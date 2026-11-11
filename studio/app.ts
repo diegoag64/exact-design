@@ -7,8 +7,6 @@ import { screenSource,localPreview } from './project';
 import { parseRoutes, type DiscoveredScreen } from './discovery';
 import { snapTargets } from './snapping';
 import { render } from './render';
-import {PreviewEngines} from './preview-engines';
-const previewEngines=new PreviewEngines();
 const editor = new WorkspaceEditor();
 const persistence = new WorkspacePersistence(editor);
 const drafts=new DraftStorage();
@@ -76,7 +74,7 @@ const reply = (fit=false,error='') => {
 const sources: Sources = {
   scene: () => snapshot(),
   previews: ([requests]) => {
-    if(!requests||requests==='[]'){previewEngines.update([]);return {ready:true,signature:'[]',requests};}
+    if(!requests||requests==='[]')return {ready:true,signature:'[]',requests};
     let latest={ready:false,signature:'',requests};
     return fetch(`${DISCOVERY_API}/previews`,{method:'POST',headers:{'content-type':'application/json'},body:requests,exactStream:event=>{
       if(event.type==='error'){
@@ -89,7 +87,6 @@ const sources: Sources = {
         if(frame.previewSource&&frame.source){const origin=new URL(frame.source).origin;const proxy=new URL(frame.previewSource).origin;if(proxy!==origin)previewBridges.set(origin,proxy);}
         if(frame.ready)editor.contentSizes.set(frame.id,{source:frame.source,width:frame.width,viewportHeight:frame.viewportHeight,height:frame.height});
       }
-      previewEngines.update([...new Set(result.frames.flatMap((frame:{previewSource:string;source:string})=>frame.previewSource&&frame.source&&new URL(frame.previewSource).origin!==new URL(frame.source).origin?[new URL(frame.previewSource).origin]:[]))] as string[]);
       return latest={requests,ready:!!result.frames.every((f:{ready:boolean})=>f.ready),signature:JSON.stringify(result.frames.map((f:{id:string;height:number;ready:boolean})=>[f.id,f.height,f.ready]))};
     }});
   },

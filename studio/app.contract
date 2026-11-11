@@ -618,7 +618,7 @@ component Studio
   action previewClick
     clicks = clicks + 1
   view
-    main navigationKey=`${top(nav).id}` navigationBack="closeLibrary" navigate=follow testId="editor" width="100%" height="100%" display="flex" flex-direction="column" background-color="ink.inverse" color="ink.primary" font-family="system-ui" font-size=12
+    main hatch="preview-engines" navigationKey=`${top(nav).id}` navigationBack="closeLibrary" navigate=follow testId="editor" width="100%" height="100%" display="flex" flex-direction="column" background-color="ink.inverse" color="ink.primary" font-family="system-ui" font-size=12
       for entry in stack(nav) key=entry.id
         if entry.name == "editor"
           column navigationKey=`${entry.id}` position="absolute" inset=0

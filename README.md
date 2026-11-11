@@ -133,7 +133,7 @@ Source files:
 - `tools/full-page-client.js`: full-page presentation and live content measurement.
 - `tools/event-stream.ts`, `tools/event-stream-client.js`, `tools/project-hub.js`: one project socket with independent native dev subscriptions.
 - `tools/shared-runtime.ts`, `tools/shared-state-client.js`, `tools/project-state-hub.js`: pinned runtime adapter, shared root state, and serialized source operations.
-- `studio/preview-engines.ts`: data runtimes that survive visible-frame removal and reloads.
+- `studio/modules/web/index.js`: an Exact browser hatch that keeps data runtimes alive across visible-frame removal and reloads.
 - `tools/design-session.ts`: local inspection, design drafts, and explicit Apply.
 - `tools/design-drafts.ts`: design patches, draft history, source-map targets, and batch code translation.
 - `studio/draft-storage.ts`: per-project draft persistence.

@@ -11,7 +11,10 @@ test('real Exact previews share controls and data while routes, widths, and scro
   const launcher=resolve(dir,'run.mjs');
   const probe=Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response()});const port=probe.port;probe.stop(true);
   let bridge:ElementBridge|undefined,suite:any,page:any;
-  const host=Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response('<!doctype html><style>iframe:not([hidden]){width:390px;height:844px}</style>'+`<iframe name="engine" hidden src="${bridge!.origin}/__exact_design/engine"></iframe>`+[390,768,1440].map((width,i)=>`<iframe name="view-${i}" style="width:${width}px" src="${bridge!.origin}/?__ed_frame=view-${i}&__ed_full=0&__ed_height=844"></iframe>`).join(''),{headers:{'content-type':'text/html'}})});
+  const host=Bun.serve({hostname:'127.0.0.1',port:0,fetch:req=>{
+    if(new URL(req.url).pathname==='/preview-host.js')return new Response(Bun.file(resolve(root,'studio/modules/web/index.js')),{headers:{'content-type':'text/javascript'}});
+    return new Response('<!doctype html><style>iframe:not([hidden]){width:390px;height:844px}</style><body>'+[390,768,1440].map((width,i)=>`<iframe name="view-${i}" style="width:${width}px" src="${bridge!.origin}/?__ed_frame=view-${i}&__ed_events=project-v2&__ed_full=0&__ed_height=844"></iframe>`).join('')+`<script type="module">import {element} from '/preview-host.js';element({hatch:'preview-engines',element:document.body});</script>`,{headers:{'content-type':'text/html'}});
+  }});
   await writeFile(launcher,`import {run} from ${JSON.stringify(resolve(root,'.exact-sdk/scripts/app-cli.mjs'))};process.exit(await run({dir:${JSON.stringify(dir)},name:'shared-preview',exact2:${JSON.stringify(resolve(root,'.exact-sdk'))},args:['web','--port','${port}']}));`);
   const child=Bun.spawn([process.execPath,launcher],{cwd:root,env:{...process.env,PATH:'/Users/diegoarias/.cargo/bin:'+process.env.PATH,EXACT_FEEDBACK:'0',EXACT_TOOL_PORT:String(host.port)},stdout:Bun.file(resolve(dir,'server.log')),stderr:Bun.file(resolve(dir,'server-errors.log'))});
   const errors:string[]=[];
@@ -22,7 +25,7 @@ test('real Exact previews share controls and data while routes, widths, and scro
     await page.goto(host.url.href,{waitUntil:'load'});
     let frames=[0,1,2].map(i=>page.frame({name:'view-'+i}));
     const count=async(n:number,targets=frames)=>Promise.all(targets.map(f=>f.waitForFunction(n=>Number(document.body.innerText.match(/(?:^|\n)(\d+) notes?(?:\n|$)/)?.[1])===n,n,{polling:50,timeout:10000})));
-    await count(6);expect(bridge.connections.size).toBe(1);
+    await count(6);expect(bridge.connections.size).toBe(1);expect(await page.locator('iframe[title="Project data runtime"]').count()).toBe(1);
     const documents=await Promise.all(frames.map(f=>f.evaluate(()=>window.sharedDocument=crypto.randomUUID())));
     await frames[1].getByRole('textbox',{name:'Search notes'}).fill('Sunday');await count(1);
     expect(await Promise.all(frames.map(f=>f.getByRole('textbox',{name:'Search notes'}).inputValue()))).toEqual(['Sunday','Sunday','Sunday']);

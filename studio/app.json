@@ -13,12 +13,22 @@
     "web": {}
   },
   "commands": {
-    "server": ["bun", "../tools/discovery-server.ts"]
+    "server": [
+      "bun",
+      "../tools/discovery-server.ts"
+    ]
   },
-  "server": {"database": false},
+  "server": {
+    "database": false
+  },
   "deploy": {
     "store": {
       "web": "0"
     }
+  },
+  "hatches": {
+    "preview-engines": [
+      "web"
+    ]
   }
 }
