@@ -11,6 +11,7 @@ shape SnapTarget
   gap: bool
 
 fn magnitude(n: number): number = max(n, -n)
+fn panEase(t: number): number = 1 - (1 - t) * (1 - t) * (1 - t)
 fn layerKind(kind: string): string = kind == "text" or kind == "span" ? "Text" : kind == "button" ? "Button" : kind == "row" ? "Row" : kind == "column" ? "Column" : kind == "scroll" ? "Scroll" : kind == "grid" ? "Grid" : kind == "image" or kind == "img" ? "Image" : kind == "screen" or kind == "main" ? "Screen" : kind == "input" ? "Input" : "Container"
 fn spacingName(property: string): string = property == "padding-top" ? "Top padding" : property == "padding-right" ? "Right padding" : property == "padding-bottom" ? "Bottom padding" : property == "padding-left" ? "Left padding" : property == "row-gap" ? "Vertical gap" : "Horizontal gap"
 
@@ -217,6 +218,7 @@ style Field
   font-size=12
 
 shape Viewport
+  prefersReducedMotion: bool
   width: number
   height: number
 
@@ -452,6 +454,28 @@ component Studio
   state zoom = 0.85 persist
   state px = 64 persist
   state py = 80 persist
+  state panning = false
+  state panFromX = 0
+  state panFromY = 0
+  state panStarted = 0
+  state panProgress = 1
+  derive cameraX = panning ? panFromX + (px - panFromX) * panEase(panProgress) : px
+  derive cameraY = panning ? panFromY + (py - panFromY) * panEase(panProgress) : py
+  derive canvasWidth = viewport.width - (leftOpen and viewport.width >= 1000 ? 208 : 0) - (rightOpen and viewport.width >= 700 ? 232 : 0)
+  derive canvasCenterX = ((leftOpen and viewport.width < 1000 ? 208 : 0) + canvasWidth - (rightOpen and viewport.width < 700 ? 232 : 0)) / 2
+  action advancePan
+    let next = viewport.prefersReducedMotion ? 1 : min(1, max(0, (performanceNow() - panStarted) / 280))
+    panProgress = next
+    if next >= 1
+      panning = false
+  task panFrames when panning
+    every(16, advancePan)
+  action cancelPan
+    let x = cameraX
+    let y = cameraY
+    panning = false
+    px = x
+    py = y
   state dragging = false
   state hand = false
   state sx = 0
@@ -466,13 +490,15 @@ component Studio
   derive dragX = snapping ? snappedDelta(scene.snapX, scene.frameX, dx, zoom) : dx
   derive dragY = snapping ? snappedDelta(scene.snapY, scene.frameY, dy, zoom) : dy
   action toggleLeft
+    cancelPan()
     leftPanel = leftOpen ? "closed" : "open"
     if viewport.width >= 1000
-      px = px + (leftOpen ? 208 : -208)
+      px = cameraX + (leftOpen ? 208 : -208)
     else
       if not leftOpen and viewport.width < 700
         rightPanel = "closed"
   action toggleRight
+    cancelPan()
     rightPanel = rightOpen ? "closed" : "open"
     if not rightOpen and viewport.width < 700
       leftPanel = "closed"
@@ -485,6 +511,7 @@ component Studio
   action prop(key: string, value: string)
     send changed = edit("property", key, value, 0, 0)
   action down(e: PointerEvent)
+    cancelPan()
     fitWhenReady = false
     if e.button == 0
       freeDrag = e.altKey
@@ -494,7 +521,7 @@ component Studio
       dx = 0
       dy = 0
       if not hand
-        send changed = edit("hit", "", `${zoom}`, (e.offsetX - px) / zoom, (e.offsetY - py) / zoom)
+        send changed = edit("hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom)
   action move(e: PointerEvent)
     if dragging
       freeDrag = e.altKey
@@ -511,22 +538,26 @@ component Studio
       dx = 0
       dy = 0
   action wheel(e: WheelEvent)
+    cancelPan()
     fitWhenReady = false
     preventDefault()
     if e.ctrlKey or e.metaKey
       let z = min(3, max(0.01, zoom * (1 - e.deltaY * 0.005)))
       let old = zoom
       zoom = z
-      px = e.offsetX - (e.offsetX - px) * z / old
-      py = e.offsetY - (e.offsetY - py) * z / old
+      px = e.offsetX - (e.offsetX - cameraX) * z / old
+      py = e.offsetY - (e.offsetY - cameraY) * z / old
     else
-      px = px - e.deltaX
-      py = py - e.deltaY
+      px = cameraX - e.deltaX
+      py = cameraY - e.deltaY
   action zoomIn
+    cancelPan()
     zoom = min(3, zoom + 0.1)
   action zoomOut
+    cancelPan()
     zoom = max(0.01, zoom - 0.1)
   action fitBounds(x: number, y: number, right: number, bottom: number)
+    cancelPan()
     let available = viewport.width - ((leftOpen and viewport.width >= 1000 ? 208 : 0) + (rightOpen and viewport.width >= 700 ? 232 : 0)) - 96
     let z = min(1, max(0.01, min(available / max(1, right - x), (viewport.height - 220) / max(1, bottom - y))))
     zoom = z
@@ -547,7 +578,31 @@ component Studio
     fitWhenReady = false
     addingViewport = false
     send changed = edit("select", id, "", 0, 0)
-    fitBounds(x, y, x + w, y + h)
+    let fromX = cameraX
+    let fromY = cameraY
+    panFromX = fromX
+    panFromY = fromY
+    let targetX = canvasCenterX - (x + w / 2) * zoom
+    let targetY = (viewport.height - 48) / 2 - (y + h / 2) * zoom
+    px = targetX
+    py = targetY
+    panStarted = performanceNow()
+    panProgress = 0
+    panning = not viewport.prefersReducedMotion and (magnitude(targetX - fromX) > 0.5 or magnitude(targetY - fromY) > 0.5)
+  action focusScreen(id: string)
+    match first(scene.groups.filter(g => g.id == id))
+      case some(group)
+        match first(group.views.filter(v => v.id == doc.active))
+          case some(v)
+            focusView(v.id, v.x, v.y, v.width, v.height)
+          case none
+            match first(group.views)
+              case some(v)
+                focusView(v.id, v.x, v.y, v.width, v.height)
+              case none
+                hand = hand
+      case none
+        hand = hand
   action selectTool
     hand = false
   action handTool
@@ -622,9 +677,11 @@ component Studio
                       column gap=6 padding-left=8 padding-right=8
                         for group in scene.groups key=group.id
                           column gap=2
-                            button press=toggleGroup(group.id) testId=`group-${group.id}` aria-label=group.name aria-expanded=(not collapsed.includes(group.id)) display="flex" align-items="center" gap=6 height=32 padding-left=4 padding-right=8 border-width=0 border-radius=5 background-color="transparent" color="ink.primary"
-                              image "symbol:icon.disclosure" width=12 height=12 rotate=(collapsed.includes(group.id) ? 0 : 90) aria-hidden=true
-                              text group.name font-size=12 font-weight=500 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                            row align-items="center" gap=2 height=32
+                              button press=toggleGroup(group.id) testId=`fold-group-${group.id}` class=Tool width=20 height=28 padding=4 aria-label=`Toggle ${group.name}` aria-expanded=(not collapsed.includes(group.id))
+                                image "symbol:icon.disclosure" width=12 height=12 rotate=(collapsed.includes(group.id) ? 0 : 90) aria-hidden=true
+                              button press=focusScreen(group.id) testId=`group-${group.id}` aria-label=group.name title="Center screen" display="flex" flex=1 min-width=0 align-items="center" height=32 padding=0 padding-right=8 border-width=0 border-radius=5 background-color="transparent" color="ink.primary"
+                                text group.name font-size=12 font-weight=500 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
                             if not collapsed.includes(group.id)
                               for v in group.views key=v.id
                                 button press=focusView(v.id, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" align-items="center" gap=6 height=30 padding-left=22 padding-right=8 border-width=0 border-radius=5 background-color=(doc.active == v.id ? "surface.selected" : "transparent") color=(doc.active == v.id ? "ink.selected" : "ink.secondary")
@@ -637,9 +694,9 @@ component Studio
 
               column flex=1 min-width=0 min-height=0 position="relative" overflow="hidden" background-color="surface.canvas"
                 for v in scene.views key=v.id
-                  column position="absolute" left=((hand ? px + dx * zoom : px) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragX : 0)) * zoom) top=((hand ? py + dy * zoom : py) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragY : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragX : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragY : 0)) scale=zoom transform-origin="top left" pointer-events=(editing and v.source.startsWith(designOrigin + "/") ? "auto" : "none") inert=(not editing or not v.source.startsWith(designOrigin + "/")) background-color="paper" border="none" box-shadow="none" testId=`frame-${v.id}`
+                  column position="absolute" left=((hand ? cameraX + dx * zoom : cameraX) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragX : 0)) * zoom) top=((hand ? cameraY + dy * zoom : cameraY) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragY : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragX : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragY : 0)) scale=zoom transform-origin="top left" pointer-events=(editing and v.source.startsWith(designOrigin + "/") ? "auto" : "none") inert=(not editing or not v.source.startsWith(designOrigin + "/")) background-color="paper" border="none" box-shadow="none" testId=`frame-${v.id}`
                     ScreenView(source=v.previewSource, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
-                canvas pointer-events=(editing ? "none" : "auto") surface=design(scene.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dragX), (hand ? 0 : dragY), doc.resizing, snapping) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel cursor=(hand ? (dragging ? "grabbing" : "grab") : (dragging ? (doc.resizing ? "nwse-resize" : "move") : "default")) touch-action="none" testId="canvas" aria-label="Design canvas"
+                canvas pointer-events=(editing ? "none" : "auto") surface=design(scene.drawing, doc.selected, zoom, (hand ? cameraX + dx * zoom : cameraX), (hand ? cameraY + dy * zoom : cameraY), (hand ? 0 : dragX), (hand ? 0 : dragY), doc.resizing, snapping) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel cursor=(hand ? (dragging ? "grabbing" : "grab") : (dragging ? (doc.resizing ? "nwse-resize" : "move") : "default")) touch-action="none" testId="canvas" aria-label="Design canvas"
                 if editing and not designWriting
                   match designChanged
                     case some(result)
@@ -649,17 +706,17 @@ component Studio
                             for v in scene.views.filter(v => v.id == measured.frame) key=v.id
                               column position="absolute" inset=0 pointer-events="none" testId="spacing-overlay"
                                 for box in measured.boxes key=box.key
-                                  column position="absolute" left=(px + (v.x + box.x) * zoom) top=(py + (v.y + box.y) * zoom) width=(box.width * zoom) height=(box.height * zoom) background-color="spacing.wash" border="1px solid spacing.edge" box-sizing="border-box" aria-hidden=true
+                                  column position="absolute" left=(cameraX + (v.x + box.x) * zoom) top=(cameraY + (v.y + box.y) * zoom) width=(box.width * zoom) height=(box.height * zoom) background-color="spacing.wash" border="1px solid spacing.edge" box-sizing="border-box" aria-hidden=true
                                   if box.label and max(box.width, box.height) * zoom >= 32
                                     for targets in [result.spacingInputs.filter(p => p.property == box.property)] key=box.property
                                       if targets.length == 0
-                                        text box.value position="absolute" left=(px + (v.x + box.labelX) * zoom) top=(py + (v.y + box.labelY) * zoom) translate="-50% -50%" font-size=10 font-weight=500 color="spacing.ink" background-color="surface.panel" padding=3 border-radius=4 pointer-events="auto" title=`${spacingName(box.property)} · Computed` testId=`spacing-readonly-${box.property}`
+                                        text box.value position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" font-size=10 font-weight=500 color="spacing.ink" background-color="surface.panel" padding=3 border-radius=4 pointer-events="auto" title=`${spacingName(box.property)} · Computed` testId=`spacing-readonly-${box.property}`
                                       else
                                         for target in targets key=target.property
                                           if spacingProperty == target.property
-                                            input id="spacing-value" value=spacingValue input=editSpacing key=spacingKey blur=cancelSpacing position="absolute" left=(px + (v.x + box.labelX) * zoom) top=(py + (v.y + box.labelY) * zoom) translate="-50% -50%" width=72 height=26 padding=4 box-sizing="border-box" border="1px solid spacing.ink" border-radius=5 background-color="surface.panel" color="ink.primary" font-size=11 text-align="center" pointer-events="auto" aria-label=spacingName(box.property) title="Enter to apply · Escape to cancel" testId="spacing-value"
+                                            input id="spacing-value" value=spacingValue input=editSpacing key=spacingKey blur=cancelSpacing position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" width=72 height=26 padding=4 box-sizing="border-box" border="1px solid spacing.ink" border-radius=5 background-color="surface.panel" color="ink.primary" font-size=11 text-align="center" pointer-events="auto" aria-label=spacingName(box.property) title="Enter to apply · Escape to cancel" testId="spacing-value"
                                           else
-                                            button press=openSpacing(target.property, target.value) position="absolute" left=(px + (v.x + box.labelX) * zoom) top=(py + (v.y + box.labelY) * zoom) translate="-50% -50%" display="flex" align-items="center" justify-content="center" box-sizing="border-box" min-width=24 height=20 min-height=20 padding=3 border="1px solid spacing.edge" border-radius=4 background-color="surface.panel" color="spacing.ink" font-size=10 font-weight=600 pointer-events="auto" aria-label=`Edit ${spacingName(box.property)}` title=(target.shared ? `${spacingName(box.property)} · Shared style` : spacingName(box.property)) testId=`spacing-${box.property}`
+                                            button press=openSpacing(target.property, target.value) position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" display="flex" align-items="center" justify-content="center" box-sizing="border-box" min-width=24 height=20 min-height=20 padding=3 border="1px solid spacing.edge" border-radius=4 background-color="surface.panel" color="spacing.ink" font-size=10 font-weight=600 pointer-events="auto" aria-label=`Edit ${spacingName(box.property)}` title=(target.shared ? `${spacingName(box.property)} · Shared style` : spacingName(box.property)) testId=`spacing-${box.property}`
                                               text box.value
                         case none
                           column display="none"
@@ -966,7 +1023,7 @@ component ScreenLayer
     activate: action
   derive x = n.x + (selected and not resizing ? dx : 0)
   derive y = n.y + (selected and not resizing ? dy : 0)
-  derive w = n.widthMode == "fill" ? `max(1px, calc(100% - ${x + n.right - (selected and resizing ? dx : 0)}px))` : `${max(1, n.width + (selected and resizing ? dx : 0))}px`
+  derive w = n.widthMode == "fill" ? `max(1px, calc(100% - ${x + n.right - (selected and resizing ? dx : 0)}cameraX))` : `${max(1, n.width + (selected and resizing ? dx : 0))}cameraX`
   derive h = max(1, n.height + (selected and resizing ? dy : 0))
   view
     if n.kind == "text"

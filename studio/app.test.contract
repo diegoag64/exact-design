@@ -296,10 +296,10 @@ test "project screens share a server and group their viewports"
   tap "variant-tablet"
   clock data
   expect state doc.groups.1.views.length == 2
-  tap "group-screen-2"
+  tap "fold-group-screen-2"
   expect tree missing "view-view-2"
   expect tree missing "view-view-3"
-  tap "group-screen-2"
+  tap "fold-group-screen-2"
   expect tree has "view-view-2"
   expect tree has "view-view-3"
   tap "project-connection"
@@ -720,3 +720,50 @@ test "load full screens at each width and switch between automatic and fixed hei
   clock +1500 real
   expect state scene.views.0.autoHeight == true
   expect state scene.views.0.height == 600
+
+
+test "sidebar screen clicks pan smoothly to the canvas center without changing zoom"
+  size 1440x900
+  clock data
+  tap "view-view-1"
+  clock data
+  expect state panning == true
+  expect state zoom == 0.85
+  expect state cameraX == 64
+  clock +140
+  expect state cameraX == 173.20303206997085
+  expect state panning == true
+  clock +160
+  expect state panning == false
+  expect state cameraX == 194
+  expect state cameraY == 205
+  tap "canvas" wheel 100 50
+  expect state px == 94
+  expect state py == 155
+  tap "group-screen-1"
+  clock data
+  expect state panning == true
+  clock +80
+  tap "canvas" wheel 20 10
+  expect state panning == false
+  expect state px == 137.55685131195335
+  clock +400
+  expect state panning == false
+  tap "toggle-inspector"
+  tap "group-screen-1"
+  clock +300
+  expect state cameraX == 310
+  expect state cameraY == 205
+  expect state zoom == 0.85
+
+test "screen centering respects reduced motion and overlay sidebars"
+  size 900x900
+  prefer prefers-reduced-motion reduce
+  clock data
+  tap "toggle-screens"
+  tap "view-view-1"
+  clock data
+  expect state panning == false
+  expect state cameraX == 132
+  expect state cameraY == 205
+  expect state zoom == 0.85
