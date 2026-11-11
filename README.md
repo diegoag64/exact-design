@@ -35,6 +35,10 @@ EXACT_TOOL_PORT=5173 bun exact.mjs web --port 5174
 
 Click **Connect project** above Screens, give the project a name, and enter `http://127.0.0.1:5174`. The editor reads the app's route manifest automatically. Click + beside Screens, choose an available screen, and select its first viewport. The name and path fill in when you choose a screen; you can edit both before adding it. Routes already in the library are marked **Added**. Add phone, tablet, and desktop variants to compare each screen at independent viewport sizes. Exact's `exactViewport()` and responsive styles receive each frame's dimensions, regardless of canvas zoom.
 
+Local app screens expand to their full rendered height when they load. Their widths still determine responsive layout. **Auto** beside Height keeps each frame fitted to its content as images load, content changes, or the width changes. The preset height acts as a minimum. Enter a Height to use a fixed viewport again, or click **Auto** to restore content sizing. This choice survives a reload. Canvas bounds, frame selection, snapping, and placement use the displayed height.
+
+Auto height expands the app's main vertical scrolling regions through preview-only CSS. It does not change source. The running app receives the expanded frame height, so use fixed height when testing behavior tied to a device's height. Automatic sizing supports local HTTP development servers. Remote previews keep their fixed viewport. Infinite feeds and virtualized lists show the content the app currently renders; Auto does not fetch every record. Expanded frames are bounded at 50,000 pixels, and canvas zoom reaches 1% for long screens.
+
 Use **Refresh screens** in the Add screen form after adding routes to your app. A dynamic route such as `/note/:id` is marked **Set path**: replace the parameter with a real value, such as `/note/7`, before adding it. Discovery does not invent record IDs or open every route. You can always enter a name and route manually, including when the server is offline or has no manifest. Choose **Blank** for an editable screen.
 
 Discovery reads the `routes.json` file produced by Exact's web build and dev server. The local helper makes this read because the app server does not allow the editor to fetch the manifest across browser origins. It only requests that file, does not follow redirects, and does not change the app's source. It omits fallback routes and merges duplicate paths. Refreshing the list never removes or changes screens already on the canvas.
@@ -63,7 +67,7 @@ Hover over a layer to outline its element in the preview without changing the se
 
 Selected elements show padding and flex-gap bands on the canvas. Click an editable value, enter a number or CSS length, and press Enter to preview it. Escape or leaving the field cancels that input. Editing one padding side or gap axis preserves the others, including shorthand units. Shared style values are identified in their tooltip. Computed values are read-only. Controls stay the same size at different canvas zoom levels and follow scrolling and draft edits. Grid gaps and unresolved percentage gaps remain available through the inspector rather than the canvas overlay.
 
-The first editing session loads the live previews through a local development bridge, without changing app source or the SDK. This reload can reset page state, and browser-only storage belongs to the bridge's separate origin. The bridge uses a stable local port for each project URL, and later editing sessions reuse it. Its hierarchy shows up to 600 mounted, visible elements per viewport; unmounted virtualized content and hidden routes are not listed. Library components without editable source can still be selected.
+Local previews load through a development bridge as soon as a screen connects, without changing app source or the SDK. Editing reuses that frame. Browser-only storage belongs to the bridge's separate origin. The bridge uses a stable local port for each project URL. Its hierarchy shows up to 600 mounted, visible elements per viewport; unmounted virtualized content and hidden routes are not listed. Library components without editable source can still be selected.
 
 The inspector offers existing visual attributes that Exact marks editable in Contract source or a shared style. Enter a value and press Enter or leave the field to preview it. Edits become a design draft. They update the viewport copies without writing source, compiling the app, or replacing its frame. A shared style affects each source instance that uses that property, while explicit overrides retain their values. Changing a token reference replaces that attribute's value in the draft. Editing token definitions is not implemented.
 
@@ -120,6 +124,8 @@ Source files:
 - `studio/project.ts`: project URL and screen route validation.
 - `studio/discovery.ts`: Exact route manifest validation and screen names.
 - `tools/discovery-server.ts`: the local manifest reader.
+- `tools/preview-screens.ts`: workspace preview subscriptions and measured frame sizes.
+- `tools/full-page-client.js`: full-page presentation and live content measurement.
 - `tools/design-session.ts`: local inspection, design drafts, and explicit Apply.
 - `tools/design-drafts.ts`: design patches, draft history, source-map targets, and batch code translation.
 - `studio/draft-storage.ts`: per-project draft persistence.
