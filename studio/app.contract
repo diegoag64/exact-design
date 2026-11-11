@@ -583,7 +583,7 @@ component Studio
     panFromX = fromX
     panFromY = fromY
     let targetX = canvasCenterX - (x + w / 2) * zoom
-    let targetY = (viewport.height - 48) / 2 - (y + h / 2) * zoom
+    let targetY = 64 - y * zoom
     px = targetX
     py = targetY
     panStarted = performanceNow()
@@ -680,7 +680,7 @@ component Studio
                             row align-items="center" gap=2 height=32
                               button press=toggleGroup(group.id) testId=`fold-group-${group.id}` class=Tool width=20 height=28 padding=4 aria-label=`Toggle ${group.name}` aria-expanded=(not collapsed.includes(group.id))
                                 image "symbol:icon.disclosure" width=12 height=12 rotate=(collapsed.includes(group.id) ? 0 : 90) aria-hidden=true
-                              button press=focusScreen(group.id) testId=`group-${group.id}` aria-label=group.name title="Center screen" display="flex" flex=1 min-width=0 align-items="center" height=32 padding=0 padding-right=8 border-width=0 border-radius=5 background-color="transparent" color="ink.primary"
+                              button press=focusScreen(group.id) testId=`group-${group.id}` aria-label=group.name title="Show screen" display="flex" flex=1 min-width=0 align-items="center" height=32 padding=0 padding-right=8 border-width=0 border-radius=5 background-color="transparent" color="ink.primary"
                                 text group.name font-size=12 font-weight=500 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
                             if not collapsed.includes(group.id)
                               for v in group.views key=v.id

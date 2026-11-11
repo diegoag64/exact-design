@@ -722,7 +722,7 @@ test "load full screens at each width and switch between automatic and fixed hei
   expect state scene.views.0.height == 600
 
 
-test "sidebar screen clicks pan smoothly to the canvas center without changing zoom"
+test "sidebar screen clicks pan smoothly to the screen top without changing zoom"
   size 1440x900
   clock data
   tap "view-view-1"
@@ -736,10 +736,10 @@ test "sidebar screen clicks pan smoothly to the canvas center without changing z
   clock +160
   expect state panning == false
   expect state cameraX == 194
-  expect state cameraY == 205
+  expect state cameraY == 64
   tap "canvas" wheel 100 50
   expect state px == 94
-  expect state py == 155
+  expect state py == 14
   tap "group-screen-1"
   clock data
   expect state panning == true
@@ -753,7 +753,7 @@ test "sidebar screen clicks pan smoothly to the canvas center without changing z
   tap "group-screen-1"
   clock +300
   expect state cameraX == 310
-  expect state cameraY == 205
+  expect state cameraY == 64
   expect state zoom == 0.85
 
 test "screen centering respects reduced motion and overlay sidebars"
@@ -765,5 +765,5 @@ test "screen centering respects reduced motion and overlay sidebars"
   clock data
   expect state panning == false
   expect state cameraX == 132
-  expect state cameraY == 205
+  expect state cameraY == 64
   expect state zoom == 0.85
