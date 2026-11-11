@@ -1,6 +1,6 @@
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
-export type ElementNode={id:string;identity:string;path:string;parent:string;depth:number;label:string;tag:string;site:number;instance:unknown[]};
+export type ElementNode={id:string;identity:string;path:string;parent:string;depth:number;label:string;kind?:string;tag:string;site:number;instance:unknown[]};
 export type ElementFrame={frame:string;page?:string;build:string;plan:string;inspecting:boolean;nodes:ElementNode[];seen:number};
 const script=readFileSync(new URL('./element-bridge-client.js',import.meta.url),'utf8');
 const bridges=new Map<string,ElementBridge>();

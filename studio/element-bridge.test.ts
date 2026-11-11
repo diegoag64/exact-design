@@ -4,6 +4,18 @@ import {DesignSession} from '../tools/design-session';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 
+test('layer names describe layout spans without repeating their descendants text',()=>{
+  const script=readFileSync(new URL('../tools/element-bridge-client.js',import.meta.url),'utf8');
+  const present=runInNewContext(script.slice(script.indexOf('function presentElement('),script.indexOf('function snapshot('))+'\npresentElement;');
+  const element=(tag:string,text:string,children=false,label='')=>({tagName:tag,textContent:text,dataset:{},getAttribute:(name:string)=>name==='aria-label'?label:null,querySelector:()=>children?{}:null});
+  const title='The art of paying attention',column={display:'flex',flexDirection:'column',overflowY:'visible'};
+  expect(present(element('SPAN',title+' An excerpt',true),column)).toEqual({kind:'column',label:'Column'});
+  expect(present(element('SPAN',title),{display:'block'})).toEqual({kind:'text',label:title});
+  expect(present(element('BUTTON',title+' An excerpt',true,title),column)).toEqual({kind:'button',label:title});
+  expect(present(element('DIV',title,true),{...column,overflowY:'auto'})).toEqual({kind:'scroll',label:'Scroll'});
+  expect(present(element('BUTTON','',false,'A'.repeat(200)),column).label).toHaveLength(120);
+});
+
 test('preview proxy injects before bootstrap, forwards routes, and refuses token and foreign-origin requests',async()=>{
   const paths:string[]=[];
   const app=Bun.serve({hostname:'127.0.0.1',port:0,fetch:req=>{

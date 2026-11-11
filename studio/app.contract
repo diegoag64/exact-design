@@ -11,6 +11,7 @@ shape SnapTarget
   gap: bool
 
 fn magnitude(n: number): number = max(n, -n)
+fn layerKind(kind: string): string = kind == "text" or kind == "span" ? "Text" : kind == "button" ? "Button" : kind == "row" ? "Row" : kind == "column" ? "Column" : kind == "scroll" ? "Scroll" : kind == "grid" ? "Grid" : kind == "image" or kind == "img" ? "Image" : kind == "screen" or kind == "main" ? "Screen" : kind == "input" ? "Input" : "Container"
 fn spacingName(property: string): string = property == "padding-top" ? "Top padding" : property == "padding-right" ? "Right padding" : property == "padding-bottom" ? "Bottom padding" : property == "padding-left" ? "Left padding" : property == "row-gap" ? "Vertical gap" : "Horizontal gap"
 
 fn snappedDelta(targets: SnapTarget[], origin: number, delta: number, zoom: number): number = match first(sortBy(targets, t => magnitude(t.value - origin - delta))) { case some(t) => magnitude(t.value - origin - delta) <= 8 / zoom ? t.value - origin : delta, case none => delta }
@@ -553,8 +554,8 @@ component Studio
                                   image "symbol:icon.disclosure" width=10 height=10 rotate=(collapsedElements.includes(element.id) ? 0 : 90)
                               else
                                 column width=20 flex-shrink=0
-                              button press=selectElement(element.id) testId=`element-${i}` aria-label=element.label aria-pressed=element.selected display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding=0 padding-right=8 border-width=0 background-color="transparent" color=(element.selected ? "ink.selected" : "ink.secondary")
-                                image (element.kind == "button" ? "symbol:select" : element.kind == "span" ? "symbol:compose" : "symbol:stop") width=12 height=12 aria-hidden=true
+                              button press=selectElement(element.id) testId=`element-${i}` aria-label=(element.label == layerKind(element.kind) ? element.label : `${layerKind(element.kind)}: ${element.label}`) title=element.label aria-pressed=element.selected display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding=0 padding-right=8 border-width=0 background-color="transparent" color=(element.selected ? "ink.selected" : "ink.secondary")
+                                ElementIcon(kind=element.kind)
                                 text element.label font-size=11 text-align="left" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
                   else
                     button press=projectSettings display="flex" align-items="center" gap=8 margin-left=8 margin-right=8 padding=8 border-width=0 border-radius=6 background-color="surface.field" color="ink.primary" aria-label="Project connection" testId="project-connection"
@@ -643,26 +644,32 @@ component Studio
                       text designError role="alert" font-size=12 color="ink.secondary" testId="design-error"
                     if editing
                       column gap=12
-                        text "App design" font-weight=600
-                        text "Changes save to app source." color="ink.secondary" font-size=11
                         match designChanged
                           case some(result)
-                            if result.crumbs.length > 0
-                              row gap=2 flex-wrap="wrap" align-items="center" testId="element-breadcrumbs"
-                                for crumb, i in result.crumbs key=crumb.id
-                                  button press=selectElement(crumb.id) class=Tool width="auto" max-width=120 height=24 padding=2 justify-content="flex-start" aria-label=crumb.label testId=`breadcrumb-${i}` color=(crumb.selected ? "ink.primary" : "ink.secondary")
-                                    text crumb.label font-size=11 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
-                                  if i < result.crumbs.length - 1
-                                    image "symbol:icon.disclosure" width=10 height=10 aria-hidden=true color="ink.muted"
+                            for selected in result.crumbs.filter(c => c.selected) key=selected.id
+                              column gap=10
+                                for parent in result.crumbs.filter(c => c.depth == selected.depth - 1) key=parent.id
+                                  button press=selectElement(parent.id) class=Tool width="100%" height=26 padding=0 gap=6 justify-content="flex-start" aria-label=`Select parent: ${parent.label}` title=`Select parent: ${parent.label}` testId="element-parent" color="ink.secondary"
+                                    image "symbol:icon.disclosure" rotate=-90 width=10 height=10 aria-hidden=true
+                                    text parent.label font-size=11 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                                row align-items="flex-start" gap=8
+                                  column padding-top=2 color="ink.secondary"
+                                    ElementIcon(kind=selected.kind)
+                                  text selected.label font-size=13 font-weight=600 flex=1 min-width=0 hyphens="auto" testId="selected-element-name"
+                                row gap=8 align-items="center"
+                                  if selected.label != layerKind(selected.kind)
+                                    text layerKind(selected.kind) font-size=11 color="ink.secondary" testId="selected-element-kind"
+                                  if result.source != ""
+                                    text result.source font-size=11 color="ink.muted" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" min-width=0 title=result.source testId="design-source"
                             if result.source != ""
-                              text result.source font-size=11 color="ink.secondary" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" testId="design-source"
                               if result.crumbs.length == 0
                                 button press=selectParent class=Tool width="100%" justify-content="flex-start" testId="design-parent"
                                   text "Select component" font-size=12
                             if result.rows.length == 0
                               text (result.restoring ? result.message : result.applied ? "Applied to source." : result.message) font-size=12 color="ink.secondary" testId="design-message"
-                            button press=undoDesign disabled=(not result.canUndo or pending(designChanged)) class=Tool width="100%" justify-content="flex-start" testId="undo-app-design"
-                              text "Undo app change" font-size=12
+                            if result.canUndo
+                              button press=undoDesign disabled=pending(designChanged) class=Tool width="100%" justify-content="flex-start" testId="undo-app-design"
+                                text "Undo app change" font-size=12
                           case none
                             text "Select an element in a screen." font-size=12
                         if designRows.filter(p => p.shared).length > 0
@@ -855,6 +862,12 @@ component Studio
                   text libraryError role="alert" color="ink.primary" font-size=12 testId="library-error"
                 button press=saveScreen disabled=(screenName.trim() == "" or pending(libraryChanged)) height=32 border-width=0 border-radius=6 background-color="surface.action" color="ink.inverse" testId="create-screen"
                   text "Add screen" font-size=12
+
+component ElementIcon
+  props
+    kind: string
+  view
+    image (kind == "text" or kind == "span" ? "symbol:icon.layer-text" : kind == "button" ? "symbol:icon.layer-button" : kind == "row" ? "symbol:icon.layer-row" : kind == "column" ? "symbol:icon.layer-column" : "symbol:stop") width=12 height=12 flex-shrink=0 aria-hidden=true
 
 component ScreenView
   props

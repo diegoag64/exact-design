@@ -541,7 +541,9 @@ test "navigate rendered layers and keep selection through edits and undo"
   tap "element-2"
   clock +300 real
   clock data
-  expect text "breadcrumb-2" == "Save"
+  expect text "selected-element-name" == "Save"
+  expect text "selected-element-kind" == "Button"
+  expect tree missing "element-breadcrumbs"
   expect text "design-property-0" == "#ffffff"
   clock +1000 real
   expect tree has "spacing-overlay"
@@ -549,9 +551,9 @@ test "navigate rendered layers and keep selection through edits and undo"
   tap "element-1" hover
   clock data
   expect state hoveredElement == "root/0:main/0:section"
-  expect text "breadcrumb-2" == "Save"
+  expect text "selected-element-name" == "Save"
   expect text "design-property-0" == "#ffffff"
-  tap "undo-app-design" hover
+  tap "selected-element-name" hover
   clock data
   expect state hoveredElement == ""
   type "design-property-0" "#123456"
@@ -560,16 +562,17 @@ test "navigate rendered layers and keep selection through edits and undo"
   clock +3500 real
   clock data
   expect text "design-property-0" == "#123456"
-  expect text "breadcrumb-2" == "Save"
+  expect text "selected-element-name" == "Save"
   tap "undo-app-design"
   clock data
   clock +3500 real
   clock data
   expect text "design-property-0" == "#ffffff"
-  tap "breadcrumb-1"
+  tap "element-parent"
   clock +1300 real
   clock data
-  expect text "breadcrumb-1" == "Header"
+  expect text "selected-element-name" == "Header"
+  expect text "selected-element-kind" == "Container"
   expect tree missing "design-property-0"
   tap "edit-app"
   clock data

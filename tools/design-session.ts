@@ -148,7 +148,7 @@ export class DesignSession {
     const tree=frame?.nodes.map(n=>{
       const ancestors:string[]=[];let at=frame.nodes.find(p=>p.id===n.parent);
       while(at&&ancestors.length<100){ancestors.push(at.id);at=frame.nodes.find(p=>p.id===at!.parent);}
-      return {id:n.id,label:n.label,depth:n.depth,kind:n.tag,ancestors,hasChildren:frame.nodes.some(p=>p.parent===n.id),selected:n.id===selected};
+      return {id:n.id,label:n.label,depth:n.depth,kind:n.kind??n.tag,ancestors,hasChildren:frame.nodes.some(p=>p.parent===n.id),selected:n.id===selected};
     })??[];
     const crumbs:typeof tree=[];let at=frame?.nodes.find(n=>n.id===selected);
     while(at&&crumbs.length<30){const entry=tree.find(n=>n.id===at!.id);if(entry)crumbs.unshift(entry);at=frame?.nodes.find(n=>n.id===at!.parent);}
@@ -157,7 +157,7 @@ export class DesignSession {
       spacingId,spacingPlan,spacingFrame:frame?.frame??'',spacingConfig:spacingId?JSON.stringify({kind:'exact-design:spacing',id:spacingId,plan:spacingPlan}):'',
       spacingInputs:spacingRows(rows.map((r,i)=>({id:String(i),property:r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true}))),
       bridgeOrigin:this.bridge?.origin??'',tree,crumbs,selectedLabel:this.picked?.node.label??'',restoring:!!this.restoring,selecting:!!this.pendingSelection,
-      message:this.pendingSelection?'Selecting element…':this.restoring?'Updating selection…':s?.readOnly || (s && !rows.length?'This element has no editable visual properties yet.':'Select an element in a screen.'),
+      message:this.pendingSelection?'Selecting element…':this.restoring?'Updating selection…':s?.readOnly || (s && !rows.length?'No editable properties.':'Select an element in a screen.'),
       rows:rows.map((r:Row,i:number)=>({id:String(i),name:labels[r.editable.row]??r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true,group:r.editable.rung==='layout'?(r.editable.row.startsWith('padding')||r.editable.row.startsWith('margin')||r.editable.row.includes('gap')?'Spacing':'Layout'):'Appearance',options:layoutOptions(r.editable.row).map(value=>({value,label:optionLabels[value]??value}))})),canUndo:this.inverses.length>0,applied:this.applied};
   }
   async edit(version:number,index:number,value:string) {

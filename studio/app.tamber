@@ -11,7 +11,7 @@ theme
   ink.primary = light-dark(#35363b, #ededf0)
   ink.secondary = light-dark(#707178, #b2b2ba)
   ink.muted = light-dark(#73747b, #95959f)
-  ink.selected = light-dark(#4563d6, #b4c1ff)
+  ink.selected = light-dark(#354fb8, #b4c1ff)
   ink.inverse = light-dark(#ffffff, #242426)
   paper = #ffffff scheme=fixed
   spacing.wash = #d946ef14 scheme=fixed
@@ -19,6 +19,10 @@ theme
   spacing.ink = light-dark(#a21caf, #efabf5)
 
 icons
+  icon.layer-row = icon(svg "icons/layer-row.svg")
+  icon.layer-column = icon(svg "icons/layer-column.svg")
+  icon.layer-button = icon(svg "icons/layer-button.svg")
+  icon.layer-text = icon(svg "icons/layer-text.svg")
   icon.panel-left = icon(sf "sidebar.left", svg "icons/panel-left.svg")
   icon.panel-right = icon(sf "sidebar.right", svg "icons/panel-right.svg")
   icon.pointer = icon(sf "cursorarrow", svg "icons/pointer.svg")
