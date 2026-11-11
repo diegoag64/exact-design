@@ -118,7 +118,7 @@ export class ElementBridge {
       }catch{return this.engineRetry();}
     }
     if(url.pathname==='/__exact_design/client.js')return new Response(script,{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
-    for(const name of ['spacing-client.js','spacing-geometry.js','design-preview-client.js','full-page-client.js','event-stream-client.js','project-hub.js','project-state-hub.js','shared-state-client.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
+    for(const name of ['spacing-client.js','spacing-geometry.js','design-preview-client.js','full-page-client.js','event-stream-client.js','project-hub.js','project-state-hub.js','shared-state-client.js','canvas-input-client.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
     if(url.pathname==='/__exact_design/feedback'&&req.method==='POST'){
       const packet=await req.json(),frame=this.frames.get(packet.frame);
       if(!frame||packet.page!==frame.page||packet.plan!==frame.plan)return new Response(null,{status:409});
@@ -163,7 +163,7 @@ export class ElementBridge {
         let html=await response.text();
         // Observe only the public build ID in Exact's registration. The captured
         // fetch otherwise receives exactly the original request and arguments.
-        const inject=`<script src="/__exact_design/event-stream-client.js"></script><script src="/__exact_design/shared-state-client.js"></script><script>{const original=window.fetch.bind(window);window.fetch=function(input,init){if(input==='/__dev/report'&&typeof init?.body==='string'){try{const report=JSON.parse(init.body);if(report.kind==='register'&&typeof report.id==='string')window.__exactDesignBuild=report.id;}catch{}}return original(input,init);};let press;addEventListener('pointerdown',e=>{press={x:e.clientX,y:e.clientY,id:e.pointerId};},true);addEventListener('pointerup',e=>{if(press?.id===e.pointerId&&Math.hypot(e.clientX-press.x,e.clientY-press.y)<=10)window.__exactDesignPick?.(e.clientX,e.clientY);press=null;},true);addEventListener('pointercancel',()=>{press=null;},true);}</script><script type="module" src="/__exact_design/client.js"></script>`;
+        const inject=`<script src="/__exact_design/canvas-input-client.js"></script><script src="/__exact_design/event-stream-client.js"></script><script src="/__exact_design/shared-state-client.js"></script><script>{const original=window.fetch.bind(window);window.fetch=function(input,init){if(input==='/__dev/report'&&typeof init?.body==='string'){try{const report=JSON.parse(init.body);if(report.kind==='register'&&typeof report.id==='string')window.__exactDesignBuild=report.id;}catch{}}return original(input,init);};let press;addEventListener('pointerdown',e=>{press={x:e.clientX,y:e.clientY,id:e.pointerId};},true);addEventListener('pointerup',e=>{if(press?.id===e.pointerId&&Math.hypot(e.clientX-press.x,e.clientY-press.y)<=10)window.__exactDesignPick?.(e.clientX,e.clientY);press=null;},true);addEventListener('pointercancel',()=>{press=null;},true);}</script><script type="module" src="/__exact_design/client.js"></script>`;
         html=/<head[^>]*>/i.test(html)?html.replace(/<head[^>]*>/i,head=>head+inject):inject+html;
         return new Response(html,{status:response.status,headers:out});
       }

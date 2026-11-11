@@ -26,6 +26,8 @@ test('preview proxy injects before bootstrap, forwards routes, and refuses token
     const html=await(await fetch(bridge.origin+'/note?record=7&__ed_frame=view-1')).text();
     expect(paths).toEqual(['/note?record=7']);
     expect(html.indexOf('window.fetch')).toBeLessThan(html.indexOf('original()'));
+    expect(html).toContain('/__exact_design/canvas-input-client.js');
+    expect(html.indexOf('/__exact_design/canvas-input-client.js')).toBeLessThan(html.indexOf('original()'));
     expect(html).toContain('/__exact_design/client.js');
     expect((await fetch(bridge.origin+'/__tamber/token')).status).toBe(404);
     expect((await fetch(bridge.origin+'/note',{headers:{origin:'https://unrelated.example'}})).status).toBe(403);
@@ -203,13 +205,13 @@ test('canvas picks are pushed to the tree without waiting for the inspection pol
 });
 
 test('inspected frames relay canvas gestures while ordinary app input stays local',()=>{
-  const script=readFileSync(new URL('../tools/element-bridge-client.js',import.meta.url),'utf8');
-  const handlers:Record<string,Function>={},packets:any[]=[];let inspecting=true;
-  runInNewContext(script.slice(script.indexOf('const canvasInput='),script.indexOf('let pageObserver;')),{parent:{postMessage:(packet:any)=>packets.push(packet)},document:{getElementById:()=>inspecting?{}:null},addEventListener:(name:string,fn:Function)=>{handlers[name]=fn;}});
+  const script=readFileSync(new URL('../tools/canvas-input-client.js',import.meta.url),'utf8');
+  const handlers:Record<string,Function>={},packets:any[]=[],frameWindow={};let inspecting=true;
+  runInNewContext(script,{window:frameWindow,parent:{postMessage:(packet:any)=>packets.push(packet)},document:{getElementById:()=>inspecting?{}:null},addEventListener:(name:string,fn:Function)=>{handlers[name]=fn;}});
   const event=(extra:any={})=>({code:'Space',target:{closest:()=>null},preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...extra});
   let wheel=event({clientX:12,clientY:34,deltaX:5,deltaY:20,deltaMode:0,ctrlKey:true});handlers.wheel(wheel);
   expect(wheel.prevented).toBe(true);expect(packets.at(-1)).toMatchObject({kind:'exact-design:canvas',op:'wheel',x:12,y:34,dx:5,dy:20,mode:0,ctrl:true});
-  handlers.keydown(event());handlers.blur();handlers.keydown(event());handlers.keyup(event());
+  handlers.keydown(event());const blur=event({target:frameWindow});handlers.blur(blur);expect(blur.stopped).toBe(true);handlers.keydown(event());handlers.keyup(event());
   expect(packets.filter(p=>p.op==='space').map(p=>p.down)).toEqual([true,true,false]);
   handlers.keydown(event({code:'KeyH'}));handlers.keydown(event({code:'KeyV'}));
   expect(packets.slice(-2).map(p=>p.tool)).toEqual(['Pan','Select']);

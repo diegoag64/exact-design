@@ -2,27 +2,6 @@
 const frame=new URL(location.href).searchParams.get('__ed_frame')||'preview';
 const page=crypto.randomUUID();
 const nodes=new Map();let command=0,selectionCommand=0,working=false,pushed=false;
-// Navigation belongs to the surrounding canvas while the inspector is active.
-const canvasInput=packet=>parent.postMessage({kind:'exact-design:canvas',...packet},'*');
-addEventListener('wheel',e=>{
-  if(!document.getElementById('exact-inspect'))return;
-  e.preventDefault();e.stopImmediatePropagation();
-  canvasInput({op:'wheel',x:e.clientX,y:e.clientY,dx:e.deltaX,dy:e.deltaY,mode:e.deltaMode,ctrl:e.ctrlKey,meta:e.metaKey});
-},{capture:true,passive:false});
-let canvasSpace=false;
-addEventListener('keydown',e=>{
-  if(e.ctrlKey||e.metaKey||e.altKey||e.isComposing||!document.getElementById('exact-inspect')||e.target?.closest?.('input,textarea,select,[contenteditable]:not([contenteditable="false"])'))return;
-  if(e.code==='KeyH'||e.code==='KeyV'){
-    e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)canvasInput({op:'tool',tool:e.code==='KeyH'?'Pan':'Select'});return;
-  }
-  if(e.code!=='Space')return;
-  e.preventDefault();e.stopImmediatePropagation();if(!e.repeat){canvasSpace=true;canvasInput({op:'space',down:true});}
-},true);
-addEventListener('blur',()=>{canvasSpace=false;});
-addEventListener('keyup',e=>{
-  if(e.code==='Space'&&canvasSpace){canvasSpace=false;e.preventDefault();e.stopImmediatePropagation();canvasInput({op:'space',down:false});}
-},true);
-
 let pageObserver;
 let spacingObserver,measurement={id:'',plan:''};
 let draftObserver,draft={patches:[],revision:0};
