@@ -97,6 +97,17 @@ shape Reply
   maxX: number
   maxY: number
 
+shape DiscoveredScreen
+  name: string
+  route: string
+  dynamic: bool
+  added: bool
+
+shape Discovery
+  owner: string
+  routes: DiscoveredScreen[]
+  error: string
+
 style Tool
   box-sizing="border-box"
   display="flex"
@@ -129,6 +140,8 @@ shape Viewport
 component Studio
   resource viewport = exactViewport() as shape Viewport
   resource doc = document() as shape Document else empty(name="Untitled")
+  state discoveryRevision = 0
+  resource discovered = discover(doc.projectUrl, doc.groups.map(g => g.route), discoveryRevision) as shape Discovery else empty()
   mutation changed as shape Reply queue refreshes doc then afterEdit
   mutation libraryChanged as shape Reply queue refreshes doc then afterLibrary
   state collapsed = [""]
@@ -173,6 +186,12 @@ component Studio
     screenPreset = value
   action chooseKind(value: string)
     screenKind = value
+  action refreshDiscovery
+    discoveryRevision = discoveryRevision + 1
+  action chooseScreen(name: string, route: string)
+    screenName = name
+    screenPath = route
+    libraryChanged = none
   action saveProject
     send libraryChanged = library("connect", projectNameValue, projectUrlValue, "")
   action disconnectProject
@@ -489,6 +508,9 @@ component Studio
             column width=400 max-width="100%" max-height="100%" background-color="surface.panel" border-radius=12 padding=20 gap=20 box-sizing="border-box"
               row align-items="center" gap=12
                 text (entry.name == "project" ? "Project" : "Add screen") font-weight=600 flex=1
+                if entry.name == "addScreen" and screenKind == "add"
+                  button press=refreshDiscovery disabled=pending(discovered) class=Tool aria-label="Refresh screens" title="Refresh screens" testId="refresh-discovery"
+                    image "symbol:refresh"
                 button id="closeLibrary" press=closeLibrary class=Tool aria-label="Close" testId="close-library"
                   image "symbol:close"
               if entry.name == "project"
@@ -511,6 +533,29 @@ component Studio
                       text "Project" font-size=12
                     button press=chooseKind("blank") class=Tool width="auto" flex=1 background-color=(screenKind == "blank" ? "surface.panel" : "transparent") color="ink.primary" testId="screen-blank"
                       text "Blank" font-size=12
+                if screenKind == "add"
+                  column gap=6
+                    if pending(discovered)
+                      text "Finding screens…" color="ink.secondary" font-size=12 role="status"
+                    if discovered.owner == doc.projectUrl and not pending(discovered)
+                      if discovered.error != ""
+                        text discovered.error color="ink.secondary" font-size=12 role="status" testId="discovery-error"
+                      else
+                        if discovered.routes.length == 0
+                          text "No screens found. Enter a route below." color="ink.secondary" font-size=12 testId="discovery-empty"
+                        else
+                          scroll max-height=176
+                            column gap=2
+                              for screen, i in discovered.routes key=screen.route
+                                button press=chooseScreen(screen.name, screen.route) disabled=screen.added testId=`discovered-${i}` aria-label=`${screen.name}, ${screen.route}` display="flex" align-items="center" gap=8 padding=8 border-width=0 border-radius=6 background-color=(screenPath == screen.route and screenName == screen.name ? "surface.selected" : "transparent") color="ink.primary"
+                                  column flex=1 min-width=0 gap=4 align-items="flex-start"
+                                    text screen.name font-size=12
+                                    text screen.route font-size=11 color="ink.secondary" text-align="left" width="100%" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" title=screen.route
+                                  if screen.added
+                                    text "Added" font-size=11 color="ink.secondary"
+                                  else
+                                    if screen.dynamic
+                                      text "Set path" font-size=11 color="ink.secondary"
                 column gap=14
                   input value=screenName input=screenNameInput class=Field placeholder="Screen name" aria-label="Screen name" testId="new-screen-name"
                   if screenKind == "add"

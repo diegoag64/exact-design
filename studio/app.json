@@ -12,6 +12,10 @@
   "host": {
     "web": {}
   },
+  "commands": {
+    "server": ["bun", "../tools/discovery-server.ts"]
+  },
+  "server": {"database": false},
   "deploy": {
     "store": {
       "web": "0"

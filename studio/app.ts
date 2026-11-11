@@ -1,11 +1,23 @@
 import type { Answer, Sources, Ctx2D, Frame } from './app.contract.d.ts';
 import { WorkspaceEditor, loadWorkspace, validSource } from './workspace';
 import { screenSource } from './project';
+import { parseRoutes, type DiscoveredScreen } from './discovery';
 import { snapTargets } from './snapping';
 import { render } from './render';
 const editor = new WorkspaceEditor();
 let status = ''; let loaded = false; let resizing = false;
-export const grants = 'fs.read app:/data/design.json\nfs.write app:/data/design.json';
+export const DISCOVERY_API = 'http://127.0.0.1:5175';
+export const grants = `fs.read app:/data/design.json\nfs.write app:/data/design.json\nnet.fetch ${DISCOVERY_API}`;
+let discoveryCache: {owner:string;revision:number;routes:DiscoveredScreen[];error:string}|undefined;
+async function discoverProject(owner:string,revision:number) {
+  if(discoveryCache?.owner===owner && discoveryCache.revision===revision) return discoveryCache;
+  const response=await fetch(`${DISCOVERY_API}/discover`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:owner}),exactTimeout:6000});
+  if(!response.ok) throw new Error('Discovery unavailable');
+  const body=await response.json();
+  if(typeof body.error!=='string' || !Array.isArray(body.routes)) throw new Error('Invalid discovery response');
+  const routes=parseRoutes({routes:body.routes.map((r:{name:string;route:string})=>({name:r.name,pattern:r.route}))});
+  return discoveryCache={owner,revision,routes,error:body.error};
+}
 const snapshot = () => {
   const document = editor.document;
   const screens = new Map(document.screens.map(screen => [screen.id, {...screen, source:screenSource(screen,document.project)}]));
@@ -39,6 +51,16 @@ const reply = (fit=false,error='') => {
   return {ok:error==='',error,fit,minX:d.minX,minY:d.minY,maxX:d.maxX,maxY:d.maxY};
 };
 const sources: Sources = {
+  discover: async ([owner,existing,revision]) => {
+    if(!owner) return {owner,routes:[],error:''};
+    try {
+      const result=await discoverProject(owner,revision), added=new Set(existing);
+      return {owner,routes:result.routes.map(route=>({...route,added:added.has(route.route)})),error:result.error};
+    } catch(e) {
+      if((e as {code?:string}).code==='bake') throw e;
+      return {owner,routes:[],error:'Discovery is unavailable. Run bun run dev, or enter a route below.'};
+    }
+  },
   library: async ([op,name,value,preset]) => {
     try {
       if(op==='connect') editor.connectProject(name,value);

@@ -352,3 +352,100 @@ test "invalid connections and duplicate routes stay in the form"
   expect state doc.projectUrl == ""
   expect state doc.source == "http://127.0.0.1:5174/"
   expect state doc.route == ""
+
+test "discover screens, resolve parameters, and refresh the manifest"
+  size 1440x900
+  request POST "http://127.0.0.1:5176/mode" {"mode":"normal"}
+  tap "project-connection"
+  type "project-name" "Discovered app"
+  type "project-url" "http://127.0.0.1:5176"
+  tap "save-project"
+  clock data
+  tap "add-screen"
+  clock data
+  expect state discovered.routes.length == 3
+  tap "discovered-0"
+  expect text "new-screen-name" == "Library"
+  expect text "new-screen-route" == "/"
+  tap "new-preset-Tablet"
+  tap "create-screen"
+  clock data
+  expect state doc.route == "/"
+  expect state doc.width == 768
+  tap "add-screen"
+  clock data
+  expect disabled "discovered-0"
+  tap "discovered-1"
+  tap "create-screen"
+  clock data
+  expect tree has "library-error"
+  expect state doc.groups.length == 2
+  type "new-screen-route" "/note/7"
+  tap "create-screen"
+  clock data
+  expect state doc.route == "/note/7"
+  tap "undo"
+  clock data
+  expect state doc.groups.length == 2
+  tap "add-screen"
+  clock data
+  request POST "http://127.0.0.1:5176/mode" {"mode":"updated"}
+  tap "refresh-discovery"
+  clock data
+  expect state discovered.routes.length == 4
+  expect tree has "discovered-3"
+
+test "discovery errors retry and keep manual entry available"
+  size 1440x900
+  request POST "http://127.0.0.1:5176/mode" {"mode":"invalid"}
+  tap "project-connection"
+  type "project-name" "Discovered app"
+  type "project-url" "http://127.0.0.1:5176"
+  tap "save-project"
+  clock data
+  tap "add-screen"
+  clock data
+  expect tree has "discovery-error"
+  type "new-screen-name" "Manual"
+  type "new-screen-route" "/manual"
+  tap "create-screen"
+  clock data
+  expect state doc.route == "/manual"
+  tap "add-screen"
+  request POST "http://127.0.0.1:5176/mode" {"mode":"normal"}
+  tap "refresh-discovery"
+  clock data
+  expect tree missing "discovery-error"
+  expect tree has "discovered-0"
+  fail fetch "http://127.0.0.1:5175"
+  tap "refresh-discovery"
+  clock data
+  expect tree has "discovery-error"
+  expect tree missing "discovered-0"
+  pass fetch "http://127.0.0.1:5175"
+  tap "refresh-discovery"
+  clock data
+  expect tree missing "discovery-error"
+  tap "close-library"
+  tap "project-connection"
+  type "project-url" "http://127.0.0.1:5177"
+  tap "save-project"
+  clock data
+  tap "add-screen"
+  clock data
+  expect state discovered.owner == "http://127.0.0.1:5177"
+  expect tree has "discovery-error"
+  expect tree missing "discovered-0"
+
+test "an empty manifest still offers a blank or manual screen"
+  size 390x844
+  request POST "http://127.0.0.1:5176/mode" {"mode":"empty"}
+  tap "toggle-screens"
+  tap "project-connection"
+  type "project-name" "Empty app"
+  type "project-url" "http://127.0.0.1:5176"
+  tap "save-project"
+  clock data
+  tap "add-screen"
+  clock data
+  expect tree has "discovery-empty"

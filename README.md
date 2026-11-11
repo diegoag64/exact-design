@@ -13,6 +13,8 @@ bun run dev
 
 Open the URL printed by the development server. Use a desktop window at least 1000 pixels wide for both panels. The two panel icons in the top bar independently show or hide Screens and the inspector. Your choices survive a reload. On narrower windows, panels start hidden and open over the canvas when needed. The centered toolbar can add a screen even with the sidebar hidden.
 
+`bun run dev` also starts the screen discovery helper on `127.0.0.1:5175` and stops it with the editor. Keep that port free. Discovery is a local development feature; a hosted editor does not use this helper.
+
 Setup downloads Exact at revision `336a059fd1464bee7c61640afb7124ebf276d06d` into the ignored `.exact-sdk` directory. Exact's setup command installs its toolchain requirements. The runtime is pinned because its APIs are still changing.
 
 ## Arrange screens
@@ -31,7 +33,11 @@ Run the editor with `bun run dev` and open `http://127.0.0.1:5173/`. In your Exa
 EXACT_TOOL_PORT=5173 bun exact.mjs web --port 5174
 ```
 
-Click **Connect project** above Screens, give the project a name, and enter `http://127.0.0.1:5174`. Click + beside Screens to add a named route, such as Home at `/` or Settings at `/settings`. Routes are entered manually; the library does not discover them from source files. Add phone, tablet, and desktop variants to compare each screen at independent viewport sizes. Exact's `exactViewport()` and responsive styles receive each frame's dimensions, regardless of canvas zoom.
+Click **Connect project** above Screens, give the project a name, and enter `http://127.0.0.1:5174`. The editor reads the app's route manifest automatically. Click + beside Screens, choose an available screen, and select its first viewport. The name and path fill in when you choose a screen; you can edit both before adding it. Routes already in the library are marked **Added**. Add phone, tablet, and desktop variants to compare each screen at independent viewport sizes. Exact's `exactViewport()` and responsive styles receive each frame's dimensions, regardless of canvas zoom.
+
+Use **Refresh screens** in the Add screen form after adding routes to your app. A dynamic route such as `/note/:id` is marked **Set path**: replace the parameter with a real value, such as `/note/7`, before adding it. Discovery does not invent record IDs or open every route. You can always enter a name and route manually, including when the server is offline or has no manifest. Choose **Blank** for an editable screen.
+
+Discovery reads the `routes.json` file produced by Exact's web build and dev server. The local helper makes this read because the app server does not allow the editor to fetch the manifest across browser origins. It only requests that file, does not follow redirects, and does not change the app's source. It omits fallback routes and merges duplicate paths. Refreshing the list never removes or changes screens already on the canvas.
 
 Click the project name in the sidebar to change its server address. Every linked screen follows that change. Disconnect keeps the current preview URLs, and Undo restores the connection. Existing standalone Preview URLs still work; connecting a project adopts matching URLs into its route library. The inspector edits a linked screen's route or a standalone screen's Preview URL.
 
@@ -45,7 +51,7 @@ To try the included Exact example, run this in a second terminal:
 bun run demo
 ```
 
-Connect a project named Morrow at `http://127.0.0.1:5174`, then add Library at `/` and Compose at `/note`. The example is a personal notebook with illustrated covers, search, collections, favorites, and an editor that saves notes locally. Cards use three columns on desktop, two on tablet, and one below 600 pixels. Light and dark themes follow the system setting. Each frame has its own running instance; browser storage remains shared by origin.
+Connect a project named Morrow at `http://127.0.0.1:5174`. The Add screen form discovers **Library** at `/` and **Note** at `/note`; choose either and add viewport variants. The example is a personal notebook with illustrated covers, search, collections, favorites, and an editor that saves notes locally. Cards use three columns on desktop, two on tablet, and one below 600 pixels. Light and dark themes follow the system setting. Each frame has its own running instance; browser storage remains shared by origin.
 
 ## Edit a screen
 
@@ -69,7 +75,7 @@ bun run build
 bun tools/demo.mjs test web
 ```
 
-The model tests cover hit testing, history, property validation, file migration, export escaping, and shared project routes. The interaction tests cover edits, undo, creation, deletion, saving across a reload, live preview, canvas dragging, resizing, project connections, and grouped screen variants.
+The model tests cover hit testing, history, property validation, file migration, export escaping, shared project routes, and discovery parsing and HTTP handling. The interaction tests cover edits, undo, creation, deletion, saving across a reload, live preview, canvas dragging, resizing, project connections, grouped screen variants, and discovery with refresh and failure recovery. `bun run test:ui` and `bun run verify` start the helper and an isolated manifest fixture on ports 5175 and 5176; stop the editor before running them.
 
 ## Current scope
 
@@ -87,6 +93,8 @@ Source files:
 - `studio/render.ts`: canvas labels and selection handles.
 - `studio/workspace.ts`: screens, viewports, responsive geometry, and live app URLs.
 - `studio/project.ts`: project URL and screen route validation.
+- `studio/discovery.ts`: Exact route manifest validation and screen names.
+- `tools/discovery-server.ts`: the local manifest reader.
 - `examples/responsive`: a running Exact app for viewport comparisons.
 - `studio/app.tamber`: editor theme.
 

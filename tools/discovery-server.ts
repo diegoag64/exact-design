@@ -49,6 +49,7 @@ export function startDiscoveryServer(port=5175) {
   });
 }
 if(import.meta.main) {
+  if(process.env.EXACT_DESIGN_TEST==='1') (await import('./discovery-fixture')).startDiscoveryFixture();
   const server=startDiscoveryServer(Number(process.env.PORT??5175));
   console.log(`Screen discovery: ${server.url}`);
 }
