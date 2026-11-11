@@ -12,6 +12,7 @@ test('real Exact previews share controls and data while routes, widths, and scro
   const probe=Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response()});const port=probe.port;probe.stop(true);
   let bridge:ElementBridge|undefined,suite:any,page:any;
   const host=Bun.serve({hostname:'127.0.0.1',port:0,fetch:req=>{
+    if(new URL(req.url).pathname==='/canvas-navigation.js')return new Response(Bun.file(resolve(root,'studio/modules/web/canvas-navigation.js')),{headers:{'content-type':'text/javascript'}});
     if(new URL(req.url).pathname==='/preview-host.js')return new Response(Bun.file(resolve(root,'studio/modules/web/index.js')),{headers:{'content-type':'text/javascript'}});
     return new Response('<!doctype html><style>iframe:not([hidden]){width:390px;height:844px}</style><body>'+[390,768,1440].map((width,i)=>`<iframe name="view-${i}" style="width:${width}px" src="${bridge!.origin}/?__ed_frame=view-${i}&__ed_events=project-v2&__ed_full=0&__ed_height=844"></iframe>`).join('')+`<script type="module">import {element} from '/preview-host.js';element({hatch:'preview-engines',element:document.body});</script>`,{headers:{'content-type':'text/html'}});
   }});

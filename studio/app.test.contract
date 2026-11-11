@@ -767,3 +767,37 @@ test "screen centering respects reduced motion and overlay sidebars"
   expect state cameraX == 132
   expect state cameraY == 64
   expect state zoom == 0.85
+
+test "pan tools remain available while editing an app"
+  size 1440x900
+  prefer prefers-reduced-motion reduce
+  request POST "http://127.0.0.1:5176/mode" {"mode":"elements"}
+  tap "view-view-1"
+  clock data
+  type "preview-url" "http://127.0.0.1:5176/"
+  type "preview-url" key "Enter"
+  clock data
+  tap "edit-app"
+  clock data
+  clock +1500 real
+  clock data
+  expect state editing == true
+  expect tree has "select-tool"
+  expect tree has "hand-tool"
+  expect tree missing "add-rectangle"
+  expect state hand == false
+  expect state px == 48
+  tap "canvas-stage" wheel 100 50
+  expect state px == -52
+  expect state py == 14
+  tap "hand-tool"
+  expect state hand == true
+  tap "canvas" drag 120 60 from 150 150 mouse
+  expect state px == 68
+  expect state py == 74
+  expect state doc.views.0.x == 0
+  expect state doc.views.0.y == 0
+  tap "select-tool"
+  expect state hand == false
+  expect state editing == true
+  expect tree has "element-tree"

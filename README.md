@@ -89,7 +89,7 @@ Editing supports local Exact dev servers with the `tamber/1` editing API. Its lo
 
 Select a layer on the canvas or in the left panel. Drag it to move it, or drag its lower-right handle to resize it. The inspector edits dimensions, color, corner radius, and text. Fixed width preserves a layer’s width across variants. Fill preserves its left and right insets, so it grows or shrinks with the frame. Switching modes preserves the layer’s current visible width. Text wraps within its configured height; increase that height to show more lines.
 
-The bottom toolbar adds rectangles, text, and buttons. Use the pan tool or scroll the trackpad to move around. Pinch to zoom. Click the percentage to fit all screens.
+The bottom toolbar adds rectangles, text, and buttons. Select and Pan remain available in Edit app. Use Pan (H), hold Space and drag, or scroll the trackpad to move around, including over an inspected app screen. Release Space to return to the previous tool. Pinch to zoom. Click the percentage to fit all screens.
 
 The workspace saves automatically after changes, including the project connection, screen library, viewport sizes and positions, and active selection. Canvas pan, zoom, collapsed screen groups, and sidebar visibility also restore when you return. Reopen the same browser URL and port to use its local storage. Earlier saved documents load automatically. Save remains available to retry a failed write. App editing sessions reconnect after a reload. Saved design drafts restore when you enter Edit app.
 
