@@ -67,7 +67,7 @@ Hover over a layer to outline its element in the preview without changing the se
 
 Selected elements show padding and flex-gap bands on the canvas. Click an editable value, enter a number or CSS length, and press Enter to preview it. Escape or leaving the field cancels that input. Editing one padding side or gap axis preserves the others, including shorthand units. Shared style values are identified in their tooltip. Computed values are read-only. Controls stay the same size at different canvas zoom levels and follow scrolling and draft edits. Grid gaps and unresolved percentage gaps remain available through the inspector rather than the canvas overlay.
 
-Local previews load through a development bridge as soon as a screen connects, without changing app source or the SDK. Editing reuses that frame. Browser-only storage belongs to the bridge's separate origin. The bridge uses a stable local port for each project URL. Its hierarchy shows up to 600 mounted, visible elements per viewport; unmounted virtualized content and hidden routes are not listed. Library components without editable source can still be selected.
+Local previews load through a development bridge as soon as a screen connects, without changing app source or the SDK. Editing reuses that frame. Browser-only storage belongs to the bridge's separate origin. The bridge uses a stable local port for each project URL. Preview control events share one WebSocket per frame, leaving the browser's HTTP connections free for app scripts, data loads, and rebuild checkpoints when many frames are open. Its hierarchy shows up to 600 mounted, visible elements per viewport; unmounted virtualized content and hidden routes are not listed. Library components without editable source can still be selected.
 
 The inspector offers existing visual attributes that Exact marks editable in Contract source or a shared style. Enter a value and press Enter or leave the field to preview it. Edits become a design draft. They update the viewport copies without writing source, compiling the app, or replacing its frame. A shared style affects each source instance that uses that property, while explicit overrides retain their values. Changing a token reference replaces that attribute's value in the draft. Editing token definitions is not implemented.
 
@@ -98,12 +98,13 @@ Keyboard shortcuts: V selects, H pans, Command or Control+S saves, Command or Co
 ```sh
 bun run test
 bun run test:ui
+bun run test:preview
 bun run verify
 bun run build
 bun tools/demo.mjs test web
 ```
 
-The model and service tests cover hit testing, history, property validation, file migration, automatic persistence, ordered writes and recovery, export escaping, project routes, discovery, source editing, bridge boundaries, and source-verified selection restoration. Layout tests run the real compiler and cover UTF-8 addresses, expressions, validation failure, conflicts, undo, and path boundaries. The interaction tests cover edits, undo, creation, deletion, automatic restoration across a reload, canvas pan and zoom, live preview, canvas dragging, resizing, project connections, grouped screen variants, discovery, layer collapse, parent navigation, and selection retention. `bun run test:ui` and `bun run verify` start the helper and an isolated fixture on ports 5175 and 5176; stop the editor before running them.
+The preview-loading regression opens nine cold frames, reloads them, and restarts both the app server and the preview proxy while checking data and shared storage. The model and service tests cover hit testing, history, property validation, file migration, automatic persistence, ordered writes and recovery, export escaping, project routes, discovery, source editing, bridge boundaries, and source-verified selection restoration. Layout tests run the real compiler and cover UTF-8 addresses, expressions, validation failure, conflicts, undo, and path boundaries. The interaction tests cover edits, undo, creation, deletion, automatic restoration across a reload, canvas pan and zoom, live preview, canvas dragging, resizing, project connections, grouped screen variants, discovery, layer collapse, parent navigation, and selection retention. `bun run test:ui` and `bun run verify` start the helper and an isolated fixture on ports 5175 and 5176; stop the editor before running them.
 
 ## Current scope
 
@@ -126,6 +127,7 @@ Source files:
 - `tools/discovery-server.ts`: the local manifest reader.
 - `tools/preview-screens.ts`: workspace preview subscriptions and measured frame sizes.
 - `tools/full-page-client.js`: full-page presentation and live content measurement.
+- `tools/event-stream.ts`, `tools/event-stream-client.js`: preview event transport without persistent HTTP connections.
 - `tools/design-session.ts`: local inspection, design drafts, and explicit Apply.
 - `tools/design-drafts.ts`: design patches, draft history, source-map targets, and batch code translation.
 - `studio/draft-storage.ts`: per-project draft persistence.

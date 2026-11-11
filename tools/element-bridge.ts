@@ -1,3 +1,4 @@
+import {eventMessages} from './event-stream';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {decodeSpacing} from '../studio/spacing';
@@ -14,7 +15,39 @@ export class ElementBridge {
   feedback=new Set<(frame:ElementFrame,packet:any)=>void>();
   server:ReturnType<typeof Bun.serve>;
   constructor(readonly target:string,port=0){
-    this.server=Bun.serve({hostname:'127.0.0.1',port,maxRequestBodySize:512*1024,idleTimeout:255,fetch:req=>this.handle(req)});
+    this.server=Bun.serve({hostname:'127.0.0.1',port,maxRequestBodySize:16*1024*1024,idleTimeout:255,
+      fetch:(req,server)=>{
+        const url=new URL(req.url);
+        if(url.pathname==='/__exact_design/live'){
+          if(url.origin!==this.origin||req.headers.get('origin')!==this.origin)return new Response('Forbidden',{status:403});
+          return server.upgrade(req,{data:{streams:new Map<string,AbortController>()}})?undefined:new Response(null,{status:400});
+        }
+        return this.handle(req);
+      },
+      websocket:{maxPayloadLength:4096,message:(ws,raw)=>{void this.live(ws,raw);},close:ws=>{for(const abort of ws.data.streams.values())abort.abort();ws.data.streams.clear();}},
+    });
+  }
+  async live(ws:any,raw:any){
+    let packet;try{packet=JSON.parse(String(raw));}catch{return;}
+    if(typeof packet.id!=='string'||packet.id.length>64)return;
+    const streams:Map<string,AbortController>=ws.data.streams;
+    streams.get(packet.id)?.abort();streams.delete(packet.id);
+    if(packet.op==='close')return;
+    if(packet.op!=='open'||streams.size>=4||typeof packet.path!=='string'||packet.path.length>2048)return;
+    let url;try{url=new URL(packet.path,this.origin);}catch{return;}
+    if(url.origin!==this.origin||!['/__dev/events','/__exact_design/events'].includes(url.pathname))return;
+    const abort=new AbortController();streams.set(packet.id,abort);
+    const send=(data:any)=>{if(!abort.signal.aborted)ws.send(JSON.stringify({id:packet.id,...data}));};
+    try{
+      const headers=new Headers({accept:'text/event-stream',origin:this.target});
+      if(typeof packet.lastEventId==='string'&&packet.lastEventId.length<1024)headers.set('last-event-id',packet.lastEventId);
+      const response=url.pathname==='/__exact_design/events'?this.subscribe(new Request(url,{headers,signal:abort.signal}),url):await fetch(new URL(url.pathname+url.search,this.target),{headers,signal:abort.signal,redirect:'error'});
+      if(!response.ok||!response.headers.get('content-type')?.includes('text/event-stream')||!response.body)throw new Error('Preview events are unavailable.');
+      send({kind:'open'});
+      for await(const event of eventMessages(response.body))send({kind:'event',...event});
+      send({kind:'error'});
+    }catch{send({kind:'error'});}
+    finally{abort.abort();if(streams.get(packet.id)===abort)streams.delete(packet.id);}
   }
   get origin(){return this.server.url.origin;}
   select(frame:string,id:string){
@@ -69,7 +102,7 @@ export class ElementBridge {
     if(url.origin!==this.origin || (origin && origin!==this.origin))return new Response('Forbidden',{status:403});
     if(url.pathname==='/__exact_design/events'&&req.method==='GET')return this.subscribe(req,url);
     if(url.pathname==='/__exact_design/client.js')return new Response(script,{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
-    for(const name of ['spacing-client.js','spacing-geometry.js','design-preview-client.js','full-page-client.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
+    for(const name of ['spacing-client.js','spacing-geometry.js','design-preview-client.js','full-page-client.js','event-stream-client.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
     if(url.pathname==='/__exact_design/feedback'&&req.method==='POST'){
       const packet=await req.json(),frame=this.frames.get(packet.frame);
       if(!frame||packet.page!==frame.page||packet.plan!==frame.plan)return new Response(null,{status:409});
@@ -113,7 +146,7 @@ export class ElementBridge {
         let html=await response.text();
         // Observe only the public build ID in Exact's registration. The captured
         // fetch otherwise receives exactly the original request and arguments.
-        const inject=`<script>{const original=window.fetch.bind(window);window.fetch=function(input,init){if(input==='/__dev/report'&&typeof init?.body==='string'){try{const report=JSON.parse(init.body);if(report.kind==='register'&&typeof report.id==='string')window.__exactDesignBuild=report.id;}catch{}}return original(input,init);};let press;addEventListener('pointerdown',e=>{press={x:e.clientX,y:e.clientY,id:e.pointerId};},true);addEventListener('pointerup',e=>{if(press?.id===e.pointerId&&Math.hypot(e.clientX-press.x,e.clientY-press.y)<=10)window.__exactDesignPick?.(e.clientX,e.clientY);press=null;},true);addEventListener('pointercancel',()=>{press=null;},true);}</script><script type="module" src="/__exact_design/client.js"></script>`;
+        const inject=`<script src="/__exact_design/event-stream-client.js"></script><script>{const original=window.fetch.bind(window);window.fetch=function(input,init){if(input==='/__dev/report'&&typeof init?.body==='string'){try{const report=JSON.parse(init.body);if(report.kind==='register'&&typeof report.id==='string')window.__exactDesignBuild=report.id;}catch{}}return original(input,init);};let press;addEventListener('pointerdown',e=>{press={x:e.clientX,y:e.clientY,id:e.pointerId};},true);addEventListener('pointerup',e=>{if(press?.id===e.pointerId&&Math.hypot(e.clientX-press.x,e.clientY-press.y)<=10)window.__exactDesignPick?.(e.clientX,e.clientY);press=null;},true);addEventListener('pointercancel',()=>{press=null;},true);}</script><script type="module" src="/__exact_design/client.js"></script>`;
         html=/<head[^>]*>/i.test(html)?html.replace(/<head[^>]*>/i,head=>head+inject):inject+html;
         return new Response(html,{status:response.status,headers:out});
       }

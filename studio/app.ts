@@ -42,7 +42,7 @@ const snapshot = () => {
     views: frames.map(view => {
       const screen = screens.get(view.screenId)!;
       let previewSource=localPreview(screen.source)&&!previewBridges.has(new URL(screen.source).origin)?'':screen.source;
-      if(previewSource){const u=new URL(previewSource),bridge=previewBridges.get(u.origin);if(bridge&&bridge!==u.origin){u.host=new URL(bridge).host;u.searchParams.set('__ed_frame',view.id);u.searchParams.set('__ed_height',String(document.views.find(v=>v.id===view.id)!.height));u.searchParams.set('__ed_full',view.heightMode==='fixed'?'0':'1');previewSource=u.href;}}
+      if(previewSource){const u=new URL(previewSource),bridge=previewBridges.get(u.origin);if(bridge&&bridge!==u.origin){u.host=new URL(bridge).host;u.searchParams.set('__ed_frame',view.id);u.searchParams.set('__ed_events','socket');u.searchParams.set('__ed_height',String(document.views.find(v=>v.id===view.id)!.height));u.searchParams.set('__ed_full',view.heightMode==='fixed'?'0':'1');previewSource=u.href;}}
       const {heightMode,...geometry}=view;
       return {...geometry,canAutoHeight:localPreview(screen.source),autoHeight:localPreview(screen.source)&&view.heightMode!=='fixed', source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name};
     }),
