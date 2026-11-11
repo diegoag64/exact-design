@@ -61,3 +61,73 @@ test "drag and resize on the canvas"
   tap "undo"
   clock data
   expect state doc.layers.5.width == 152
+
+test "linked viewports share edits and persist dimensions"
+  size 1440x900
+  tap "view-view-1"
+  clock data
+  tap "variant-phone"
+  clock data
+  expect state doc.views.length == 2
+  expect state doc.width == 390
+  tap "layer-title"
+  clock data
+  type "text-content" "Shared heading"
+  type "text-content" key "Enter"
+  clock data
+  tap "view-view-1"
+  clock data
+  expect state doc.layers.0.text == "Shared heading"
+  tap "view-view-2"
+  clock data
+  type "frame-width" "430"
+  type "frame-width" key "Enter"
+  clock data
+  tap "save"
+  clock data
+  reload
+  clock data
+  expect state doc.views.1.width == 430
+  expect state doc.layers.0.text == "Shared heading"
+
+test "create rename duplicate and delete screens"
+  size 1440x900
+  tap "add-screen"
+  clock data
+  expect state doc.views.length == 2
+  expect state doc.layers.length == 0
+  type "screen-name" "Settings"
+  type "screen-name" key "Enter"
+  clock data
+  tap "add-text"
+  clock data
+  tap "view-view-2"
+  clock data
+  tap "duplicate-screen"
+  clock data
+  expect state doc.screenName == "Settings copy"
+  expect state doc.layers.length == 1
+  tap "preset-tablet"
+  clock data
+  expect state doc.width == 768
+  expect state doc.height == 1024
+  tap "delete"
+  clock data
+  expect state doc.views.length == 2
+  tap "undo"
+  clock data
+  expect state doc.views.length == 3
+
+test "move and resize a screen frame"
+  size 1440x900
+  tap "canvas" drag 34 17 from 80 68 mouse
+  clock data
+  expect state doc.views.0.x == 40
+  expect state doc.views.0.y == 20
+  tap "canvas" drag 34 17 from 710 539 mouse
+  clock data
+  expect state doc.views.0.width == 760
+  expect state doc.views.0.height == 540
+  tap "undo"
+  clock data
+  expect state doc.views.0.width == 720

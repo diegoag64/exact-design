@@ -84,7 +84,7 @@ export class WorkspaceEditor {
     const ox=this.selected===v.id?0:v.x, oy=this.selected===v.id?0:v.y;
     if(n && Math.abs(x-ox-n.x-n.width)<tolerance && Math.abs(y-oy-n.y-n.height)<tolerance) return true;
     for(const f of [...this.document.views].reverse()) {
-      if(x<f.x || x>f.x+f.width || y<f.y-26 || y>f.y+f.height) continue;
+      if(x<f.x || x>f.x+f.width || y<f.y-tolerance*3 || y>f.y+f.height) continue;
       this.active=f.id;
       const layer=y>=f.y?[...this.screen.layers].reverse().find(n=>x-f.x>=n.x && y-f.y>=n.y && x-f.x<=n.x+n.width && y-f.y<=n.y+n.height):undefined;
       this.selected=layer?.id??f.id; return false;
