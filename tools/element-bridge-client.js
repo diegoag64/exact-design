@@ -11,10 +11,10 @@ function snapshot(){
     let parent=el.parentElement?.closest('[data-site]');while(parent&&!ids.has(parent))parent=parent.parentElement?.closest('[data-site]');
     const instance=globalThis.exact?.instanceOf?.(el)??[];
     const identity=JSON.stringify([Number(el.dataset.site),instance]);
-    const id=identity+':'+rows.filter(r=>r.identity===identity).length;
-    const parentId=ids.get(parent)||'';ids.set(el,id);nodes.set(id,el);
+    const parentId=ids.get(parent)||'';
     const tag=el.tagName.toLowerCase();
     const path=(rows.find(r=>r.id===parentId)?.path||'root')+'/'+rows.filter(r=>r.parent===parentId).length+':'+tag;
+    const id=path;ids.set(el,id);nodes.set(id,el);
     const css=getComputedStyle(el),container=css.display.includes('flex')?(css.flexDirection.startsWith('row')?'Row':'Column'):(['auto','scroll'].includes(css.overflowY)?'Scroll':'Container');
     const label=el.getAttribute('aria-label')||el.dataset.testid||el.getAttribute('data-testid')||(['span','button','h1','h2','p'].includes(tag)?el.textContent?.trim().slice(0,55):'')||({div:container,span:'Text',img:'Image',button:'Button',main:'Screen',header:'Header',section:'Section'}[tag]||tag);
     rows.push({id,identity,path,parent:parentId,depth:parentId?(rows.find(r=>r.id===parentId)?.depth??0)+1:0,label,tag,site:Number(el.dataset.site),instance});

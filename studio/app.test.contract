@@ -468,3 +468,46 @@ test "source editing refuses a server without Exact editing support"
   expect tree has "design-error"
   expect state editing == false
   expect tree has "viewport-preset"
+
+test "navigate rendered layers and keep selection through edits and undo"
+  size 1440x900
+  request POST "http://127.0.0.1:5176/mode" {"mode":"elements"}
+  tap "view-view-1"
+  clock data
+  type "preview-url" "http://127.0.0.1:5176/"
+  type "preview-url" key "Enter"
+  clock data
+  tap "edit-app"
+  clock data
+  clock +2200 real
+  clock data
+  expect state elementTree.length == 4
+  tap "fold-element-1"
+  expect tree missing "element-2"
+  tap "fold-element-1"
+  tap "element-2"
+  clock +1500 real
+  clock data
+  expect text "breadcrumb-2" == "Save"
+  expect text "design-property-0" == "#ffffff"
+  type "design-property-0" "#123456"
+  type "design-property-0" key "Enter"
+  clock data
+  clock +2200 real
+  clock data
+  expect text "design-property-0" == "#123456"
+  expect text "breadcrumb-2" == "Save"
+  tap "undo-app-design"
+  clock data
+  clock +2200 real
+  clock data
+  expect text "design-property-0" == "#ffffff"
+  tap "breadcrumb-1"
+  clock +1300 real
+  clock data
+  expect text "breadcrumb-1" == "Header"
+  expect tree missing "design-property-0"
+  tap "edit-app"
+  clock data
+  expect state editing == false
+  expect tree has "screens-panel"

@@ -1,15 +1,16 @@
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 export type ElementNode={id:string;identity:string;path:string;parent:string;depth:number;label:string;tag:string;site:number;instance:unknown[]};
 export type ElementFrame={frame:string;build:string;plan:string;inspecting:boolean;nodes:ElementNode[];seen:number};
 const script=readFileSync(new URL('./element-bridge-client.js',import.meta.url),'utf8');
 const bridges=new Map<string,ElementBridge>();
-export function bridgeFor(origin:string){let bridge=bridges.get(origin);if(!bridge){bridge=new ElementBridge(origin);bridges.set(origin,bridge);}return bridge;}
+export function bridgeFor(origin:string){let bridge=bridges.get(origin);if(!bridge){const port=20000+parseInt(createHash('sha256').update(origin).digest('hex').slice(0,6),16)%30000;bridge=new ElementBridge(origin,port);bridges.set(origin,bridge);}return bridge;}
 export class ElementBridge {
   frames=new Map<string,ElementFrame>();seq=0;
   commands=new Map<string,{seq:number;op:string;id:string;plan:string}[]>();
   server:ReturnType<typeof Bun.serve>;
-  constructor(readonly target:string){
-    this.server=Bun.serve({hostname:'127.0.0.1',port:0,maxRequestBodySize:512*1024,idleTimeout:255,fetch:req=>this.handle(req)});
+  constructor(readonly target:string,port=0){
+    this.server=Bun.serve({hostname:'127.0.0.1',port,maxRequestBodySize:512*1024,idleTimeout:255,fetch:req=>this.handle(req)});
   }
   get origin(){return this.server.url.origin;}
   select(frame:string,id:string){this.commands.set(frame,[{seq:++this.seq,op:'select',id,plan:this.frames.get(frame)?.plan??''}]);}

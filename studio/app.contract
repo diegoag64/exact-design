@@ -31,6 +31,7 @@ shape Layer
 
 shape CanvasView
   source: string
+  previewSource: string
   layers: Layer[]
   id: string
   screenId: string
@@ -132,6 +133,20 @@ shape DesignReply
   rows: DesignRow[]
   canUndo: bool
   applied: bool
+  bridgeOrigin: string
+  tree: ElementNode[]
+  crumbs: ElementNode[]
+  selectedLabel: string
+  restoring: bool
+
+shape ElementNode
+  id: string
+  label: string
+  depth: number
+  selected: bool
+  kind: string
+  ancestors: string[]
+  hasChildren: bool
 
 style Tool
   box-sizing="border-box"
@@ -169,19 +184,24 @@ component Studio
   resource discovered = discover(doc.projectUrl, doc.groups.map(g => g.route), discoveryRevision) as shape Discovery else empty()
   mutation changed as shape Reply queue refreshes doc then afterEdit
   mutation libraryChanged as shape Reply queue refreshes doc then afterLibrary
-  mutation designChanged as shape DesignReply queue then afterDesign
+  mutation designChanged as shape DesignReply queue refreshes doc then afterDesign
   state designSession = ""
+  state collapsedElements = [""]
+  action toggleElement(id: string)
+    collapsedElements = collapsedElements.includes(id) ? collapsedElements.filter(value => value != id) : collapsedElements.concat([id])
   state designOrigin = ""
   state designWriting = false
   state designVersion = 0
   derive editing = designSession != ""
   derive designRows = match designChanged { case some(r) => r.rows, case none => [] }
+  derive elementTree = match designChanged { case some(r) => r.tree, case none => [] }
   derive appCanUndo = match designChanged { case some(r) => r.canUndo, case none => false }
   state designError = ""
   action startEditing
+    collapsedElements = [""]
     designWriting = true
     rightPanel = "open"
-    send designChanged = design("open", "", doc.source, 0, "", "")
+    send designChanged = design("open", "", doc.source, 0, doc.active, "")
   action finishEditing
     designWriting = true
     send designChanged = design("close", designSession, "", 0, "", "")
@@ -204,6 +224,8 @@ component Studio
     send designChanged = design("undo", designSession, "", 0, "", "")
   action selectParent
     send designChanged = design("parent", designSession, "", 0, "", "")
+  action selectElement(id: string)
+    send designChanged = design("select", designSession, "", designVersion, id, "")
   action afterDesign
     designWriting = false
     match designChanged
@@ -211,6 +233,7 @@ component Studio
         if r.error != ""
           designError = r.error
         if r.ok
+          collapsedElements = collapsedElements.filter(id => not r.crumbs.map(c => c.id).includes(id))
           if r.version != designVersion or r.session == ""
             designError = ""
           if r.origin != ""
@@ -435,36 +458,53 @@ component Studio
                 image "symbol:icon.panel-right"
             row flex=1 min-height=0 position="relative"
               if leftOpen
-                column testId="screens-panel" inert=editing position=(viewport.width >= 1000 ? "relative" : "absolute") left=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=208 flex-shrink=0 border-right-width=1 border-right-style="solid" border-right-color="line.subtle" padding-top=12 gap=8
-                  button press=projectSettings display="flex" align-items="center" gap=8 margin-left=8 margin-right=8 padding=8 border-width=0 border-radius=6 background-color="surface.field" color="ink.primary" aria-label="Project connection" testId="project-connection"
-                    image "symbol:link" aria-hidden=true
-                    text (doc.projectName == "" ? "Connect project" : doc.projectName) font-size=12 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
-                    image "symbol:adjust" aria-hidden=true color="ink.muted"
-                  row padding-left=16 padding-right=8 align-items="center"
-                    text "Screens" font-weight=600 flex=1
-                    button press=addScreen class=Tool aria-label="Add screen" testId="add-screen"
-                      image "symbol:add"
-                  scroll flex=1 min-height=0
-                    column gap=6 padding-left=8 padding-right=8
-                      for group in doc.groups key=group.id
-                        column gap=2
-                          button press=toggleGroup(group.id) testId=`group-${group.id}` aria-label=group.name aria-expanded=(not collapsed.includes(group.id)) display="flex" align-items="center" gap=6 height=32 padding-left=4 padding-right=8 border-width=0 border-radius=5 background-color="transparent" color="ink.primary"
-                            image "symbol:icon.disclosure" width=12 height=12 rotate=(collapsed.includes(group.id) ? 0 : 90) aria-hidden=true
-                            text group.name font-size=12 font-weight=500 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
-                          if not collapsed.includes(group.id)
-                            for v in group.views key=v.id
-                              button press=focusView(v.id, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" align-items="center" gap=6 height=30 padding-left=22 padding-right=8 border-width=0 border-radius=5 background-color=(doc.active == v.id ? "surface.selected" : "transparent") color=(doc.active == v.id ? "ink.selected" : "ink.secondary")
-                                text v.name font-size=11 flex=1 text-align="left"
-                                text `${v.width} × ${v.height}` font-size=10
-                            for n in group.layers key=n.id
-                              button press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" align-items="center" gap=8 height=30 padding-left=28 padding-right=8 border-width=0 border-radius=5 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.secondary")
-                                image (n.kind == "text" ? "symbol:compose" : n.kind == "button" ? "symbol:select" : "symbol:stop") aria-hidden=true
-                                text n.name font-size=12
+                column testId="screens-panel" position=(viewport.width >= 1000 ? "relative" : "absolute") left=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=208 flex-shrink=0 border-right-width=1 border-right-style="solid" border-right-color="line.subtle" padding-top=12 gap=8
+                  if editing
+                    row padding-left=16 padding-right=8 height=32 align-items="center"
+                      text "Layers" font-weight=600
+                    scroll flex=1 min-height=0 testId="element-tree"
+                      column padding-left=8 padding-right=8 gap=2
+                        for element, i in elementTree key=element.id
+                          if element.ancestors.filter(id => collapsedElements.includes(id)).length == 0
+                            row align-items="center" padding-left=(min(element.depth, 8) * 10) background-color=(element.selected ? "surface.selected" : "transparent") border-radius=5
+                              if element.hasChildren
+                                button press=toggleElement(element.id) class=Tool width=20 height=28 padding=3 aria-label=`Toggle ${element.label}` aria-expanded=(not collapsedElements.includes(element.id)) testId=`fold-element-${i}`
+                                  image "symbol:icon.disclosure" width=10 height=10 rotate=(collapsedElements.includes(element.id) ? 0 : 90)
+                              else
+                                column width=20 flex-shrink=0
+                              button press=selectElement(element.id) testId=`element-${i}` aria-label=element.label aria-pressed=element.selected display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding=0 padding-right=8 border-width=0 background-color="transparent" color=(element.selected ? "ink.selected" : "ink.secondary")
+                                image (element.kind == "button" ? "symbol:select" : element.kind == "span" ? "symbol:compose" : "symbol:stop") width=12 height=12 aria-hidden=true
+                                text element.label font-size=11 text-align="left" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                  else
+                    button press=projectSettings display="flex" align-items="center" gap=8 margin-left=8 margin-right=8 padding=8 border-width=0 border-radius=6 background-color="surface.field" color="ink.primary" aria-label="Project connection" testId="project-connection"
+                      image "symbol:link" aria-hidden=true
+                      text (doc.projectName == "" ? "Connect project" : doc.projectName) font-size=12 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                      image "symbol:adjust" aria-hidden=true color="ink.muted"
+                    row padding-left=16 padding-right=8 align-items="center"
+                      text "Screens" font-weight=600 flex=1
+                      button press=addScreen class=Tool aria-label="Add screen" testId="add-screen"
+                        image "symbol:add"
+                    scroll flex=1 min-height=0
+                      column gap=6 padding-left=8 padding-right=8
+                        for group in doc.groups key=group.id
+                          column gap=2
+                            button press=toggleGroup(group.id) testId=`group-${group.id}` aria-label=group.name aria-expanded=(not collapsed.includes(group.id)) display="flex" align-items="center" gap=6 height=32 padding-left=4 padding-right=8 border-width=0 border-radius=5 background-color="transparent" color="ink.primary"
+                              image "symbol:icon.disclosure" width=12 height=12 rotate=(collapsed.includes(group.id) ? 0 : 90) aria-hidden=true
+                              text group.name font-size=12 font-weight=500 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                            if not collapsed.includes(group.id)
+                              for v in group.views key=v.id
+                                button press=focusView(v.id, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" align-items="center" gap=6 height=30 padding-left=22 padding-right=8 border-width=0 border-radius=5 background-color=(doc.active == v.id ? "surface.selected" : "transparent") color=(doc.active == v.id ? "ink.selected" : "ink.secondary")
+                                  text v.name font-size=11 flex=1 text-align="left"
+                                  text `${v.width} × ${v.height}` font-size=10
+                              for n in group.layers key=n.id
+                                button press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" align-items="center" gap=8 height=30 padding-left=28 padding-right=8 border-width=0 border-radius=5 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.secondary")
+                                  image (n.kind == "text" ? "symbol:compose" : n.kind == "button" ? "symbol:select" : "symbol:stop") aria-hidden=true
+                                  text n.name font-size=12
 
               column flex=1 min-width=0 min-height=0 position="relative" overflow="hidden" background-color="surface.canvas"
                 for v in doc.views key=v.id
                   column position="absolute" left=((hand ? px + dx * zoom : px) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragX : 0)) * zoom) top=((hand ? py + dy * zoom : py) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragY : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragX : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragY : 0)) scale=zoom transform-origin="top left" pointer-events=(editing and v.source.startsWith(designOrigin + "/") ? "auto" : "none") inert=(not editing or not v.source.startsWith(designOrigin + "/")) background-color="paper" border="none" box-shadow="none" testId=`frame-${v.id}`
-                    ScreenView(source=v.source, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
+                    ScreenView(source=v.previewSource, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
                 canvas pointer-events=(editing ? "none" : "auto") surface=design(doc.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dragX), (hand ? 0 : dragY), doc.resizing, snapping) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel cursor=(hand ? (dragging ? "grabbing" : "grab") : (dragging ? (doc.resizing ? "nwse-resize" : "move") : "default")) touch-action="none" testId="canvas" aria-label="Design canvas"
                 row display=(panelOverlay or editing ? "none" : "flex") position="absolute" bottom=20 left="50%" translate="-50% 0" padding=6 gap=4 align-items="center" border="1px solid line.subtle" background-color="ink.inverse" border-radius=10 box-shadow="0 2px 12px #00000012"
                   button press=selectTool aria-keyshortcuts="v" class=Tool background-color=(not hand ? "surface.selected" : "transparent") aria-label="Select" title="Select (V). Hold Alt to ignore snapping." testId="select-tool"
@@ -501,12 +541,20 @@ component Studio
                         text "Changes save to app source." color="ink.secondary" font-size=11
                         match designChanged
                           case some(result)
+                            if result.crumbs.length > 0
+                              row gap=2 flex-wrap="wrap" align-items="center" testId="element-breadcrumbs"
+                                for crumb, i in result.crumbs key=crumb.id
+                                  button press=selectElement(crumb.id) class=Tool width="auto" max-width=120 height=24 padding=2 justify-content="flex-start" aria-label=crumb.label testId=`breadcrumb-${i}` color=(crumb.selected ? "ink.primary" : "ink.secondary")
+                                    text crumb.label font-size=11 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                                  if i < result.crumbs.length - 1
+                                    image "symbol:icon.disclosure" width=10 height=10 aria-hidden=true color="ink.muted"
                             if result.source != ""
                               text result.source font-size=11 color="ink.secondary" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" testId="design-source"
-                              button press=selectParent class=Tool width="100%" justify-content="flex-start" testId="design-parent"
-                                text "Select component" font-size=12
+                              if result.crumbs.length == 0
+                                button press=selectParent class=Tool width="100%" justify-content="flex-start" testId="design-parent"
+                                  text "Select component" font-size=12
                             if result.rows.length == 0
-                              text (result.applied ? "Applied to source. Select an element to continue." : result.message) font-size=12 color="ink.secondary" testId="design-message"
+                              text (result.restoring ? result.message : result.applied ? "Applied to source." : result.message) font-size=12 color="ink.secondary" testId="design-message"
                             button press=undoDesign disabled=(not result.canUndo or pending(designChanged)) class=Tool width="100%" justify-content="flex-start" testId="undo-app-design"
                               text "Undo app change" font-size=12
                           case none

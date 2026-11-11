@@ -55,13 +55,15 @@ Connect a project named Morrow at `http://127.0.0.1:5174`. The Add screen form d
 
 ## Edit a connected app
 
-Select a connected viewport, then click **Edit app** in the inspector. Click an element inside a screen to inspect its source. Use **Select component** to move up to the containing component. Click a button’s padding to select the button rather than its text label. Exact's inspect mode captures these clicks instead of activating the app.
+Select a connected viewport, then click **Edit app** in the inspector. The left sidebar becomes a collapsible **Layers** tree of the app's rendered elements. Click a layer to select the exact container, button, image, or text node; it scrolls into view. Click a breadcrumb in the inspector to select an ancestor. Selecting an element directly on the canvas expands its path in the tree. Hover outlines show what a canvas click will select, and Exact highlights matching source instances across viewport copies. Repeated instances of the same source element can all be highlighted. These clicks inspect the app rather than activating it. **Done editing** or Escape returns to arranging screens.
+
+The first editing session loads the live previews through a local development bridge, without changing app source or the SDK. This reload can reset page state, and browser-only storage belongs to the bridge's separate origin. The bridge uses a stable local port for each project URL, and later editing sessions reuse it. Its hierarchy shows up to 600 mounted, visible elements per viewport; unmounted virtualized content and hidden routes are not listed. Library components without editable source can still be selected.
 
 The inspector offers existing visual attributes that Exact marks editable in the app's Contract source or a shared style. Enter a value and press Enter or leave the field to apply it. For example, select the padding of Morrow's New note button and change Fill from `brand` to `#b34c34`. The attribute changes in the app's source, and its dev server updates the running viewport copies. A shared style affects every element using that style. Changing a token reference here replaces that attribute's value; editing token definitions is not implemented.
 
 The inspector separates **Layout**, **Spacing**, and **Appearance**. Layout includes existing width and height constraints, direction, alignment, distribution, and wrapping. Spacing includes existing padding, margin, and gap attributes. Numbers use pixels; CSS lengths and percentages are also accepted. Padding and margin accept one to four values, such as `8 16` or `8px 16px`. Dropdowns offer the supported alignment and direction values. For example, select Morrow's New note button and change Gap from `8` to `20` to increase the space between its icon and label.
 
-Changes write to the connected app immediately, independently of workspace Save. **Undo app change** restores appearance and layout edits from the current editing session. **Done editing** returns to arranging frames and ends that session's undo history. Source edits remain on disk after leaving the editor. A hand edit or server restart can invalidate a selection; select again or reconnect before continuing. Undo refuses to overwrite a later source change.
+Changes write to the connected app immediately, independently of workspace Save. The editor restores the selected element and its property controls after a source edit or undo. It checks the rebuilt element's source location before accepting the restored selection. If the element disappeared, changed location, or became ambiguous, select it again. **Undo app change** restores appearance and layout edits from the current editing session. **Done editing** ends that session's undo history. Source edits remain on disk after leaving the editor. A hand edit or server restart can invalidate a selection; select again or reconnect before continuing. Undo refuses to overwrite a later source change.
 
 Appearance writes use Exact's checked transactions. Exact currently refuses direct layout writes through that API, so layout edits use a local source adapter: it checks the selected attribute's file digest and UTF-8 source location, validates a staged project copy with the pinned Exact compiler, checks the original again, then atomically replaces that file. An invalid or conflicting edit leaves the live source unchanged. Layout undo validates and restores the saved source only while the file still matches the edit. Staging files are removed after validation.
 
@@ -89,7 +91,7 @@ bun run build
 bun tools/demo.mjs test web
 ```
 
-The model and service tests cover hit testing, history, property validation, file migration, export escaping, project routes, discovery, and source editing. Layout tests run the real compiler and cover UTF-8 addresses, expressions, validation failure, conflicts, undo, and path boundaries. The interaction tests cover edits, undo, creation, deletion, saving across a reload, live preview, canvas dragging, resizing, project connections, grouped screen variants, and discovery with refresh and failure recovery. `bun run test:ui` and `bun run verify` start the helper and an isolated manifest fixture on ports 5175 and 5176; stop the editor before running them.
+The model and service tests cover hit testing, history, property validation, file migration, export escaping, project routes, discovery, source editing, bridge boundaries, and source-verified selection restoration. Layout tests run the real compiler and cover UTF-8 addresses, expressions, validation failure, conflicts, undo, and path boundaries. The interaction tests cover edits, undo, creation, deletion, saving across a reload, live preview, canvas dragging, resizing, project connections, grouped screen variants, discovery, layer collapse, breadcrumbs, and selection retention. `bun run test:ui` and `bun run verify` start the helper and an isolated fixture on ports 5175 and 5176; stop the editor before running them.
 
 ## Current scope
 
@@ -111,6 +113,7 @@ Source files:
 - `tools/discovery-server.ts`: the local manifest reader.
 - `tools/design-session.ts`: local inspection, checked source edits, and undo.
 - `tools/layout-source.ts`: source-addressed layout edits and staged compiler validation.
+- `tools/element-bridge.ts`, `tools/element-bridge-client.js`: local live-preview inspection and rendered element navigation.
 - `examples/responsive`: a running Exact app for viewport comparisons.
 - `studio/app.tamber`: editor theme.
 

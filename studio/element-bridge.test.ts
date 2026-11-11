@@ -59,4 +59,5 @@ test('selection restoration waits for the new plan and verifies the source locat
   s.restoring={frame:'phone',path:node.path,file:'app.contract',line:10,col:5,sha:'after',before:'after',plan:'new-plan',sent:'',since:Date.now()};
   frame.plan='third-plan';events=[{event:'selection',build:'page',site:40,instance:[],source:{...source,line:99},rows:[]}];
   await s.poll();expect(s.view().restoring).toBe(false);expect(s.view().source).toBe('');
+  events=[{event:'selected',build:'page',selected:null}];await s.poll();expect(s.ended).toBe(true);
 });

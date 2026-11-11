@@ -34,6 +34,7 @@ export class DesignSession {
   app='';
   bridge:ElementBridge|null=null;
   preferredFrame='';
+  ended=false;
   picked:{frame:string;node:ElementNode}|null=null;
   restoring:{frame:string;path:string;file:string;line:number;col:number;sha:string;before:string;plan:string;sent:string;since:number}|null=null;
   builds=new Set<string>();
@@ -76,7 +77,7 @@ export class DesignSession {
         if(frame&&node)this.picked={frame:frame.frame,node};
         this.selection=await this.withLayout(event);this.version++;this.applied=false;this.restoring=null;
       }
-      if(event.event==='selected' && event.selected===null && this.builds.has(String(event.build))) {this.selection=null;this.version++;}
+      if(event.event==='selected' && event.selected===null && this.builds.has(String(event.build))) {this.selection=null;this.version++;this.ended=true;}
     }
     if(this.selection&&this.bridge){
       const frame=[...this.bridge.frames.values()].find(f=>f.build===String(this.selection.build));
@@ -192,7 +193,11 @@ export async function designRequest(body:any) {
   if(!entry) throw new Error('The editing session ended. Connect again.');
   entry.seen=Date.now();const s=entry.session;
   if(body.op==='close') {await s.close();sessions.delete(body.session);return {};}
-  if(body.op==='poll') return s.busy?s.view():await s.poll();
+  if(body.op==='poll') {
+    const view=s.busy?s.view():await s.poll();
+    if(s.ended){await s.close();sessions.delete(body.session);return {...view,session:''};}
+    return view;
+  }
   if(body.op==='edit') return s.edit(Number(body.version),Number(body.row),body.value);
   if(body.op==='undo') return s.undo();
   if(body.op==='parent') {

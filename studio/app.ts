@@ -9,6 +9,7 @@ let status = ''; let loaded = false; let resizing = false;
 export const DISCOVERY_API = 'http://127.0.0.1:5175';
 export const grants = `fs.read app:/data/design.json\nfs.write app:/data/design.json\nnet.fetch ${DISCOVERY_API}`;
 let discoveryCache: {owner:string;revision:number;routes:DiscoveredScreen[];error:string}|undefined;
+const previewBridges=new Map<string,string>();
 async function discoverProject(owner:string,revision:number) {
   if(discoveryCache?.owner===owner && discoveryCache.revision===revision) return discoveryCache;
   const response=await fetch(`${DISCOVERY_API}/discover`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:owner}),exactTimeout:6000});
@@ -33,7 +34,9 @@ const snapshot = () => {
     layers: editor.layers,
     views: document.views.map(view => {
       const screen = screens.get(view.screenId)!;
-      return {...view, source: screen.source, layers: screen.source ? [] : screen.layers, screenName: screen.name};
+      let previewSource=screen.source;
+      if(previewSource){const u=new URL(previewSource),bridge=previewBridges.get(u.origin);if(bridge){u.host=new URL(bridge).host;u.searchParams.set('__ed_frame',view.id);previewSource=u.href;}}
+      return {...view, source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name};
     }),
     active: editor.active, screenId: editor.screen.id, source: editor.source,
     frameSelected: editor.selected === editor.active,
@@ -52,11 +55,12 @@ const reply = (fit=false,error='') => {
 };
 const sources: Sources = {
   design: async ([op,session,url,version,row,value]) => {
-    const empty={ok:false,error:'',session,origin:'',source:'',component:'',version:0,message:'',rows:[],canUndo:false,applied:false};
+    const empty={ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,source:'',component:'',version:0,message:'',rows:[],canUndo:false,applied:false};
     try {
       const origin=url?new URL(url).origin:'';
       const response=await fetch(`${DISCOVERY_API}/design`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,session,url:origin,version,row,value})});
       const result=await response.json();
+      if(op==='open'&&result.ok&&result.bridgeOrigin)previewBridges.set(origin,result.bridgeOrigin);
       return {...empty,...result,origin:op==='open'?origin:'',session:op==='close'?'':result.session??session};
     } catch(e) {
       if((e as {code?:string}).code==='bake') throw e;
