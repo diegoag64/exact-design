@@ -145,6 +145,12 @@ component Studio
   mutation changed as shape Reply queue refreshes doc then afterEdit
   mutation libraryChanged as shape Reply queue refreshes doc then afterLibrary
   state collapsed = [""]
+  state addingViewport = false
+  action toggleViewportMenu
+    addingViewport = not addingViewport
+  action addViewport(preset: string)
+    addingViewport = false
+    command("variant", preset)
   state projectName = ""
   state projectUrl = ""
   state projectNameChanged = false
@@ -303,6 +309,7 @@ component Studio
       case none
         hand = hand
   action focusView(id: string, x: number, y: number, w: number, h: number)
+    addingViewport = false
     send changed = edit("select", id, "", 0, 0)
     fitBounds(x, y, x + w, y + h)
   action selectTool
@@ -377,7 +384,7 @@ component Studio
 
               column flex=1 min-width=0 min-height=0 position="relative" overflow="hidden" background-color="surface.canvas"
                 for v in doc.views key=v.id
-                  column position="absolute" left=((hand ? px + dx * zoom : px) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragX : 0)) * zoom) top=((hand ? py + dy * zoom : py) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragY : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragX : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragY : 0)) scale=zoom transform-origin="top left" pointer-events="none" inert=true background-color="paper" box-shadow="0 4px 16px #00000012" testId=`frame-${v.id}`
+                  column position="absolute" left=((hand ? px + dx * zoom : px) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragX : 0)) * zoom) top=((hand ? py + dy * zoom : py) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragY : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragX : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragY : 0)) scale=zoom transform-origin="top left" pointer-events="none" inert=true background-color="paper" border="none" box-shadow="none" testId=`frame-${v.id}`
                     ScreenView(source=v.source, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
                 canvas surface=design(doc.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dragX), (hand ? 0 : dragY), doc.resizing, snapping) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel cursor=(hand ? (dragging ? "grabbing" : "grab") : (dragging ? (doc.resizing ? "nwse-resize" : "move") : "default")) touch-action="none" testId="canvas" aria-label="Design canvas"
                 row display=(panelOverlay ? "none" : "flex") position="absolute" bottom=20 left="50%" translate="-50% 0" padding=6 gap=4 align-items="center" border="1px solid line.subtle" background-color="ink.inverse" border-radius=10 box-shadow="0 2px 12px #00000012"
@@ -405,44 +412,54 @@ component Studio
                 scroll testId="inspector-panel" position=(viewport.width >= 700 ? "relative" : "absolute") right=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=232 flex-shrink=0 border-left-width=1 border-left-style="solid" border-left-color="line.subtle"
                   column padding=16 gap=20
                     row align-items="center"
-                      text "Design" font-weight=600 flex=1
-                      if doc.selected != ""
+                      text (doc.frameSelected ? "Screen" : "Design") font-weight=600 flex=1
+                      if doc.selected != "" and not doc.frameSelected
                         button press=command("delete", "") class=Tool aria-label="Delete selection" testId="delete"
                           image "symbol:delete"
                     if doc.selected == ""
                       text "Select a screen or layer" color="ink.secondary"
                     if doc.frameSelected
                       for v in doc.views.filter(v => v.id == doc.active) key=v.id
-                        column gap=18
-                          input value=v.screenName change=prop("name") class=Field aria-label="Screen name" testId="screen-name"
-                          if doc.route != ""
-                            input value=doc.route change=prop("route") class=Field placeholder="/settings" aria-label="Screen route" testId="screen-route"
-                          else
-                            input value=v.source change=prop("source") class=Field placeholder="Preview URL" aria-label="Preview URL" testId="preview-url"
-                          row gap=8
-                            column flex=1 min-width=0 gap=5
-                              text "W" color="ink.muted" font-size=11
-                              input value=`${v.width}` change=prop("width") class=Field aria-label="Viewport width" testId="frame-width"
-                            column flex=1 min-width=0 gap=5
-                              text "H" color="ink.muted" font-size=11
-                              input value=`${v.height}` change=prop("height") class=Field aria-label="Viewport height" testId="frame-height"
-                          row gap=4
-                            button press=prop("preset", "Phone") class=Tool flex=1 width="auto" aria-label="Phone viewport" testId="preset-phone"
-                              text "Phone" font-size=11
-                            button press=prop("preset", "Tablet") class=Tool flex=1 width="auto" aria-label="Tablet viewport" testId="preset-tablet"
-                              text "Tablet" font-size=11
-                            button press=prop("preset", "Desktop") class=Tool flex=1 width="auto" aria-label="Desktop viewport" testId="preset-desktop"
-                              text "Desktop" font-size=11
+                        column gap=20
                           column gap=6
-                            text "Add viewport" font-weight=500
-                            row gap=4
-                              button press=command("variant", "Phone") class=Tool flex=1 width="auto" aria-label="Add phone variant" testId="variant-phone"
-                                text "Phone" font-size=11
-                              button press=command("variant", "Tablet") class=Tool flex=1 width="auto" aria-label="Add tablet variant" testId="variant-tablet"
-                                text "Tablet" font-size=11
-                              button press=command("variant", "Desktop") class=Tool flex=1 width="auto" aria-label="Add desktop variant" testId="variant-desktop"
-                                text "Desktop" font-size=11
-                          button press=command("duplicate", "") class=Tool width="100%" box-sizing="border-box" aria-label="Duplicate screen" testId="duplicate-screen"
+                            text "Name" color="ink.secondary" font-size=11
+                            input value=v.screenName change=prop("name") class=Field aria-label="Screen name" testId="screen-name"
+                          column gap=6
+                            text (doc.route != "" ? "Route" : "Preview URL") color="ink.secondary" font-size=11
+                            if doc.route != ""
+                              input value=doc.route change=prop("route") class=Field placeholder="/settings" aria-label="Screen route" testId="screen-route"
+                            else
+                              input value=v.source change=prop("source") class=Field placeholder="https://…" aria-label="Preview URL" testId="preview-url"
+                          column height=1 background-color="line.subtle"
+                          column gap=12
+                            row align-items="center"
+                              text "Viewport" font-weight=600 flex=1
+                              button press=command("delete", "") class=Tool aria-label="Delete viewport" title="Delete viewport" testId="delete" disabled=(doc.views.length == 1)
+                                image "symbol:delete"
+                            select value=v.name change=prop("preset") class=Field aria-label="Viewport preset" testId="viewport-preset"
+                              if v.name == "Custom"
+                                option "Custom" value="Custom" disabled=true
+                              option "Phone" value="Phone"
+                              option "Tablet" value="Tablet"
+                              option "Desktop" value="Desktop"
+                            row gap=8
+                              column flex=1 min-width=0 gap=6
+                                text "Width" color="ink.secondary" font-size=11
+                                input value=`${v.width}` change=prop("width") class=Field aria-label="Viewport width" testId="frame-width"
+                              column flex=1 min-width=0 gap=6
+                                text "Height" color="ink.secondary" font-size=11
+                                input value=`${v.height}` change=prop("height") class=Field aria-label="Viewport height" testId="frame-height"
+                          column gap=4
+                            button press=toggleViewportMenu class=Tool width="100%" justify-content="flex-start" gap=8 aria-expanded=addingViewport aria-label="Add viewport" testId="add-viewport"
+                              image "symbol:add"
+                              text "Add viewport" font-size=12
+                            if addingViewport
+                              for preset in ["Phone", "Tablet", "Desktop"] key=preset
+                                button press=addViewport(preset) class=Tool width="100%" justify-content="flex-start" padding-left=28 aria-label=`Add ${preset} viewport` testId=`variant-${preset.toLowerCase()}`
+                                  text preset font-size=12
+                          column height=1 background-color="line.subtle"
+                          button press=command("duplicate", "") class=Tool width="100%" justify-content="flex-start" gap=8 aria-label="Duplicate screen" testId="duplicate-screen"
+                            image "symbol:document"
                             text "Duplicate screen" font-size=12
                     for n in doc.layers.filter(n => n.id == doc.selected) key=n.id
                       column gap=18
@@ -584,7 +601,7 @@ component ScreenView
       if source != ""
         // A new frame avoids adding preview URL changes to the editor's browser history.
         for url in [source] key=url
-          iframe src=url width="100%" height="100%" border-width=0 flex-shrink=0 title="Live app preview" sandbox="allow-scripts allow-same-origin allow-forms" testId=`${prefix}-app`
+          iframe src=url width="100%" height="100%" border="none" outline="none" box-shadow="none" flex-shrink=0 title="Live app preview" sandbox="allow-scripts allow-same-origin allow-forms" testId=`${prefix}-app`
       else
         for n in layers key=n.id
           ScreenLayer(n=n, prefix=prefix, selected=(selected == n.id), dx=dx, dy=dy, resizing=resizing, activate=activate)

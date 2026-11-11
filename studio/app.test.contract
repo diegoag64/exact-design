@@ -66,6 +66,7 @@ test "linked viewports share edits and persist dimensions"
   size 1440x900
   tap "view-view-1"
   clock data
+  tap "add-viewport"
   tap "variant-phone"
   clock data
   expect state doc.views.length == 2
@@ -111,8 +112,9 @@ test "create rename duplicate and delete screens"
   clock data
   expect state doc.screenName == "Settings copy"
   expect state doc.layers.length == 1
-  tap "preset-tablet"
+  type "viewport-preset" "Tablet"
   clock data
+  expect state doc.views.length == 3
   expect state doc.width == 768
   expect state doc.height == 1024
   tap "delete"
@@ -140,6 +142,7 @@ test "Exact layers resize independently and preserve responsive settings"
   size 1440x900
   tap "view-view-1"
   clock data
+  tap "add-viewport"
   tap "variant-phone"
   clock data
   expect tree has "view-1-card"
@@ -176,6 +179,7 @@ test "connect a live app and persist its linked viewports"
   clock data
   expect tree has "view-1-app"
   expect tree missing "layer-title"
+  tap "add-viewport"
   tap "variant-phone"
   clock data
   expect tree has "view-2-app"
@@ -239,6 +243,7 @@ test "frames snap into place as one undo step"
   size 1440x900
   tap "view-view-1"
   clock data
+  tap "add-viewport"
   tap "variant-phone"
   clock data
   tap "canvas" drag 76 76 from 680 52 mouse
@@ -273,6 +278,7 @@ test "project screens share a server and group their viewports"
   clock settle
   expect state doc.source == "http://127.0.0.1:5174/note"
   expect state doc.groups.length == 2
+  tap "add-viewport"
   tap "variant-tablet"
   clock data
   expect state doc.groups.1.views.length == 2
