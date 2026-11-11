@@ -68,7 +68,7 @@ test('hover follows element bounds, clears safely, and does not cancel an in-fli
   const element:any={isConnected:true,dataset:{site:'2'},tagName:'BUTTON',textContent:'Save',parentElement:null,
     closest:()=>null,checkVisibility:()=>true,getBoundingClientRect:()=>rect,getAttribute:()=>null,
     setAttribute(){},removeAttribute(){},scrollIntoView(){}};
-  const context:any={URL,window:{},location:{href:'http://localhost/?__ed_frame=phone'},exact:{plan:'plan-1'},innerWidth:400,innerHeight:800,
+  const context:any={URL,crypto:{randomUUID:()=> 'test-page'},window:{},location:{href:'http://localhost/?__ed_frame=phone'},exact:{plan:'plan-1'},innerWidth:400,innerHeight:800,
     requestAnimationFrame:(fn:Function)=>{animations.set(++next,fn);return next;},cancelAnimationFrame:(id:number)=>animations.delete(id),
     addEventListener(){},setInterval(){},fetch:()=>new Promise(()=>{}),EventSource:class{},PointerEvent:class{constructor(public type:string){}},
     getComputedStyle:()=>({display:'block'}),gate:(event:any)=>picked.push(event.type),
@@ -96,7 +96,7 @@ test('hover follows element bounds, clears safely, and does not cancel an in-fli
 test('selection restoration waits for the new plan and verifies the source location',async()=>{
   let files={'app.contract':'before'},events:any[]=[];
   const node={id:'old',identity:'[2,[]]',path:'root/0:button',parent:'',depth:0,label:'Save',tag:'button',site:2,instance:[]};
-  const frame={frame:'phone',build:'page',plan:'old-plan',inspecting:true,nodes:[node],seen:Date.now()};
+  const frame={frame:'phone',page:'generation-1',build:'page',plan:'old-plan',inspecting:true,nodes:[node],seen:Date.now()};
   const commands:any[]=[];
   const request=(async(url:string,init:any)=>{
     const body=JSON.parse(init.body);
@@ -121,6 +121,8 @@ test('selection restoration waits for the new plan and verifies the source locat
   // A literal source edit can renumber every plan site without moving the element.
   frame.plan='new-plan';frame.nodes=[{...node,id:'new',identity:'[40,[]]',site:40}];
   await s.poll();expect(commands).toEqual([['phone','new']]);
+  // A page may keep Exact's build ID across a reload. Reattach and reselect it.
+  frame.page='generation-2';await s.poll();expect(commands).toEqual([['phone','new'],['phone','new']]);
   events=[{event:'selection',build:'page',site:40,instance:[],source,rows:[]}];
   await s.poll();expect(s.view().restoring).toBe(false);expect(s.view().selectedLabel).toBe('Save');
   const immediate=s.navigate('new');expect(immediate.selecting).toBe(true);expect(immediate.tree[0].selected).toBe(true);expect(immediate.rows).toEqual([]);
@@ -148,4 +150,18 @@ test('the first selection waits for instance paths in the next hierarchy snapsho
   expect((await s.poll()).selecting).toBe(true);expect(s.view().spacingId).toBe('');
   node.instance=[{region:1,key:'home'}];
   const confirmed=await s.poll();expect(confirmed.selecting).toBe(false);expect(confirmed.source).toBe('app.contract:3');expect(confirmed.spacingId).toBe('node');
+});
+test('undo before a rebuild retains the source location and restores on the original plan',async()=>{
+  let events:any[]=[];const commands:any[]=[];
+  const request=(async(url:string)=>url.endsWith('/events')?Response.json({files:{'app.contract':'before'},events:events.splice(0),seq:1,epoch:'run'}):Response.json({ok:{protocol:'tamber/1.18',files:{'app.contract':'before'},builds:['page']}})) as typeof fetch;
+  const node={id:'node',identity:'[2,[]]',path:'root/0:button',parent:'',depth:0,label:'Save',tag:'button',site:2,instance:[]};
+  const frame={frame:'phone',page:'generation',build:'page',plan:'original-plan',inspecting:true,nodes:[node],seen:Date.now()};
+  const s=new DesignSession('http://localhost:5174','fixture',request);
+  s.bridge={frames:new Map([['phone',frame]]),origin:'http://localhost:9999',select:(...args:any[])=>commands.push(args)} as any;
+  await s.start();s.picked={frame:'phone',node};
+  s.restoring={frame:'phone',path:node.path,file:'app.contract',line:3,col:1,sha:'after',before:'before',plan:'original-plan',sent:'',since:Date.now()};
+  s.armRestore({'app.contract':'before'});expect(s.restoring!.sha).toBe('before');expect(s.restoring!.allowSamePlan).toBe(true);
+  await s.poll();expect(commands).toEqual([['phone','node']]);
+  events=[{event:'selection',build:'page',site:2,instance:[],source:{file:'app.contract',line:3,col:1},rows:[]}];
+  expect((await s.poll()).restoring).toBe(false);expect(s.view().source).toBe('app.contract:3');
 });

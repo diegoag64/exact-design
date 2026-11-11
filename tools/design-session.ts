@@ -39,6 +39,10 @@ export function spacingOperation(rows:Row[],property:string,value:string){
     const sides=[parts[0],parts[1]??parts[0],parts[2]??parts[0],parts[3]??parts[1]??parts[0]];
     sides[spacingProperties.indexOf(property)]=value.trim();value=sides.join(' ');
   }
+  if(rows[index].editable.row==='gap'){
+    const parts=rows[index].editable.text.trim().split(/\s+/),axes=[parts[0],parts[1]??parts[0]];
+    axes[property==='row-gap'?0:1]=value.trim();value=axes.join(' ');
+  }
   return {index,value};
 }
 export class DesignSession {
@@ -52,8 +56,9 @@ export class DesignSession {
   ended=false;
   picked:{frame:string;node:ElementNode}|null=null;
   pendingSelection:{frame:string;path:string;until:number}|null=null;
-  restoring:{frame:string;path:string;file:string;line:number;col:number;sha:string;before:string;plan:string;sent:string;since:number}|null=null;
+  restoring:{frame:string;path:string;file:string;line:number;col:number;sha:string;before:string;plan:string;sent:string;since:number;allowSamePlan?:boolean}|null=null;
   builds=new Set<string>();
+  inspectedPages=new Map<string,string>();
   deferredSelections:{event:any;until:number;plan:string}[]=[];
   constructor(readonly origin:string,private token:string,private request:typeof fetch=fetch) {}
   async call(body:any,path='/__tamber') {
@@ -76,8 +81,8 @@ export class DesignSession {
     return this.view();
   }
   async poll() {
-    if(this.bridge)for(const frame of this.bridge.frames.values())if(frame.build&&!this.builds.has(frame.build)){
-      try{await this.call({method:'inspect',client:this.client,build:frame.build,on:true});this.builds.add(frame.build);}catch{/* The page can report its ID before registration completes. */}
+    if(this.bridge)for(const frame of this.bridge.frames.values())if(frame.build&&this.inspectedPages.get(frame.build)!==(frame.page||frame.build)){
+      try{await this.call({method:'inspect',client:this.client,build:frame.build,on:true});this.builds.add(frame.build);this.inspectedPages.set(frame.build,frame.page||frame.build);}catch{/* The page can report its ID before registration completes. */}
     }
     const r=await this.call({client:this.client,after:this.cursor,...(this.epoch?{epoch:this.epoch}:{}),wait:false},'/__tamber/events');
     if(this.epoch && this.epoch!==r.epoch) throw new Error('The app server restarted. Finish editing and reconnect.');
@@ -100,7 +105,7 @@ export class DesignSession {
         }
         if(this.pendingSelection&&(!frame||frame.frame!==this.pendingSelection.frame||node?.path!==this.pendingSelection.path))continue;
         if(this.restoring && (!frame || frame.frame!==this.restoring.frame || !node || node.path!==this.restoring.path))continue;
-        if(this.restoring && (frame!.plan===this.restoring.plan || event.readOnly || this.files[this.restoring.file]!==this.restoring.sha))continue;
+        if(this.restoring && ((!this.restoring.allowSamePlan&&frame!.plan===this.restoring.plan) || event.readOnly || this.files[this.restoring.file]!==this.restoring.sha))continue;
         if(this.restoring&&(event.source?.file!==this.restoring.file||event.source?.line!==this.restoring.line||event.source?.col!==this.restoring.col)){this.restoring=null;this.selection=null;this.version++;continue;}
         if(frame&&node)this.picked={frame:frame.frame,node};
         this.selection=await this.withLayout(event);this.version++;this.applied=false;this.restoring=null;this.pendingSelection=null;
@@ -115,9 +120,9 @@ export class DesignSession {
     if(this.restoring&&this.bridge){
       const pending=this.restoring,frame=this.bridge.frames.get(pending.frame);
       if(Date.now()-pending.since>15000 || (this.files[pending.file]!==pending.sha&&this.files[pending.file]!==pending.before)){this.restoring=null;}
-      else if(frame?.inspecting&&frame.plan!==pending.plan&&pending.sent!==frame.plan){
+      else if(frame?.inspecting&&(pending.allowSamePlan||frame.plan!==pending.plan)&&pending.sent!==(frame.page||frame.build)+':'+frame.plan){
         const matches=frame.nodes.filter(n=>n.path===pending.path);
-        if(matches.length===1){this.bridge.select(frame.frame,matches[0].id);pending.sent=frame.plan;}
+        if(matches.length===1){this.bridge.select(frame.frame,matches[0].id);pending.sent=(frame.page||frame.build)+':'+frame.plan;}
       }
     }
     return this.view();
@@ -196,8 +201,9 @@ export class DesignSession {
     } finally {this.busy=false;}
   }
   armRestore(files:any){
-    const frame=this.picked&&this.bridge?.frames.get(this.picked.frame),source=this.selection?.source;
-    if(frame&&this.picked&&source?.file&&files?.[source.file])this.restoring={frame:frame.frame,path:this.picked.node.path,file:source.file,line:source.line,col:source.col,sha:files[source.file],before:this.files[source.file],plan:frame.plan,sent:'',since:Date.now()};
+    const frame=this.picked&&this.bridge?.frames.get(this.picked.frame),previous=this.restoring,source=this.selection?.source??previous;
+    const allowSamePlan=!this.selection&&!!previous&&frame?.plan===previous.plan&&files?.[previous.file]===previous.before;
+    if(frame&&this.picked&&source?.file&&files?.[source.file])this.restoring={frame:frame.frame,path:this.picked.node.path,file:source.file,line:source.line,col:source.col,sha:files[source.file],before:this.files[source.file],plan:frame.plan,sent:'',since:Date.now(),allowSamePlan};
   }
   navigate(id:string){
     const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??[...this.bridge.frames.values()][0]);

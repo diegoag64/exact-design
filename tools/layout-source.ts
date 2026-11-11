@@ -29,8 +29,8 @@ export function layoutValue(attr:string,text:string):string {
   const value=text.trim();
   if(enums[attr]) {if(!enums[attr].includes(value)) throw new Error('Choose one of the available layout options.');return JSON.stringify(value);}
   if(!lengths.has(attr)) throw new Error('This layout property is not supported.');
-  const parts=value.split(/\s+/),isShorthand=attr==='padding'||attr==='margin';
-  if(!value || parts.length>(isShorthand?4:1)) throw new Error(isShorthand?'Use one to four spacing values.':'Enter one size.');
+  const parts=value.split(/\s+/),isShorthand=attr==='padding'||attr==='margin'||attr==='gap',limit=attr==='gap'?2:isShorthand?4:1;
+  if(!value || parts.length>limit) throw new Error(attr==='gap'?'Use one or two gap values.':isShorthand?'Use one to four spacing values.':'Enter one size.');
   for(const part of parts) {
     if(part==='auto' && (attr.includes('width')||attr.includes('height')||attr.startsWith('margin'))) continue;
     if(!/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|vh|vw)?$/.test(part)) throw new Error('Use a number, CSS length, or percentage.');

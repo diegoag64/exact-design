@@ -1,5 +1,8 @@
 const number=value=>Math.max(0,parseFloat(value)||0);
 const value=n=>String(Math.round(n*10)/10);
+// Percentage/calc gaps can remain unresolved in computed style. Do not label
+// their numeric prefix as pixels; the inspector still exposes authored values.
+const gapPixels=value=>typeof value==='string'&&/^(?:\d+(?:\.\d+)?|\.\d+)px$/.test(value)?number(value):0;
 
 /** Measurements stay in the guest's viewport coordinates, before canvas zoom. */
 export function measureSpacing(el,styleOf,viewport){
@@ -38,7 +41,7 @@ export function measureSpacing(el,styleOf,viewport){
       if(!line){line={start:child[cross],end:child[crossEnd],children:[]};lines.push(line);}
       line.start=Math.min(line.start,child[cross]);line.end=Math.max(line.end,child[crossEnd]);line.children.push(child);
     }
-    const gap=number(horizontal?css.columnGap:css.rowGap),scaledGap=gap*(horizontal?sx:sy);
+    const gap=gapPixels(horizontal?css.columnGap:css.rowGap),scaledGap=gap*(horizontal?sx:sy);
     for(const line of lines){
       line.children.sort((a,b)=>a[main]-b[main]);
       for(let i=1;i<line.children.length;i++){
@@ -50,7 +53,7 @@ export function measureSpacing(el,styleOf,viewport){
       }
     }
     lines.sort((a,b)=>a.start-b.start);
-    const crossGap=number(horizontal?css.rowGap:css.columnGap),scaledCrossGap=crossGap*(horizontal?sy:sx);
+    const crossGap=gapPixels(horizontal?css.rowGap:css.columnGap),scaledCrossGap=crossGap*(horizontal?sy:sx);
     for(let i=1;i<lines.length;i++){
       const space=lines[i].start-lines[i-1].end;if(space+0.5<scaledCrossGap)continue;
       const start=lines[i-1].end+(space-scaledCrossGap)/2;

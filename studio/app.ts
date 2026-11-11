@@ -1,6 +1,7 @@
 import type { Answer, Sources, Ctx2D, Frame } from './app.contract.d.ts';
 import { WorkspaceEditor, validSource } from './workspace';
 import { WorkspacePersistence } from './persistence';
+import { decodeSpacing } from './spacing';
 import { screenSource } from './project';
 import { parseRoutes, type DiscoveredScreen } from './discovery';
 import { snapTargets } from './snapping';
@@ -56,8 +57,9 @@ const reply = (fit=false,error='') => {
   return {ok:error==='',error,fit,minX:d.minX,minY:d.minY,maxX:d.maxX,maxY:d.maxY};
 };
 const sources: Sources = {
+  spacingMeasure: ([frame,payload]) => decodeSpacing(frame,payload),
   design: async ([op,session,url,version,row,value]) => {
-    const empty={ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,message:'',rows:[],canUndo:false,applied:false};
+    const empty={ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,message:'',rows:[],canUndo:false,applied:false,spacingId:'',spacingPlan:'',spacingFrame:'',spacingConfig:'',spacingInputs:[]};
     try {
       const origin=url?new URL(url).origin:'';
       const response=await fetch(`${DISCOVERY_API}/design`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,session,url:origin,version,row,value})});

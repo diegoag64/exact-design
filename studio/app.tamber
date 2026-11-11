@@ -14,6 +14,9 @@ theme
   ink.selected = light-dark(#4563d6, #b4c1ff)
   ink.inverse = light-dark(#ffffff, #242426)
   paper = #ffffff scheme=fixed
+  spacing.wash = #d946ef14 scheme=fixed
+  spacing.edge = #c026d34d scheme=fixed
+  spacing.ink = light-dark(#a21caf, #efabf5)
 
 icons
   icon.panel-left = icon(sf "sidebar.left", svg "icons/panel-left.svg")

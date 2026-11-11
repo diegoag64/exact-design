@@ -23,6 +23,7 @@ test('patches only a literal attribute at the compiled UTF-8 source address',()=
 test('layout values accept sizing and spacing without accepting expressions or code',()=>{
   expect(layoutValue('width','100%')).toBe('"100%"');
   expect(layoutValue('gap','16')).toBe('16');
+  expect(layoutValue('gap','8 16')).toBe('"8px 16px"');
   expect(layoutValue('padding','8px 16px')).toBe('"8px 16px"');
   expect(layoutValue('padding','8 16')).toBe('"8px 16px"');
   expect(layoutValue('margin-left','-8')).toBe('-8');
@@ -72,4 +73,30 @@ test('cannot write sources outside the connected app, including through symlinks
     for(const file of ['../external.contract','linked.contract']) await expect(writeLayout(app,{...site(),file},'24')).rejects.toThrow('Only this app');
     expect(await readFile(join(root,'external.contract'),'utf8')).toBe(source);
   } finally {await rm(root,{recursive:true,force:true});}
+});
+test('on-canvas spacing edits preserve shorthand sides and use the same source undo history',async()=>{
+  const app=await mkdtemp(join(tmpdir(),'exact-canvas-spacing-'));let events:any[]=[];
+  await writeFile(join(app,'app.contract'),source);
+  const files=async()=>({'app.contract':digest(await readFile(join(app,'app.contract'),'utf8'))});
+  const request=(async(url:string,init:any)=>{
+    const body=JSON.parse(init.body);
+    if(url.endsWith('/events')){const reply={files:await files(),events,seq:1,epoch:'run'};events=[];return Response.json(reply);}
+    if(body.method==='hello')return Response.json({ok:{protocol:'tamber/1.18',files:await files(),local:true,app}});
+    if(body.method==='inspect')return Response.json({ok:{builds:['page']}});
+    throw new Error('Spacing must use checked source writes.');
+  }) as typeof fetch;
+  const select=()=>{events=[{event:'selection',build:'page',source:{file:'app.contract',line:3},rows:['gap','padding'].map(attr=>{
+    const at=site(source,attr);return {name:attr,source:'authored',origin:'own',layout:true,attr,at:{file:join(app,'app.contract'),line:at.line,col:at.col,sha256:at.sha256},editable:{rung:null}};
+  })}];};
+  try{
+    const session=new DesignSession('http://localhost:5174','fixture',request);await session.start();select();
+    let selected=await session.poll();
+    await session.editSpacing(selected.version,'padding-top','24');
+    expect(await readFile(join(app,'app.contract'),'utf8')).toContain('padding="24px 16px 8px 16px"');
+    await session.undo();expect(await readFile(join(app,'app.contract'),'utf8')).toBe(source);
+    select();selected=await session.poll();await session.editSpacing(selected.version,'column-gap','20');
+    expect(await readFile(join(app,'app.contract'),'utf8')).toContain('gap="12px 20px"');
+    await session.undo();expect(await readFile(join(app,'app.contract'),'utf8')).toBe(source);
+    await expect(session.editSpacing(selected.version,'padding-top','30')).rejects.toThrow('changed');
+  }finally{await rm(app,{recursive:true,force:true});}
 });

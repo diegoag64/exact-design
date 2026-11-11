@@ -1,5 +1,6 @@
 // Runs only in the local development proxy, never in the app's source.
 const frame=new URL(location.href).searchParams.get('__ed_frame')||'preview';
+const page=crypto.randomUUID();
 const nodes=new Map();let command=0,selectionCommand=0,working=false,pushed=false;
 const style=document.createElement('style');style.textContent='#exact-inspect{display:none!important}';document.head.append(style);
 const outline=document.createElement('div');outline.dataset.edHover='';outline.setAttribute('aria-hidden','true');
@@ -33,7 +34,7 @@ function snapshot(){
     const label=el.getAttribute('aria-label')||el.dataset.testid||el.getAttribute('data-testid')||(['span','button','h1','h2','p'].includes(tag)?el.textContent?.trim().slice(0,55):'')||({div:container,span:'Text',img:'Image',button:'Button',main:'Screen',header:'Header',section:'Section'}[tag]||tag);
     rows.push({id,identity,path,parent:parentId,depth:parentId?(rows.find(r=>r.id===parentId)?.depth??0)+1:0,label,tag,site:Number(el.dataset.site),instance});
   }
-  return {frame,build:window.__exactDesignBuild||'',plan:globalThis.exact?.plan||'',inspecting:!!document.getElementById('exact-inspect'),nodes:rows};
+  return {frame,page,build:window.__exactDesignBuild||'',plan:globalThis.exact?.plan||'',inspecting:!!document.getElementById('exact-inspect'),nodes:rows};
 }
 async function select(id,sequence){
   const el=nodes.get(id);if(!el?.isConnected||!document.getElementById('exact-inspect'))return;

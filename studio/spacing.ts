@@ -26,6 +26,9 @@ export function spacingRows(rows:SpacingRow[]){
       const parts=value.trim().split(/\s+/),sides=[parts[0],parts[1]??parts[0],parts[2]??parts[0],parts[3]??parts[1]??parts[0]];
       value=sides[spacingProperties.indexOf(property)];
     }
+    if(row.property==='gap'){
+      const parts=value.trim().split(/\s+/);value=property==='row-gap'?parts[0]:parts[1]??parts[0];
+    }
     return {property,value,shared:row.shared};
   }).filter((row):row is {property:string;value:string;shared:boolean}=>row!==null);
 }

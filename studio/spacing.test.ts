@@ -34,15 +34,18 @@ test('scroll clipping, transforms, and distributed space do not report extra spa
   expect(boxes.find((b:any)=>b.property==='column-gap')).toMatchObject({width:3,value:'16'});
   const scaled=element(rect(0,0,600,240));scaled.offsetWidth=300;scaled.offsetHeight=120;
   expect(measureSpacing(scaled,styleOf,viewport).find((b:any)=>b.property==='padding-top')).toMatchObject({height:24,value:'12'});
+  el.style={...css,columnGap:'10%'};expect(measureSpacing(el,styleOf,viewport).some((b:any)=>b.property==='column-gap')).toBe(false);
 });
 test('spacing edits prefer explicit sides and preserve other shorthand values and units',()=>{
   const rows=[{name:'padding',editable:{row:'padding',text:'1rem 20px'}},{name:'left',editable:{row:'padding-left',text:'8'}}];
   expect(spacingOperation(rows,'padding-top','24')).toEqual({index:0,value:'24 20px 1rem 20px'});
   expect(spacingOperation(rows,'padding-left','12')).toEqual({index:1,value:'12'});
-  expect(spacingOperation([{name:'gap',editable:{row:'gap',text:'8'}}],'column-gap','16')).toEqual({index:0,value:'16'});
+  expect(spacingOperation([{name:'gap',editable:{row:'gap',text:'8'}}],'column-gap','16')).toEqual({index:0,value:'8 16'});
+  expect(spacingOperation([{name:'gap',editable:{row:'gap',text:'8px 1rem'}}],'row-gap','16')).toEqual({index:0,value:'16 1rem'});
   for(const [property,value] of [['width','20'],['padding-left','-2'],['row-gap','8 16'],['padding-top','calc(1px)']])expect(()=>spacingOperation(rows,property,value)).toThrow();
   expect(()=>spacingOperation([],'padding-top','20')).toThrow('computed');
   expect(spacingRows([{id:'0',property:'padding',value:'1rem 20px',shared:true}])[0]).toEqual({property:'padding-top',value:'1rem',shared:true});
+  expect(spacingRows([{id:'0',property:'gap',value:'8px 1rem',shared:false}])).toEqual([{property:'row-gap',value:'8px',shared:false},{property:'column-gap',value:'1rem',shared:false}]);
 });
 test('guest messages accept only bounded geometry and known spacing properties',()=>{
   const box={key:'padding-top-0',property:'padding-top',x:0,y:0,width:100,height:12,labelX:50,labelY:6,value:'12',label:true};

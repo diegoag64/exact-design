@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 export type ElementNode={id:string;identity:string;path:string;parent:string;depth:number;label:string;tag:string;site:number;instance:unknown[]};
-export type ElementFrame={frame:string;build:string;plan:string;inspecting:boolean;nodes:ElementNode[];seen:number};
+export type ElementFrame={frame:string;page?:string;build:string;plan:string;inspecting:boolean;nodes:ElementNode[];seen:number};
 const script=readFileSync(new URL('./element-bridge-client.js',import.meta.url),'utf8');
 const bridges=new Map<string,ElementBridge>();
 export function stopElementBridges(){for(const bridge of bridges.values())bridge.server.stop(true);bridges.clear();}
@@ -54,7 +54,7 @@ export class ElementBridge {
       for(const [key,frame]of this.frames)if(Date.now()-frame.seen>30000)this.frames.delete(key);
       if(!this.frames.has(body.frame)&&this.frames.size>=200)return new Response(null,{status:429});
       const nodes=body.nodes.filter((n:any)=>n&&typeof n.id==='string'&&n.id.length<2048&&typeof n.identity==='string'&&n.identity.length<2048&&typeof n.path==='string'&&n.path.length<4096&&typeof n.parent==='string'&&n.parent.length<2048&&typeof n.label==='string'&&n.label.length<=120&&typeof n.tag==='string'&&n.tag.length<40&&Number.isSafeInteger(n.depth)&&n.depth>=0&&n.depth<1000&&Number.isSafeInteger(n.site)&&Array.isArray(n.instance));
-      this.frames.set(body.frame,{frame:body.frame,build:body.build,plan:body.plan,inspecting:body.inspecting===true,nodes,seen:Date.now()});
+      this.frames.set(body.frame,{frame:body.frame,page:typeof body.page==='string'&&body.page.length<=100?body.page:'',build:body.build,plan:body.plan,inspecting:body.inspecting===true,nodes,seen:Date.now()});
       return Response.json({commands:(this.commands.get(body.frame)||[]).filter(c=>c.seq>Number(body.after))});
     }
     if(url.pathname.startsWith('/__exact_design/')||url.pathname.startsWith('/__tamber'))return new Response(null,{status:404});

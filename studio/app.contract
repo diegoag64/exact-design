@@ -11,6 +11,7 @@ shape SnapTarget
   gap: bool
 
 fn magnitude(n: number): number = max(n, -n)
+fn spacingName(property: string): string = property == "padding-top" ? "Top padding" : property == "padding-right" ? "Right padding" : property == "padding-bottom" ? "Bottom padding" : property == "padding-left" ? "Left padding" : property == "row-gap" ? "Vertical gap" : "Horizontal gap"
 
 fn snappedDelta(targets: SnapTarget[], origin: number, delta: number, zoom: number): number = match first(sortBy(targets, t => magnitude(t.value - origin - delta))) { case some(t) => magnitude(t.value - origin - delta) <= 8 / zoom ? t.value - origin : delta, case none => delta }
 
@@ -121,6 +122,29 @@ shape LayoutOption
   value: string
   label: string
 
+shape SpacingInput
+  property: string
+  value: string
+  shared: bool
+
+shape SpacingBox
+  key: string
+  property: string
+  x: number
+  y: number
+  width: number
+  height: number
+  labelX: number
+  labelY: number
+  value: string
+  label: bool
+
+shape SpacingMeasurement
+  frame: string
+  id: string
+  plan: string
+  boxes: SpacingBox[]
+
 shape DesignReply
   ok: bool
   error: string
@@ -139,6 +163,11 @@ shape DesignReply
   selectedLabel: string
   restoring: bool
   selecting: bool
+  spacingId: string
+  spacingPlan: string
+  spacingFrame: string
+  spacingConfig: string
+  spacingInputs: SpacingInput[]
 
 shape ElementNode
   id: string
@@ -187,6 +216,15 @@ component Studio
   mutation libraryChanged as shape Reply queue refreshes doc then afterLibrary
   mutation designChanged as shape DesignReply queue then afterDesign
   mutation hoverChanged as shape DesignReply queue
+  mutation spacingMeasured as shape SpacingMeasurement
+  state spacingFrame = ""
+  state previewPlan = ""
+  state previewRevision = 0
+  state spacingProperty = ""
+  state spacingValue = ""
+  action measureSpacing(frame: string, payload: string)
+    if editing
+      send spacingMeasured = spacingMeasure(frame, payload)
   state designSession = ""
   state hoveredElement = ""
   action hoverElement(id: string, on: bool)
@@ -212,6 +250,9 @@ component Studio
     rightPanel = "open"
     send designChanged = design("open", "", doc.source, 0, doc.active, "")
   action finishEditing
+    postMessage("", spacingFrame)
+    spacingFrame = ""
+    spacingProperty = ""
     hoveredElement = ""
     designWriting = true
     send designChanged = design("close", designSession, "", 0, "", "")
@@ -231,6 +272,23 @@ component Studio
   action editDesign(row: string, value: string)
     designWriting = true
     send designChanged = design("edit", designSession, "", designVersion, row, value)
+  action editSpacing(value: string)
+    spacingValue = value
+  action openSpacing(property: string, value: string)
+    spacingProperty = property
+    spacingValue = value
+    selectText("spacing-value")
+  action cancelSpacing
+    spacingProperty = ""
+  action spacingKey(key: string)
+    if key == "Escape"
+      preventDefault()
+      spacingProperty = ""
+    if key == "Enter"
+      preventDefault()
+      designWriting = true
+      send designChanged = design("spacing", designSession, "", designVersion, spacingProperty, spacingValue)
+      spacingProperty = ""
   action undoDesign
     designWriting = true
     send designChanged = design("undo", designSession, "", 0, "", "")
@@ -245,8 +303,18 @@ component Studio
         if r.error != ""
           designError = r.error
         if r.ok
+          if r.spacingPlan != ""
+            if previewPlan != "" and previewPlan != r.spacingPlan
+              previewRevision = previewRevision + 1
+            previewPlan = r.spacingPlan
+          if spacingFrame != "" and spacingFrame != r.spacingFrame
+            postMessage("", spacingFrame)
+          if r.spacingFrame != ""
+            postMessage(r.spacingConfig, r.spacingFrame)
+          spacingFrame = r.spacingFrame
           collapsedElements = collapsedElements.filter(id => not r.crumbs.map(c => c.id).includes(id))
           if r.version != designVersion or r.session == ""
+            spacingProperty = ""
             designError = ""
           if r.origin != ""
             designOrigin = r.origin
@@ -517,8 +585,33 @@ component Studio
               column flex=1 min-width=0 min-height=0 position="relative" overflow="hidden" background-color="surface.canvas"
                 for v in doc.views key=v.id
                   column position="absolute" left=((hand ? px + dx * zoom : px) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragX : 0)) * zoom) top=((hand ? py + dy * zoom : py) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragY : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragX : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragY : 0)) scale=zoom transform-origin="top left" pointer-events=(editing and v.source.startsWith(designOrigin + "/") ? "auto" : "none") inert=(not editing or not v.source.startsWith(designOrigin + "/")) background-color="paper" border="none" box-shadow="none" testId=`frame-${v.id}`
-                    ScreenView(source=v.previewSource, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
+                    ScreenView(source=v.previewSource, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick, measure=measureSpacing, revision=(v.previewSource.includes("__ed_frame=") ? previewRevision : 0))
                 canvas pointer-events=(editing ? "none" : "auto") surface=design(doc.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dragX), (hand ? 0 : dragY), doc.resizing, snapping) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel cursor=(hand ? (dragging ? "grabbing" : "grab") : (dragging ? (doc.resizing ? "nwse-resize" : "move") : "default")) touch-action="none" testId="canvas" aria-label="Design canvas"
+                if editing and not designWriting
+                  match designChanged
+                    case some(result)
+                      match spacingMeasured
+                        case some(measured)
+                          if measured.id != "" and measured.id == result.spacingId and measured.plan == result.spacingPlan and measured.frame == result.spacingFrame
+                            for v in doc.views.filter(v => v.id == measured.frame) key=v.id
+                              column position="absolute" inset=0 pointer-events="none" testId="spacing-overlay"
+                                for box in measured.boxes key=box.key
+                                  column position="absolute" left=(px + (v.x + box.x) * zoom) top=(py + (v.y + box.y) * zoom) width=(box.width * zoom) height=(box.height * zoom) background-color="spacing.wash" border="1px solid spacing.edge" box-sizing="border-box" aria-hidden=true
+                                  if box.label and max(box.width, box.height) * zoom >= 32
+                                    for targets in [result.spacingInputs.filter(p => p.property == box.property)] key=box.property
+                                      if targets.length == 0
+                                        text box.value position="absolute" left=(px + (v.x + box.labelX) * zoom) top=(py + (v.y + box.labelY) * zoom) translate="-50% -50%" font-size=10 font-weight=500 color="spacing.ink" background-color="surface.panel" padding=3 border-radius=4 title=`${spacingName(box.property)} · Computed` testId=`spacing-readonly-${box.property}`
+                                      else
+                                        for target in targets key=target.property
+                                          if spacingProperty == target.property
+                                            input id="spacing-value" value=spacingValue input=editSpacing key=spacingKey blur=cancelSpacing position="absolute" left=(px + (v.x + box.labelX) * zoom) top=(py + (v.y + box.labelY) * zoom) translate="-50% -50%" width=72 height=26 padding=4 box-sizing="border-box" border="1px solid spacing.ink" border-radius=5 background-color="surface.panel" color="ink.primary" font-size=11 text-align="center" pointer-events="auto" aria-label=spacingName(box.property) title="Enter to apply · Escape to cancel" testId="spacing-value"
+                                          else
+                                            button press=openSpacing(target.property, target.value) position="absolute" left=(px + (v.x + box.labelX) * zoom) top=(py + (v.y + box.labelY) * zoom) translate="-50% -50%" display="flex" align-items="center" justify-content="center" box-sizing="border-box" min-width=24 height=20 min-height=20 padding=3 border="1px solid spacing.edge" border-radius=4 background-color="surface.panel" color="spacing.ink" font-size=10 font-weight=600 pointer-events="auto" aria-label=`Edit ${spacingName(box.property)}` title=(target.shared ? `${spacingName(box.property)} · Shared style` : spacingName(box.property)) testId=`spacing-${box.property}`
+                                              text box.value
+                        case none
+                          column display="none"
+                    case none
+                      column display="none"
                 row display=(panelOverlay or editing ? "none" : "flex") position="absolute" bottom=20 left="50%" translate="-50% 0" padding=6 gap=4 align-items="center" border="1px solid line.subtle" background-color="ink.inverse" border-radius=10 box-shadow="0 2px 12px #00000012"
                   button press=selectTool aria-keyshortcuts="v" class=Tool background-color=(not hand ? "surface.selected" : "transparent") aria-label="Select" title="Select (V). Hold Alt to ignore snapping." testId="select-tool"
                     image "symbol:icon.pointer"
@@ -696,7 +789,7 @@ component Studio
                     image "symbol:close"
                 scroll width="100%" max-width=doc.width height=doc.height max-height="80%" overflow-x="scroll"
                   column position="relative" width=doc.width height=doc.height overflow="hidden" background-color="paper" testId="live-screen"
-                    ScreenView(source=doc.source, layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick)
+                    ScreenView(source=doc.source, layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick, measure=measureSpacing, revision=0)
         if entry.name == "project" or entry.name == "addScreen"
           column navigationKey=`${entry.id}` navigationPresentation="fullscreen" position="absolute" inset=0 background-color="surface.scrim" align-items="center" justify-content="center" padding=20 box-sizing="border-box"
             column width=400 max-width="100%" max-height="100%" background-color="surface.panel" border-radius=12 padding=20 gap=20 box-sizing="border-box"
@@ -773,12 +866,15 @@ component ScreenView
     dy: number
     resizing: bool
     activate: action
+    measure: action
+    revision: number
   view
     column position="relative" width="100%" height="100%" overflow="hidden" background-color="paper" font-family="system-ui"
       if source != ""
         // A new frame avoids adding preview URL changes to the editor's browser history.
-        for url in [source] key=url
-          iframe src=url width="100%" height="100%" border="none" outline="none" box-shadow="none" flex-shrink=0 title="Live app preview" sandbox="allow-scripts allow-same-origin allow-forms" testId=`${prefix}-app`
+        // A rebuilt guest gets a fresh message channel owned by this frame.
+        for generation in [`${source}-${revision}`] key=generation
+          iframe id=prefix src=source message=measure(prefix) width="100%" height="100%" border="none" outline="none" box-shadow="none" flex-shrink=0 title="Live app preview" sandbox="allow-scripts allow-same-origin allow-forms" testId=`${prefix}-app`
       else
         for n in layers key=n.id
           ScreenLayer(n=n, prefix=prefix, selected=(selected == n.id), dx=dx, dy=dy, resizing=resizing, activate=activate)

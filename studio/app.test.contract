@@ -532,7 +532,7 @@ test "navigate rendered layers and keep selection through edits and undo"
   clock data
   tap "edit-app"
   clock data
-  clock +2200 real
+  clock +3500 real
   clock data
   expect state elementTree.length == 4
   tap "fold-element-1"
@@ -543,6 +543,9 @@ test "navigate rendered layers and keep selection through edits and undo"
   clock data
   expect text "breadcrumb-2" == "Save"
   expect text "design-property-0" == "#ffffff"
+  clock +1000 real
+  expect tree has "spacing-overlay"
+  expect text "spacing-readonly-padding-top" == "20"
   tap "element-1" hover
   clock data
   expect state hoveredElement == "root/0:main/0:section"
@@ -554,13 +557,13 @@ test "navigate rendered layers and keep selection through edits and undo"
   type "design-property-0" "#123456"
   type "design-property-0" key "Enter"
   clock data
-  clock +2200 real
+  clock +3500 real
   clock data
   expect text "design-property-0" == "#123456"
   expect text "breadcrumb-2" == "Save"
   tap "undo-app-design"
   clock data
-  clock +2200 real
+  clock +3500 real
   clock data
   expect text "design-property-0" == "#ffffff"
   tap "breadcrumb-1"
@@ -571,4 +574,5 @@ test "navigate rendered layers and keep selection through edits and undo"
   tap "edit-app"
   clock data
   expect state editing == false
+  expect tree missing "spacing-overlay"
   expect tree has "screens-panel"
