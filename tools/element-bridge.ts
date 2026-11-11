@@ -10,6 +10,7 @@ export function stopElementBridges(){for(const bridge of bridges.values())bridge
 export function bridgeFor(origin:string){let bridge=bridges.get(origin);if(!bridge){const port=20000+parseInt(createHash('sha256').update(origin).digest('hex').slice(0,6),16)%30000;bridge=new ElementBridge(origin,port);bridges.set(origin,bridge);}return bridge;}
 export class ElementBridge {
   frames=new Map<string,ElementFrame>();seq=0;
+  connections=new Set<unknown>();
   commands=new Map<string,({seq:number;op:string;id:string;plan:string}&Record<string,any>)[]>();
   listeners=new Map<string,Set<ReadableStreamDefaultController<Uint8Array>>>();
   feedback=new Set<(frame:ElementFrame,packet:any)=>void>();
@@ -24,7 +25,7 @@ export class ElementBridge {
         }
         return this.handle(req);
       },
-      websocket:{maxPayloadLength:4096,message:(ws,raw)=>{void this.live(ws,raw);},close:ws=>{for(const abort of ws.data.streams.values())abort.abort();ws.data.streams.clear();}},
+      websocket:{maxPayloadLength:4096,open:ws=>{this.connections.add(ws);},message:(ws,raw)=>{void this.live(ws,raw);},close:ws=>{this.connections.delete(ws);for(const abort of ws.data.streams.values())abort.abort();ws.data.streams.clear();}},
     });
   }
   async live(ws:any,raw:any){
@@ -33,7 +34,7 @@ export class ElementBridge {
     const streams:Map<string,AbortController>=ws.data.streams;
     streams.get(packet.id)?.abort();streams.delete(packet.id);
     if(packet.op==='close')return;
-    if(packet.op!=='open'||streams.size>=4||typeof packet.path!=='string'||packet.path.length>2048)return;
+    if(packet.op!=='open'||streams.size>=800||typeof packet.path!=='string'||packet.path.length>2048)return;
     let url;try{url=new URL(packet.path,this.origin);}catch{return;}
     if(url.origin!==this.origin||!['/__dev/events','/__exact_design/events'].includes(url.pathname))return;
     const abort=new AbortController();streams.set(packet.id,abort);
@@ -102,7 +103,7 @@ export class ElementBridge {
     if(url.origin!==this.origin || (origin && origin!==this.origin))return new Response('Forbidden',{status:403});
     if(url.pathname==='/__exact_design/events'&&req.method==='GET')return this.subscribe(req,url);
     if(url.pathname==='/__exact_design/client.js')return new Response(script,{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
-    for(const name of ['spacing-client.js','spacing-geometry.js','design-preview-client.js','full-page-client.js','event-stream-client.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
+    for(const name of ['spacing-client.js','spacing-geometry.js','design-preview-client.js','full-page-client.js','event-stream-client.js','project-hub.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
     if(url.pathname==='/__exact_design/feedback'&&req.method==='POST'){
       const packet=await req.json(),frame=this.frames.get(packet.frame);
       if(!frame||packet.page!==frame.page||packet.plan!==frame.plan)return new Response(null,{status:409});

@@ -16,9 +16,9 @@ test('many cold previews load app data and recover through reloads and server re
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   const waitLoaded=async()=>{const frames=page.frames().filter(f=>f!==page.mainFrame());await Promise.all(frames.map(f=>f.waitForFunction(()=>document.querySelectorAll('.note').length===6,undefined,{timeout:10000})));return frames;};
   try{
-    await page.goto(host.url.href,{waitUntil:'domcontentloaded'});let frames=await waitLoaded();expect(frames.length).toBe(8);
+    await page.goto(host.url.href,{waitUntil:'domcontentloaded'});let frames=await waitLoaded();expect(frames.length).toBe(8);expect(bridge.connections.size).toBe(1);
     await page.evaluate(src=>{const frame=document.createElement('iframe');frame.src=src;document.body.append(frame);},bridge.origin+'/?__ed_frame=added&__ed_height=240&__ed_full=1');
-    frames=await waitLoaded();expect(frames.length).toBe(9);
+    frames=await waitLoaded();expect(frames.length).toBe(9);expect(bridge.connections.size).toBe(1);
     await frames[0].evaluate(()=>localStorage.setItem('preview-regression','kept'));
     await Promise.all(frames.map(async f=>{await Promise.all([f.waitForNavigation({waitUntil:'domcontentloaded'}),f.evaluate(()=>location.reload())]);}));frames=await waitLoaded();
     for(const frame of frames)expect(await frame.evaluate(()=>localStorage.getItem('preview-regression'))).toBe('kept');
@@ -29,6 +29,6 @@ test('many cold previews load app data and recover through reloads and server re
     const before=await Promise.all(frames.map(f=>f.evaluate(()=>window.eventsSeen)));
     await Promise.all(frames.map((f,i)=>f.waitForFunction(count=>window.eventsSeen>count,before[i],{timeout:10000})));
     await Promise.all(frames.map(async f=>{await Promise.all([f.waitForNavigation({waitUntil:'domcontentloaded'}),f.evaluate(()=>location.reload())]);}));await waitLoaded();
-    expect(errors).toEqual([]);
+    expect(bridge.connections.size).toBe(1);expect(errors).toEqual([]);
   }finally{await page.context().close();await suite.browser.close();bridge.server.stop(true);app.stop(true);host.stop(true);}
 },30000);
