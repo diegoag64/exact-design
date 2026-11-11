@@ -7,6 +7,8 @@ import { screenSource,localPreview } from './project';
 import { parseRoutes, type DiscoveredScreen } from './discovery';
 import { snapTargets } from './snapping';
 import { render } from './render';
+import {PreviewEngines} from './preview-engines';
+const previewEngines=new PreviewEngines();
 const editor = new WorkspaceEditor();
 const persistence = new WorkspacePersistence(editor);
 const drafts=new DraftStorage();
@@ -25,6 +27,16 @@ async function discoverProject(owner:string,revision:number) {
   const routes=parseRoutes({routes:body.routes.map((r:{name:string;route:string})=>({name:r.name,pattern:r.route}))});
   return discoveryCache={owner,revision,routes,error:body.error};
 }
+function framePreview(source:string,id:string,height:number,auto:boolean){
+  if(!source)return '';
+  if(localPreview(source)&&!previewBridges.has(new URL(source).origin))return '';
+  const url=new URL(source),bridge=previewBridges.get(url.origin);
+  if(bridge&&bridge!==url.origin){
+    url.host=new URL(bridge).host;url.searchParams.set('__ed_frame',id);url.searchParams.set('__ed_events','project-v2');
+    url.searchParams.set('__ed_height',String(height));url.searchParams.set('__ed_full',auto?'1':'0');
+  }
+  return url.href;
+}
 const snapshot = () => {
   const document = editor.document,frames=editor.frames;
   const screens = new Map(document.screens.map(screen => [screen.id, {...screen, source:screenSource(screen,document.project)}]));
@@ -41,11 +53,11 @@ const snapshot = () => {
     layers: editor.layers,
     views: frames.map(view => {
       const screen = screens.get(view.screenId)!;
-      let previewSource=localPreview(screen.source)&&!previewBridges.has(new URL(screen.source).origin)?'':screen.source;
-      if(previewSource){const u=new URL(previewSource),bridge=previewBridges.get(u.origin);if(bridge&&bridge!==u.origin){u.host=new URL(bridge).host;u.searchParams.set('__ed_frame',view.id);u.searchParams.set('__ed_events','socket');u.searchParams.set('__ed_height',String(document.views.find(v=>v.id===view.id)!.height));u.searchParams.set('__ed_full',view.heightMode==='fixed'?'0':'1');previewSource=u.href;}}
+      const previewSource=framePreview(screen.source,view.id,document.views.find(v=>v.id===view.id)!.height,view.heightMode!=='fixed');
       const {heightMode,...geometry}=view;
       return {...geometry,canAutoHeight:localPreview(screen.source),autoHeight:localPreview(screen.source)&&view.heightMode!=='fixed', source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name};
     }),
+    previewSource:framePreview(editor.source,'preview-'+editor.active,editor.view.height,editor.view.heightMode!=='fixed'),
     active: editor.active, screenId: editor.screen.id, source: editor.source,
     frameSelected: editor.selected === editor.active,
     width: editor.view.width, height: editor.frame.height, screenName: editor.screen.name,
@@ -64,7 +76,7 @@ const reply = (fit=false,error='') => {
 const sources: Sources = {
   scene: () => snapshot(),
   previews: ([requests]) => {
-    if(!requests||requests==='[]')return {ready:true,signature:'[]',requests};
+    if(!requests||requests==='[]'){previewEngines.update([]);return {ready:true,signature:'[]',requests};}
     let latest={ready:false,signature:'',requests};
     return fetch(`${DISCOVERY_API}/previews`,{method:'POST',headers:{'content-type':'application/json'},body:requests,exactStream:event=>{
       if(event.type==='error'){
@@ -77,6 +89,7 @@ const sources: Sources = {
         if(frame.previewSource&&frame.source){const origin=new URL(frame.source).origin;const proxy=new URL(frame.previewSource).origin;if(proxy!==origin)previewBridges.set(origin,proxy);}
         if(frame.ready)editor.contentSizes.set(frame.id,{source:frame.source,width:frame.width,viewportHeight:frame.viewportHeight,height:frame.height});
       }
+      previewEngines.update([...new Set(result.frames.flatMap((frame:{previewSource:string;source:string})=>frame.previewSource&&frame.source&&new URL(frame.previewSource).origin!==new URL(frame.source).origin?[new URL(frame.previewSource).origin]:[]))] as string[]);
       return latest={requests,ready:!!result.frames.every((f:{ready:boolean})=>f.ready),signature:JSON.stringify(result.frames.map((f:{id:string;height:number;ready:boolean})=>[f.id,f.height,f.ready]))};
     }});
   },

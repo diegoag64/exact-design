@@ -3,9 +3,9 @@
 // EventSource's HTTP/1 connections otherwise starve lazy app/data imports once
 // several previews are open on the project's shared storage origin.
 (()=>{
-  const NativeEventSource=window.EventSource,streams=new Map();
+  const NativeEventSource=window.EventSource,streams=new Map(),listeners=new Set();
   let socket=null,retry=0,serial=0,leaving=false,hub=null;
-  try{hub=new SharedWorker('/__exact_design/project-hub.js',{name:'exact-design-project-v1'}).port;hub.start();}catch{}
+  try{hub=new SharedWorker('/__exact_design/project-hub.js',{name:'exact-design-project-v2'}).port;hub.start();}catch{}
   const heartbeat=hub?setInterval(()=>hub.postMessage({op:'heartbeat'}),20000):0;
   const send=packet=>{if(hub)hub.postMessage(packet);else if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(packet));};
   const subscribe=source=>send({op:'open',id:source.id,path:source.path,lastEventId:source.lastEventId});
@@ -26,7 +26,9 @@
     // close reports the failure and reconnects; suppress a duplicate error.
     current.onerror=()=>{};
   }
+  window.__exactDesignHub={available:!!hub,send,listen:listener=>{listeners.add(listener);return()=>listeners.delete(listener);}};
   function deliver(packet){
+    if(packet.kind==='project'){for(const listener of listeners)listener(packet);return;}
       const source=streams.get(packet.id);if(!source)return;
       if(packet.kind==='open'){source.readyState=1;source.emit('open');}
       if(packet.kind==='event'){

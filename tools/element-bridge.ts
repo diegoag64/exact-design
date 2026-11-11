@@ -1,4 +1,5 @@
 import {eventMessages} from './event-stream';
+import {sharedRuntime} from './shared-runtime';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {decodeSpacing} from '../studio/spacing';
@@ -91,6 +92,7 @@ export class ElementBridge {
     },cancel:close});
     return new Response(stream,{headers:{'content-type':'text/event-stream','cache-control':'no-store','x-accel-buffering':'no'}});
   }
+  engineRetry(){return new Response('<!doctype html><script>setTimeout(()=>location.reload(),1000)</script>',{headers:{'content-type':'text/html','cache-control':'no-store'}});}
   size(frame:ElementFrame,packet:any){
     if(!Number.isInteger(packet.height)||packet.height<100||packet.height>50000||!Number.isInteger(packet.width)||packet.width<100||packet.width>10000||!Number.isInteger(packet.viewportHeight)||packet.viewportHeight<100||packet.viewportHeight>10000||typeof packet.fullHeight!=='boolean'||typeof packet.url!=='string'||packet.url.length>4096)return false;
     const changed=frame.contentHeight!==packet.height||frame.width!==packet.width||frame.viewportHeight!==packet.viewportHeight||frame.fullHeight!==packet.fullHeight||frame.url!==packet.url;
@@ -102,8 +104,21 @@ export class ElementBridge {
     const url=new URL(req.url),origin=req.headers.get('origin');
     if(url.origin!==this.origin || (origin && origin!==this.origin))return new Response('Forbidden',{status:403});
     if(url.pathname==='/__exact_design/events'&&req.method==='GET')return this.subscribe(req,url);
+    if(url.pathname==='/__exact_design/engine'&&req.method==='GET'){
+      try{
+        const response=await fetch(this.target+'/',{signal:req.signal,redirect:'error'});
+        const html=await response.text(),base=html.match(/<base\s+href=["']([^"']+)["']/i)?.[1];
+        if(!response.ok)return this.engineRetry();
+        if(!base||!base.startsWith('/.exact/gen/'))return new Response(null,{status:204});
+        const bundle=await fetch(new URL(base+'app.js',this.target),{signal:req.signal,redirect:'error'});
+        if(!bundle.ok)return this.engineRetry();
+        if(!sharedRuntime(await bundle.text()))return new Response(null,{status:204});
+        const safe=base.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
+        return new Response(`<!doctype html><html><head><base href="${safe}"><script src="/__exact_design/event-stream-client.js"></script><script src="/__exact_design/shared-state-client.js"></script></head><body><script type="module">window.__exactDesignEngineReady={};try{await import('./app.js');}catch(error){if(error!==window.__exactDesignEngineReady)throw error;}</script></body></html>`,{headers:{'content-type':'text/html','cache-control':'no-store'}});
+      }catch{return this.engineRetry();}
+    }
     if(url.pathname==='/__exact_design/client.js')return new Response(script,{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
-    for(const name of ['spacing-client.js','spacing-geometry.js','design-preview-client.js','full-page-client.js','event-stream-client.js','project-hub.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
+    for(const name of ['spacing-client.js','spacing-geometry.js','design-preview-client.js','full-page-client.js','event-stream-client.js','project-hub.js','project-state-hub.js','shared-state-client.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
     if(url.pathname==='/__exact_design/feedback'&&req.method==='POST'){
       const packet=await req.json(),frame=this.frames.get(packet.frame);
       if(!frame||packet.page!==frame.page||packet.plan!==frame.plan)return new Response(null,{status:409});
@@ -139,6 +154,7 @@ export class ElementBridge {
     if(target.origin!==this.target)return new Response(null,{status:400});
     const headers=new Headers(req.headers);for(const name of ['host','origin','referer','connection','accept-encoding'])headers.delete(name);
     if(origin)headers.set('origin',this.target);
+    if(url.pathname.endsWith('/app.js')){headers.delete('if-none-match');headers.delete('if-modified-since');}
     try{
       const response=await fetch(target,{method:req.method,headers,body:['GET','HEAD'].includes(req.method)?undefined:req.body,redirect:'manual',signal:req.signal});
       const out=new Headers(response.headers);for(const name of ['content-length','content-encoding','transfer-encoding','connection'])out.delete(name);
@@ -147,9 +163,14 @@ export class ElementBridge {
         let html=await response.text();
         // Observe only the public build ID in Exact's registration. The captured
         // fetch otherwise receives exactly the original request and arguments.
-        const inject=`<script src="/__exact_design/event-stream-client.js"></script><script>{const original=window.fetch.bind(window);window.fetch=function(input,init){if(input==='/__dev/report'&&typeof init?.body==='string'){try{const report=JSON.parse(init.body);if(report.kind==='register'&&typeof report.id==='string')window.__exactDesignBuild=report.id;}catch{}}return original(input,init);};let press;addEventListener('pointerdown',e=>{press={x:e.clientX,y:e.clientY,id:e.pointerId};},true);addEventListener('pointerup',e=>{if(press?.id===e.pointerId&&Math.hypot(e.clientX-press.x,e.clientY-press.y)<=10)window.__exactDesignPick?.(e.clientX,e.clientY);press=null;},true);addEventListener('pointercancel',()=>{press=null;},true);}</script><script type="module" src="/__exact_design/client.js"></script>`;
+        const inject=`<script src="/__exact_design/event-stream-client.js"></script><script src="/__exact_design/shared-state-client.js"></script><script>{const original=window.fetch.bind(window);window.fetch=function(input,init){if(input==='/__dev/report'&&typeof init?.body==='string'){try{const report=JSON.parse(init.body);if(report.kind==='register'&&typeof report.id==='string')window.__exactDesignBuild=report.id;}catch{}}return original(input,init);};let press;addEventListener('pointerdown',e=>{press={x:e.clientX,y:e.clientY,id:e.pointerId};},true);addEventListener('pointerup',e=>{if(press?.id===e.pointerId&&Math.hypot(e.clientX-press.x,e.clientY-press.y)<=10)window.__exactDesignPick?.(e.clientX,e.clientY);press=null;},true);addEventListener('pointercancel',()=>{press=null;},true);}</script><script type="module" src="/__exact_design/client.js"></script>`;
         html=/<head[^>]*>/i.test(html)?html.replace(/<head[^>]*>/i,head=>head+inject):inject+html;
         return new Response(html,{status:response.status,headers:out});
+      }
+      if(url.pathname.endsWith('/app.js')&&response.ok){
+        const source=await response.text(),adapted=sharedRuntime(source);
+        if(adapted){out.delete('etag');out.set('cache-control','no-store');}
+        return new Response(adapted??source,{status:response.status,headers:out});
       }
       return new Response(response.body,{status:response.status,headers:out});
     }catch{return new Response('The app dev server is unavailable.',{status:502});}

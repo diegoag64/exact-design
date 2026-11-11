@@ -1,8 +1,10 @@
 // One worker and one socket per project origin. Frames retain independent
 // native dev subscriptions (their registration nonces must never be shared).
+importScripts('/__exact_design/project-state-hub.js');
 const clients=new Map(),streams=new Map();
 let socket=null,retry=0,serial=0;
 const post=(client,packet)=>{try{client.port.postMessage(packet);}catch{leave(client);}};
+const project=createProjectState(clients,post);
 const send=packet=>{if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(packet));};
 function connect(){
   if(socket||!streams.size)return;
@@ -27,7 +29,7 @@ function connect(){
 function leave(client){
   if(!clients.delete(client.id))return;
   for(const id of client.streams.values()){send({op:'close',id});streams.delete(id);}
-  client.streams.clear();client.port.close();
+  client.streams.clear();project.leave(client);client.port.close();
   if(!streams.size){clearTimeout(retry);const current=socket;socket=null;current?.close();}
 }
 onconnect=event=>{
@@ -36,6 +38,7 @@ onconnect=event=>{
     const packet=event.data;client.seen=Date.now();
     if(!packet||typeof packet!=='object')return;
     if(packet.op==='leave'){leave(client);return;}
+    if(project.receive(client,packet))return;
     if(typeof packet.id!=='string'||packet.id.length>64)return;
     if(packet.op==='close'){
       const id=client.streams.get(packet.id);if(id){send({op:'close',id});streams.delete(id);client.streams.delete(packet.id);}return;
