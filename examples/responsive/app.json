@@ -1,0 +1,5 @@
+{
+  "name": "Responsive example",
+  "app": { "id": "dev.exactdesign.responsive", "name": "Responsive example" },
+  "host": { "web": {} }
+}

@@ -1,0 +1,12 @@
+test "phone renders and responds"
+  size 390x844
+  expect state viewport.width == 390
+  tap "create"
+  expect text "count" == "1 idea"
+
+test "desktop gets its own viewport"
+  size 1440x900
+  expect state viewport.width == 1440
+  tap "create"
+  tap "create"
+  expect text "count" == "2 ideas"

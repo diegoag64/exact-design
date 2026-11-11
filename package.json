@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "setup": "bun tools/setup.mjs",
-    "dev": "bun tools/run.mjs web",
+    "demo": "bun tools/demo.mjs",
+    "dev": "bun tools/run.mjs web --port 5173",
     "build": "bun tools/run.mjs web-build --out dist",
     "test": "bun test studio/model.test.ts studio/workspace.test.ts",
     "test:ui": "bun tools/run.mjs test web",

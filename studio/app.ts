@@ -1,10 +1,31 @@
 import type { Answer, Sources, Ctx2D, Frame } from './app.contract.d.ts';
-import { WorkspaceEditor, loadWorkspace } from './workspace';
+import { WorkspaceEditor, loadWorkspace, validSource } from './workspace';
 import { render } from './render';
 const editor = new WorkspaceEditor();
 let status = ''; let loaded = false; let resizing = false;
 export const grants = 'fs.read app:/data/design.json\nfs.write app:/data/design.json';
-const snapshot = () => ({ drawing: JSON.stringify({ ...editor.document, active: editor.active }), name: editor.document.name, layers: editor.layers, views: editor.document.views.map(v => ({...v, layers: editor.document.screens.find(s=>s.id===v.screenId)!.layers, screenName: editor.document.screens.find(s=>s.id===v.screenId)!.name})), active: editor.active, screenId: editor.screen.id, frameSelected: editor.selected === editor.active, width: editor.view.width, height: editor.view.height, screenName: editor.screen.name, minX: Math.min(...editor.document.views.map(v=>v.x)), minY: Math.min(...editor.document.views.map(v=>v.y)), maxX: Math.max(...editor.document.views.map(v=>v.x+v.width)), maxY: Math.max(...editor.document.views.map(v=>v.y+v.height)), selected: editor.selected, canUndo: editor.past.length > 0, canRedo: editor.future.length > 0, code: editor.code(), status, resizing });
+const snapshot = () => {
+  const document = editor.document;
+  const screens = new Map(document.screens.map(screen => [screen.id, screen]));
+  return {
+    drawing: JSON.stringify({...document, active: editor.active}),
+    name: document.name,
+    layers: editor.layers,
+    views: document.views.map(view => {
+      const screen = screens.get(view.screenId)!;
+      return {...view, source: screen.source, layers: screen.source ? [] : screen.layers, screenName: screen.name};
+    }),
+    active: editor.active, screenId: editor.screen.id, source: editor.screen.source,
+    frameSelected: editor.selected === editor.active,
+    width: editor.view.width, height: editor.view.height, screenName: editor.screen.name,
+    minX: Math.min(...document.views.map(view => view.x)),
+    minY: Math.min(...document.views.map(view => view.y)),
+    maxX: Math.max(...document.views.map(view => view.x + view.width)),
+    maxY: Math.max(...document.views.map(view => view.y + view.height)),
+    selected: editor.selected, canUndo: editor.past.length > 0, canRedo: editor.future.length > 0,
+    code: editor.code(), status, resizing,
+  };
+};
 const sources: Sources = {
   document: async (_args, _store, storage) => {
     if (!loaded) {
@@ -22,7 +43,7 @@ const sources: Sources = {
     if(op === 'duplicate') editor.addView('',true,true);
     if(op === 'variant') editor.addView(key);
     if(op === 'add') editor.add(key);
-    if(op === 'property') editor.property(key, value);
+    if(op === 'property') { if(key === 'source' && !validSource(value.trim())) status = 'Use an http:// or https:// URL'; else editor.property(key, value); }
     if(op === 'undo') editor.undo();
     if(op === 'redo') editor.redo();
     if(op === 'delete') editor.remove();

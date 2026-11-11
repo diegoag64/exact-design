@@ -14,6 +14,7 @@ shape Layer
   right: number
 
 shape CanvasView
+  source: string
   layers: Layer[]
   id: string
   screenId: string
@@ -25,6 +26,7 @@ shape CanvasView
   height: number
 
 shape Document
+  source: string
   views: CanvasView[]
   active: string
   screenId: string
@@ -190,7 +192,7 @@ component Studio
           image "symbol:forward-chevron"
         button press=togglePreview class=Tool aria-label="Preview" testId="preview"
           image "symbol:play"
-        button press=toggleCode height=30 border-width=0 border-radius=6 background-color="surface.action" color="ink.inverse" padding-left=12 padding-right=12 testId="export"
+        button press=toggleCode disabled=(doc.source != "") height=30 border-width=0 border-radius=6 background-color="surface.action" color="ink.inverse" padding-left=12 padding-right=12 testId="export"
           text "Export" font-size=12
       row flex=1 min-height=0
         column display=(viewport.width >= 1000 ? "flex" : "none") width=208 flex-shrink=0 border-right-width=1 border-right-style="solid" border-right-color="line.subtle" padding-top=16 gap=12
@@ -206,8 +208,8 @@ component Studio
                     image "symbol:document" aria-hidden=true
                     column flex=1 min-width=0 align-items="start" gap=3
                       text v.screenName font-size=12
-                      text `${v.name} · ${v.width} × ${v.height}` font-size=11 color="ink.muted"
-                  if doc.active == v.id
+                      text `${v.name} · ${v.width} × ${v.height}` font-size=11 color=(doc.active == v.id ? "ink.selected" : "ink.muted")
+                  if doc.active == v.id and v.source == ""
                     for n in v.layers key=n.id
                       button press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" align-items="center" gap=8 height=32 padding-left=24 padding-right=8 border-width=0 border-radius=5 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.secondary")
                         image (n.kind == "text" ? "symbol:compose" : n.kind == "button" ? "symbol:select" : "symbol:stop") aria-hidden=true
@@ -215,18 +217,18 @@ component Studio
         column flex=1 min-width=0 min-height=0 position="relative" overflow="hidden" background-color="surface.canvas"
           for v in doc.views key=v.id
             column position="absolute" left=((hand ? px + dx * zoom : px) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dx : 0)) * zoom) top=((hand ? py + dy * zoom : py) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dy : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dx : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dy : 0)) scale=zoom transform-origin="top left" pointer-events="none" inert=true background-color="paper" box-shadow="0 4px 16px #00000012" testId=`frame-${v.id}`
-              ScreenView(layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dx), dy=(hand ? 0 : dy), resizing=doc.resizing, activate=previewClick)
+              ScreenView(source=v.source, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dx), dy=(hand ? 0 : dy), resizing=doc.resizing, activate=previewClick)
           canvas surface=design(doc.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dx), (hand ? 0 : dy), doc.resizing) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel touch-action="none" testId="canvas" aria-label="Design canvas"
           row position="absolute" bottom=24 left=24 padding=6 gap=4 background-color="ink.inverse" border-radius=10 box-shadow="0 2px 12px #00000012"
             button press=selectTool aria-keyshortcuts="v" class=Tool background-color=(not hand ? "surface.selected" : "transparent") aria-label="Select" testId="select-tool"
               image "symbol:select"
             button press=handTool aria-keyshortcuts="h" class=Tool background-color=(hand ? "surface.selected" : "transparent") aria-label="Pan" testId="hand-tool"
               image "symbol:reorder"
-            button press=command("add", "rectangle") class=Tool aria-label="Rectangle" testId="add-rectangle"
+            button press=command("add", "rectangle") disabled=(doc.source != "") class=Tool aria-label="Rectangle" testId="add-rectangle"
               image "symbol:stop"
-            button press=command("add", "text") class=Tool aria-label="Text" testId="add-text"
+            button press=command("add", "text") disabled=(doc.source != "") class=Tool aria-label="Text" testId="add-text"
               image "symbol:compose"
-            button press=command("add", "button") class=Tool aria-label="Button" testId="add-button"
+            button press=command("add", "button") disabled=(doc.source != "") class=Tool aria-label="Button" testId="add-button"
               image "symbol:add"
           row position="absolute" right=20 bottom=(viewport.width >= 700 ? 28 : 94) align-items="center" gap=4 background-color="ink.inverse" border-radius=8 padding=2
             button press=zoomOut class=Tool aria-label="Zoom out" testId="zoom-out"
@@ -248,6 +250,7 @@ component Studio
               for v in doc.views.filter(v => v.id == doc.active) key=v.id
                 column gap=18
                   input value=v.screenName change=prop("name") class=Field aria-label="Screen name" testId="screen-name"
+                  input value=v.source change=prop("source") class=Field placeholder="Preview URL" aria-label="Preview URL" testId="preview-url"
                   row gap=8
                     column flex=1 min-width=0 gap=5
                       text "W" color="ink.muted" font-size=11
@@ -331,10 +334,11 @@ component Studio
               image "symbol:close"
           scroll width="100%" max-width=doc.width height=doc.height max-height="80%" overflow-x="scroll"
             column position="relative" width=doc.width height=doc.height overflow="hidden" background-color="paper" testId="live-screen"
-              ScreenView(layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick)
+              ScreenView(source=doc.source, layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick)
 
 component ScreenView
   props
+    source: string
     layers: Layer[]
     prefix: string
     selected: string
@@ -344,8 +348,11 @@ component ScreenView
     activate: action
   view
     column position="relative" width="100%" height="100%" overflow="hidden" background-color="paper" font-family="system-ui"
-      for n in layers key=n.id
-        ScreenLayer(n=n, prefix=prefix, selected=(selected == n.id), dx=dx, dy=dy, resizing=resizing, activate=activate)
+      if source != ""
+        iframe src=source width="100%" height="100%" border-width=0 flex-shrink=0 title="Live app preview" sandbox="allow-scripts allow-same-origin allow-forms" testId=`${prefix}-app`
+      else
+        for n in layers key=n.id
+          ScreenLayer(n=n, prefix=prefix, selected=(selected == n.id), dx=dx, dy=dy, resizing=resizing, activate=activate)
 
 component ScreenLayer
   props

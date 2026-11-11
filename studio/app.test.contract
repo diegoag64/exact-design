@@ -162,3 +162,33 @@ test "Exact layers resize independently and preserve responsive settings"
   reload
   clock data
   expect state doc.layers.2.widthMode == "fill"
+
+test "connect a live app and persist its linked viewports"
+  size 1440x900
+  tap "view-view-1"
+  clock data
+  type "preview-url" "http://127.0.0.1:5174/"
+  type "preview-url" key "Enter"
+  clock data
+  expect tree has "view-1-app"
+  expect tree missing "layer-title"
+  tap "variant-phone"
+  clock data
+  expect tree has "view-2-app"
+  expect state doc.source == "http://127.0.0.1:5174/"
+  tap "preview"
+  expect tree has "preview-app"
+  tap "close-preview"
+  tap "save"
+  clock data
+  reload
+  clock data
+  expect state doc.source == "http://127.0.0.1:5174/"
+  expect state doc.views.length == 2
+  tap "view-view-1"
+  clock data
+  type "preview-url" ""
+  type "preview-url" key "Enter"
+  clock data
+  expect tree has "layer-title"
+  expect tree missing "view-1-app"

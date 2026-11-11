@@ -1,9 +1,9 @@
 import { Editor, initial, validate, exportContract, resolveLayer, type Layer } from './model';
-export type Screen = { id: string; name: string; layers: Layer[] };
+export type Screen = { id: string; name: string; source: string; layers: Layer[] };
 export type View = { id: string; screenId: string; name: string; x: number; y: number; width: number; height: number };
 export type Workspace = { version: 2; name: string; screens: Screen[]; views: View[] };
 export const presets: Record<string, [number, number]> = { Phone: [390, 844], Tablet: [768, 1024], Desktop: [1440, 900] };
-export const createWorkspace = (): Workspace => ({ version: 2, name: 'Untitled', screens: [{ id: 'screen-1', name: 'Home', layers: initial().layers.map(n => n.kind === 'button' ? n : {...n, widthMode: 'fill', right: 720 - n.x - n.width, fontSize: n.id === 'title' ? 28 : n.id === 'card-title' ? 18 : n.fontSize, height: n.id === 'card-title' ? 44 : n.id === 'card-copy' ? 48 : n.height}) }], views: [{ id: 'view-1', screenId: 'screen-1', name: 'Custom', x: 0, y: 0, width: 720, height: 520 }] });
+export const createWorkspace = (): Workspace => ({ version: 2, name: 'Untitled', screens: [{ id: 'screen-1', name: 'Home', source: '', layers: initial().layers.map(n => n.kind === 'button' ? n : {...n, widthMode: 'fill', right: 720 - n.x - n.width, fontSize: n.id === 'title' ? 28 : n.id === 'card-title' ? 18 : n.fontSize, height: n.id === 'card-title' ? 44 : n.id === 'card-copy' ? 48 : n.height}) }], views: [{ id: 'view-1', screenId: 'screen-1', name: 'Custom', x: 0, y: 0, width: 720, height: 520 }] });
 export function loadWorkspace(value: unknown): Workspace {
   if ((value as {version?: number})?.version === 1) {
     const old = validate(value), next = createWorkspace();
@@ -14,6 +14,8 @@ export function loadWorkspace(value: unknown): Workspace {
   const ids = new Set<string>();
   for (const s of d.screens) {
     if (!s || typeof s.id !== 'string' || !s.id || ids.has(s.id) || typeof s.name !== 'string') throw new Error('Invalid screen');
+    s.source ??= '';
+    if (!validSource(s.source)) throw new Error('Invalid preview URL');
     ids.add(s.id); s.layers = validate({version: 1, name: s.name, width:720, height:520, layers:s.layers}).layers;
   }
   for (const v of d.views) {
@@ -29,7 +31,7 @@ export class WorkspaceEditor {
   get view() { return this.document.views.find(v => v.id === this.active) ?? this.document.views[0]; }
   get screen() { return this.document.screens.find(s => s.id === this.view.screenId)!; }
   get target() { return this.selected === this.view.id ? this.view : this.layers.find(n => n.id === this.selected); }
-  get layers() { return this.screen.layers.map(n=>resolveLayer(n,this.view.width)); }
+  get layers() { return (this.screen.source ? [] : this.screen.layers).map(n=>resolveLayer(n,this.view.width)); }
   change(work: (d: Workspace) => void) {
     const next = structuredClone(this.document); work(next);
     if (JSON.stringify(next) === JSON.stringify(this.document)) return;
@@ -47,7 +49,7 @@ export class WorkspaceEditor {
     const x=Math.max(...this.document.views.map(v=>v.x+v.width))+80, y=this.view.y;
     const source=structuredClone(this.screen);
     this.change(d=>{
-      if(independent) d.screens.push({id:screenId,name:duplicate?`${source.name} copy`:`Screen ${d.screens.length+1}`,layers:duplicate?source.layers:[]});
+      if(independent) d.screens.push({id:screenId,name:duplicate?`${source.name} copy`:`Screen ${d.screens.length+1}`,source:duplicate?source.source:'',layers:duplicate?source.layers:[]});
       d.views.push({id,screenId,name:presets[preset]?preset:this.view.name,x,y,width,height});
     });
     this.active=id; this.selected=id;
@@ -57,7 +59,7 @@ export class WorkspaceEditor {
     work(e); const screenId=this.screen.id;
     this.change(d=>{ d.screens.find(s=>s.id===screenId)!.layers=e.document.layers; }); this.selected=e.selected;
   }
-  add(kind: string) { this.layerEdit(e=>e.add(kind)); }
+  add(kind: string) { if(this.screen.source)return; this.layerEdit(e=>e.add(kind)); }
   remove() {
     if(this.selected!==this.view.id) { this.layerEdit(e=>e.remove()); return; }
     if(this.document.views.length===1) return;
@@ -77,6 +79,7 @@ export class WorkspaceEditor {
     }
     const id=this.active;
     this.change(d=>{ const v=d.views.find(v=>v.id===id)!;
+      if(key==='source' && validSource(value.trim())) d.screens.find(s=>s.id===v.screenId)!.source=value.trim();
       if(key==='name' && value.trim()) d.screens.find(s=>s.id===v.screenId)!.name=value.trim().slice(0,120);
       if(key==='preset' && presets[value]) { [v.width,v.height]=presets[value]; v.name=value; }
       if(['x','y','width','height'].includes(key) && value.trim() && Number.isFinite(Number(value))) { const k=key as 'x'|'y'|'width'|'height'; v[k]=Math.round(Math.max(k==='x'||k==='y'?-10000:100,Math.min(10000,Number(value)))); if(k==='width'||k==='height') v.name='Custom'; }
@@ -102,5 +105,9 @@ export class WorkspaceEditor {
     }
     this.selected='';return false;
   }
-  code() { return exportContract({version:1,name:this.screen.name,width:this.view.width,height:this.view.height,layers:this.screen.layers}); }
+  code() { if(this.screen.source)return ''; return exportContract({version:1,name:this.screen.name,width:this.view.width,height:this.view.height,layers:this.screen.layers}); }
+}
+
+export function validSource(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 2048 && (value === '' || /^https?:\/\/[^\s/?#]+(?:[/?#][^\s]*)?$/.test(value));
 }

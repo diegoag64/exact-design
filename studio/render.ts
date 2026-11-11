@@ -17,7 +17,7 @@ export function render(args: unknown[], c: Ctx2D, frame: Frame) {
     c.save(); c.translate(vx,vy);
     c.fillStyle = frameSelected ? '#5574ef' : '#808087'; c.font = `${11 / zoom}px system-ui`; c.textBaseline = 'alphabetic'; c.textAlign = 'left';
     c.fillText(`${screen.name} · ${view.name}  ${Math.round(vw)} × ${Math.round(vh)}`, 0, -12 / zoom, vw);
-    const original = active ? screen.layers.find(n => n.id === selected) : undefined;
+    const original = active && !screen.source ? screen.layers.find(n => n.id === selected) : undefined;
     let n = original && {...original};
     if(n) {
       if(resizing) { n.width=Math.max(1,n.width+dx); n.height=Math.max(1,n.height+dy); n.right-=dx; }

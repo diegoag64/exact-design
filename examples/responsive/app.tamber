@@ -1,0 +1,10 @@
+tamber example
+
+theme
+  page = light-dark(#fafaf9, #1b1c1e)
+  ink = light-dark(#242529, #eeeeef)
+  secondary = light-dark(#696b70, #b3b5bb)
+  card = light-dark(#efeeeb, #292a2e)
+  accent = light-dark(#e8eee8, #29352e)
+  action = light-dark(#292a2d, #eeeeef)
+  on-action = light-dark(#ffffff, #242529)

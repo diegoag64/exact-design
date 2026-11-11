@@ -32,3 +32,17 @@ test('responsive export retains width rules instead of baking the active viewpor
   const e=new WorkspaceEditor(); const code=e.code(); expect(code).toContain('calc(100% - 112px)');
   e.addView('Phone'); expect(e.code()).toContain('calc(100% - 112px)'); expect(e.code()).toContain('white-space="pre-wrap"');
 });
+
+test('live sources are shared across variants and copied with independent screens',()=>{
+  const e=new WorkspaceEditor(); e.select(e.active); e.property('source','http://localhost:5174/settings');
+  e.addView('Phone'); expect(e.screen.source).toBe('http://localhost:5174/settings'); expect(e.layers).toEqual([]);
+  e.addView('',true,true); e.property('source','http://localhost:5174/profile');
+  expect(e.document.screens[0].source).toBe('http://localhost:5174/settings');
+  expect(loadWorkspace(e.document).screens[1].source).toBe('http://localhost:5174/profile');
+  e.undo(); expect(e.screen.source).toBe('http://localhost:5174/settings');
+  e.property('source',''); expect(e.layers.length).toBe(6);
+});
+test('invalid preview URL schemes are rejected',()=>{
+  const e=new WorkspaceEditor(); e.select(e.active); e.property('source','javascript:alert(1)'); expect(e.screen.source).toBe('');
+  e.document.screens[0].source='data:text/html,bad'; expect(()=>loadWorkspace(e.document)).toThrow();
+});
