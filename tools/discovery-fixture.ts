@@ -1,12 +1,17 @@
 // Only the browser test launcher starts this app-shaped fixture.
 export function startDiscoveryFixture() {
-  let mode='normal';
+  let mode='normal',short=false;
   let visits=0,markedVisits=0;
   let inspecting=false,version=0,color='#ffffff',seq=0;let events:any[]=[];
   const files=()=>({'app.contract':'fixture-'+version});
   return Bun.serve({hostname:'127.0.0.1',port:5176,fetch:async req=>{
     const url=new URL(req.url);
-    if(url.pathname==='/mode' && req.method==='POST') {mode=(await req.json()).mode;inspecting=false;version=0;color='#ffffff';seq=0;events=[];return Response.json({ok:true});}
+    if(url.pathname==='/mode' && req.method==='POST') {mode=(await req.json()).mode;short=false;inspecting=false;version=0;color='#ffffff';seq=0;events=[];return Response.json({ok:true});}
+    if(mode==='full-height'){
+      if(url.pathname==='/fixture/content'){if(req.method==='POST')short=(await req.json()).short===true;return Response.json({short});}
+      const count=url.pathname==='/short'?2:12;
+      return new Response(`<!doctype html><html><head><style>html,body,#exact-root{height:100%;margin:0}main{height:100%;display:flex;flex-direction:column;background:#fafafa}.fill{position:absolute;inset:0;display:flex;flex-direction:column}.header{height:72px;flex-shrink:0}.scroll{flex:1;min-height:0;overflow-y:auto}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:24px}.card{height:240px;background:#ddd}.footer{height:30px;flex-shrink:0}@media(max-width:999px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:599px){.cards{grid-template-columns:1fr}}</style></head><body><div id="exact-root"><main data-site="0"><div class="fill" data-site="1"><header class="header" data-site="2">Full screen</header><div class="scroll" data-site="3"><div class="cards" data-site="4">${Array.from({length:count},(_,i)=>`<article class="card" data-site="${i+5}">Card ${i+1}</article>`).join('')}</div></div><footer class="footer" data-site="20">End of screen</footer></div></main></div><script>let count=${count};setInterval(async()=>{const state=await(await fetch('/fixture/content')).json(),next=location.pathname==='/short'||state.short?2:12;if(count!==next){count=next;history.replaceState(null,'',state.short?'/dynamic-short':'/');document.querySelector('.cards').innerHTML=Array.from({length:count},(_,i)=>'<article class="card" data-site="'+(i+5)+'">Card '+(i+1)+'</article>').join('');}},150);</script></body></html>`,{headers:{'content-type':'text/html'}});
+    }
     if(mode==='elements'||mode==='elements-long'){
       if(url.pathname==='/__tamber/token')return Response.json({token:'test-fixture-only'});
       if(url.pathname==='/__tamber/events'){const body=await req.json();return Response.json({files:files(),seq,epoch:'fixture',events:events.filter(e=>e.seq>body.after),missed:false});}

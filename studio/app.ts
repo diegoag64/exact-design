@@ -3,7 +3,7 @@ import { WorkspaceEditor, validSource } from './workspace';
 import { WorkspacePersistence } from './persistence';
 import {DraftStorage} from './draft-storage';
 import { emptySpacing } from './spacing';
-import { screenSource } from './project';
+import { screenSource,localPreview } from './project';
 import { parseRoutes, type DiscoveredScreen } from './discovery';
 import { snapTargets } from './snapping';
 import { render } from './render';
@@ -26,31 +26,33 @@ async function discoverProject(owner:string,revision:number) {
   return discoveryCache={owner,revision,routes,error:body.error};
 }
 const snapshot = () => {
-  const document = editor.document;
+  const document = editor.document,frames=editor.frames;
   const screens = new Map(document.screens.map(screen => [screen.id, {...screen, source:screenSource(screen,document.project)}]));
-  const targets = editor.selected === editor.active ? snapTargets(editor.view, document.views) : {x: [], y: []};
+  const targets = editor.selected === editor.active ? snapTargets(editor.frame, frames) : {x: [], y: []};
   return {
     frameX: editor.view.x, frameY: editor.view.y, snapX: targets.x, snapY: targets.y,
-    drawing: JSON.stringify({...document, screens:[...screens.values()], active: editor.active}),
+    drawing: JSON.stringify({...document,views:frames, screens:[...screens.values()], active: editor.active}),
     projectName: document.project.name, projectUrl: document.project.url, route: editor.screen.route,
     groups: [...screens.values()].map(screen=>({id:screen.id,name:screen.name,route:screen.route,source:screen.source,
-      views:document.views.filter(v=>v.screenId===screen.id).map(({id,name,x,y,width,height})=>({id,name,x,y,width,height})),
+      views:frames.filter(v=>v.screenId===screen.id).map(({id,name,x,y,width,height})=>({id,name,x,y,width,height})),
       layers:editor.screen.id===screen.id && !screen.source ? editor.layers : []})),
     name: document.name,
+    previewRequests:JSON.stringify(document.views.flatMap(v=>{const screen=screens.get(v.screenId)!;return screen.source?[{id:v.id,url:screen.source,width:v.width,height:v.height,auto:localPreview(screen.source)&&v.heightMode!=='fixed'}]:[];})),
     layers: editor.layers,
-    views: document.views.map(view => {
+    views: frames.map(view => {
       const screen = screens.get(view.screenId)!;
-      let previewSource=screen.source;
-      if(previewSource){const u=new URL(previewSource),bridge=previewBridges.get(u.origin);if(bridge){u.host=new URL(bridge).host;u.searchParams.set('__ed_frame',view.id);previewSource=u.href;}}
-      return {...view, source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name};
+      let previewSource=localPreview(screen.source)&&!previewBridges.has(new URL(screen.source).origin)?'':screen.source;
+      if(previewSource){const u=new URL(previewSource),bridge=previewBridges.get(u.origin);if(bridge&&bridge!==u.origin){u.host=new URL(bridge).host;u.searchParams.set('__ed_frame',view.id);u.searchParams.set('__ed_height',String(document.views.find(v=>v.id===view.id)!.height));u.searchParams.set('__ed_full',view.heightMode==='fixed'?'0':'1');previewSource=u.href;}}
+      const {heightMode,...geometry}=view;
+      return {...geometry,canAutoHeight:localPreview(screen.source),autoHeight:localPreview(screen.source)&&view.heightMode!=='fixed', source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name};
     }),
     active: editor.active, screenId: editor.screen.id, source: editor.source,
     frameSelected: editor.selected === editor.active,
-    width: editor.view.width, height: editor.view.height, screenName: editor.screen.name,
-    minX: Math.min(...document.views.map(view => view.x)),
-    minY: Math.min(...document.views.map(view => view.y)),
-    maxX: Math.max(...document.views.map(view => view.x + view.width)),
-    maxY: Math.max(...document.views.map(view => view.y + view.height)),
+    width: editor.view.width, height: editor.frame.height, screenName: editor.screen.name,
+    minX: Math.min(...frames.map(view => view.x)),
+    minY: Math.min(...frames.map(view => view.y)),
+    maxX: Math.max(...frames.map(view => view.x + view.width)),
+    maxY: Math.max(...frames.map(view => view.y + view.height)),
     selected: editor.selected, canUndo: editor.past.length > 0, canRedo: editor.future.length > 0,
     code: editor.code(), status: persistence.error || status, resizing,
   };
@@ -60,6 +62,24 @@ const reply = (fit=false,error='') => {
   return {ok:error==='',error,fit,minX:d.minX,minY:d.minY,maxX:d.maxX,maxY:d.maxY};
 };
 const sources: Sources = {
+  scene: () => snapshot(),
+  previews: ([requests]) => {
+    if(!requests||requests==='[]')return {ready:true,signature:'[]',requests};
+    let latest={ready:false,signature:'',requests};
+    return fetch(`${DISCOVERY_API}/previews`,{method:'POST',headers:{'content-type':'application/json'},body:requests,exactStream:event=>{
+      if(event.type==='error'){
+        for(const frame of JSON.parse(requests)){const origin=new URL(frame.url).origin;if(!previewBridges.has(origin))previewBridges.set(origin,origin);}
+        return latest={requests,ready:true,signature:'unavailable'};
+      }
+      if(event.type!=='message'||typeof event.data!=='string')return latest;
+      const result=JSON.parse(event.data);
+      for(const frame of result.frames){
+        if(frame.previewSource&&frame.source){const origin=new URL(frame.source).origin;const proxy=new URL(frame.previewSource).origin;if(proxy!==origin)previewBridges.set(origin,proxy);}
+        if(frame.ready)editor.contentSizes.set(frame.id,{source:frame.source,width:frame.width,viewportHeight:frame.viewportHeight,height:frame.height});
+      }
+      return latest={requests,ready:!!result.frames.every((f:{ready:boolean})=>f.ready),signature:JSON.stringify(result.frames.map((f:{id:string;height:number;ready:boolean})=>[f.id,f.height,f.ready]))};
+    }});
+  },
   previewSignal: ([session]) => {
     if(!session)return {revision:0,updateRevision:0,measurement:emptySpacing()};
     return fetch(`${DISCOVERY_API}/design/events?session=${encodeURIComponent(session)}`,{exactStream:event=>{
@@ -112,7 +132,7 @@ const sources: Sources = {
     await persistence.load(storage.fs);
     status = '';
     if(op === 'select') { editor.select(key); resizing = false; }
-    if(op === 'hit') resizing = editor.hit(x,y,9 / Math.max(0.05, Number(value) || 1));
+    if(op === 'hit') resizing = editor.hit(x,y,9 / Math.max(0.01, Number(value) || 1));
     if(op === 'move') editor.move(x,y,resizing,key === 'snap' ? Number(value) || 1 : 0);
     if(op === 'screen') editor.addView('',true);
     if(op === 'duplicate') editor.addView('',true,true);
@@ -124,7 +144,7 @@ const sources: Sources = {
     if(op === 'delete') editor.remove();
     const saved=await persistence.save(storage.fs,op==='save');
     if(op==='save'&&saved)status='Saved';
-    return reply(['screen','duplicate','variant'].includes(op));
+    return reply(['screen','duplicate','variant'].includes(op)||(op==='property'&&['source','route'].includes(key)));
   },
 };
 export const answer: Answer = (source, args, store, storage, native) => sources[source](args, store, storage, native);

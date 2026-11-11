@@ -669,3 +669,54 @@ test "save a design draft across editor reloads and discard without writing code
   expect tree missing "apply-design"
   expect text "design-property-0" == "#ffffff"
   request POST "http://127.0.0.1:5176/fixture/assert-color?value=%23ffffff" {}
+
+test "load full screens at each width and switch between automatic and fixed height"
+  size 1440x900
+  request POST "http://127.0.0.1:5176/mode" {"mode":"full-height"}
+  tap "view-view-1"
+  clock data
+  type "preview-url" "http://127.0.0.1:5176/"
+  type "preview-url" key "Enter"
+  clock data
+  clock +1500 real
+  expect state scene.views.0.width == 720
+  expect state scene.views.0.height == 1670
+  expect text "frame-height" == "1670"
+  expect state doc.views.0.autoHeight == true
+  type "frame-height" "600"
+  type "frame-height" key "Enter"
+  clock data
+  clock +700 real
+  expect state scene.views.0.height == 600
+  expect state scene.views.0.autoHeight == false
+  tap "auto-height"
+  clock data
+  clock +1000 real
+  expect state scene.views.0.height == 1670
+  type "frame-width" "390"
+  type "frame-width" key "Enter"
+  clock data
+  clock +1000 real
+  expect state scene.views.0.width == 390
+  expect state scene.views.0.height == 3206
+  type "frame-width" "1440"
+  type "frame-width" key "Enter"
+  clock data
+  clock +1000 real
+  expect state scene.views.0.height == 1158
+  request POST "http://127.0.0.1:5176/fixture/content" {"short":true}
+  clock +700 real
+  expect state scene.views.0.height == 600
+  request POST "http://127.0.0.1:5176/fixture/content" {"short":false}
+  clock +700 real
+  expect state scene.views.0.height == 1158
+  type "preview-url" "http://127.0.0.1:5176/short"
+  type "preview-url" key "Enter"
+  clock data
+  clock +1000 real
+  expect state scene.views.0.height == 600
+  reload
+  clock data
+  clock +1500 real
+  expect state scene.views.0.autoHeight == true
+  expect state scene.views.0.height == 600

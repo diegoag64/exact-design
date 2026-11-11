@@ -1,3 +1,4 @@
+import {previewScreens} from './preview-screens';
 import { projectUrl } from '../studio/project';
 import { parseRoutes } from '../studio/discovery';
 import { designRequest,designEvents } from './design-session';
@@ -38,11 +39,12 @@ export function startDiscoveryServer(port=5175) {
         for(const [key,value]of Object.entries(headers))response.headers.set(key,value);
         return response;
       }
-      if(!['/discover','/design'].includes(url.pathname)) return new Response(null,{status:404,headers});
+      if(!['/discover','/design','/previews'].includes(url.pathname)) return new Response(null,{status:404,headers});
       if(req.method==='OPTIONS') return new Response(null,{status:204,headers});
       if(req.method!=='POST' || !req.headers.get('content-type')?.startsWith('application/json')) return new Response(null,{status:405,headers});
       try {
         const body=await req.json();
+        if(url.pathname==='/previews'){const response=previewScreens(body,req);for(const [key,value]of Object.entries(headers))response.headers.set(key,value);return response;}
         if(url.pathname==='/design') {
           try {return Response.json({ok:true,error:'',...await designRequest(body)},{headers});}
           catch(e) {return Response.json({ok:false,error:e instanceof Error?e.message:'Could not update the app.'},{headers});}

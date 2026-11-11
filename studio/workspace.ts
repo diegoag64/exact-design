@@ -3,7 +3,7 @@ import { hasRouteParameters } from './discovery';
 import { snapMove, FRAME_GAP } from './snapping';
 import { Editor, initial, validate, exportContract, resolveLayer, type Layer } from './model';
 export type Screen = { id: string; name: string; source: string; route: string; layers: Layer[] };
-export type View = { id: string; screenId: string; name: string; x: number; y: number; width: number; height: number };
+export type View = { id: string; screenId: string; name: string; x: number; y: number; width: number; height: number; heightMode?: 'content'|'fixed' };
 export type Workspace = { version: 2; name: string; project: Project; screens: Screen[]; views: View[] };
 export const presets: Record<string, [number, number]> = { Phone: [390, 844], Tablet: [768, 1024], Desktop: [1440, 900] };
 export const createWorkspace = (): Workspace => ({ version: 2, name: 'Untitled', project: {name: '', url: ''}, screens: [{ id: 'screen-1', name: 'Home', source: '', route: '', layers: initial().layers.map(n => n.kind === 'button' ? n : {...n, widthMode: 'fill', right: 720 - n.x - n.width, fontSize: n.id === 'title' ? 28 : n.id === 'card-title' ? 18 : n.fontSize, height: n.id === 'card-title' ? 44 : n.id === 'card-copy' ? 48 : n.height}) }], views: [{ id: 'view-1', screenId: 'screen-1', name: 'Custom', x: 0, y: 0, width: 720, height: 520 }] });
@@ -27,6 +27,7 @@ export function loadWorkspace(value: unknown): Workspace {
   for (const v of d.views) {
     if (!v || typeof v.id !== 'string' || !v.id || ids.has(v.id) || typeof v.name !== 'string' || !d.screens.some(s => s.id === v.screenId)) throw new Error('Invalid viewport');
     ids.add(v.id);
+    if(v.heightMode!==undefined&&!['content','fixed'].includes(v.heightMode))throw new Error('Invalid viewport height mode');
     if (![v.x,v.y,v.width,v.height].every(Number.isFinite) || v.width < 100 || v.height < 100 || v.width > 10000 || v.height > 10000) throw new Error('Invalid viewport geometry');
   }
   if (d.screens.some(s => !d.views.some(v => v.screenId === s.id))) throw new Error('Screen has no viewport');
@@ -34,6 +35,9 @@ export function loadWorkspace(value: unknown): Workspace {
 }
 export class WorkspaceEditor {
   document = createWorkspace(); active = 'view-1'; selected = ''; past: Workspace[] = []; future: Workspace[] = [];
+  contentSizes=new Map<string,{source:string;width:number;viewportHeight:number;height:number}>();
+  get frames(){return this.document.views.map(v=>{const screen=this.document.screens.find(s=>s.id===v.screenId)!,source=screenSource(screen,this.document.project),size=this.contentSizes.get(v.id);return source&&v.heightMode!=='fixed'&&size?.source===source&&size.width===v.width&&size.viewportHeight===v.height?{...v,height:size.height}:v;});}
+  get frame(){return this.frames.find(v=>v.id===this.active)??this.frames[0];}
   get view() { return this.document.views.find(v => v.id === this.active) ?? this.document.views[0]; }
   get screen() { return this.document.screens.find(s => s.id === this.view.screenId)!; }
   get target() { return this.selected === this.view.id ? this.view : this.layers.find(n => n.id === this.selected); }
@@ -53,11 +57,11 @@ export class WorkspaceEditor {
     if(this.document.views.length >= 200 || (independent && this.document.screens.length >= 100)) return;
     const id=this.id('view'), screenId=independent?this.id('screen'):this.view.screenId;
     const [width,height]=presets[preset] ?? [this.view.width,this.view.height];
-    const x=Math.max(...this.document.views.map(v=>v.x+v.width))+FRAME_GAP, y=this.view.y;
+    const x=Math.max(...this.frames.map(v=>v.x+v.width))+FRAME_GAP, y=this.view.y;
     const source=structuredClone(this.screen);
     this.change(d=>{
       if(independent) d.screens.push({id:screenId,name:duplicate?`${source.name} copy`:`Screen ${d.screens.length+1}`,source:duplicate?source.source:'',route:duplicate?source.route:'',layers:duplicate?source.layers:[]});
-      d.views.push({id,screenId,name:presets[preset]?preset:this.view.name,x,y,width,height});
+      d.views.push({id,screenId,name:presets[preset]?preset:this.view.name,x,y,width,height,heightMode:presets[preset]?'content':this.view.heightMode});
     });
     this.active=id; this.selected=id;
   }
@@ -88,7 +92,7 @@ export class WorkspaceEditor {
     if(route && this.document.screens.some(s=>s.route===route)) throw new Error('That route is already in your screen library.');
     const id=this.id('view'),screenId=this.id('screen');
     const [width,height]=presets[preset]??[720,520];
-    const y=Math.max(...this.document.views.map(v=>v.y+v.height))+FRAME_GAP;
+    const y=Math.max(...this.frames.map(v=>v.y+v.height))+FRAME_GAP;
     this.change(d=>{
       d.screens.push({id:screenId,name:name.trim().slice(0,120),route,source:'',layers:[]});
       d.views.push({id,screenId,name:presets[preset]?preset:'Custom',x:0,y,width,height});
@@ -123,24 +127,25 @@ export class WorkspaceEditor {
       if(key==='source' && validSource(value.trim())) { const s=d.screens.find(s=>s.id===v.screenId)!; s.source=value.trim();s.route=''; }
       if(key==='route' && d.project.url) d.screens.find(s=>s.id===v.screenId)!.route=screenRoute(value);
       if(key==='name' && value.trim()) d.screens.find(s=>s.id===v.screenId)!.name=value.trim().slice(0,120);
-      if(key==='preset' && presets[value]) { [v.width,v.height]=presets[value]; v.name=value; }
-      if(['x','y','width','height'].includes(key) && value.trim() && Number.isFinite(Number(value))) { const k=key as 'x'|'y'|'width'|'height'; v[k]=Math.round(Math.max(k==='x'||k==='y'?-10000:100,Math.min(10000,Number(value)))); if(k==='width'||k==='height') v.name='Custom'; }
+      if(key==='preset' && presets[value]) { [v.width,v.height]=presets[value]; v.name=value;v.heightMode='content'; }
+      if(key==='heightMode'&&['content','fixed'].includes(value))v.heightMode=value as 'content'|'fixed';
+      if(['x','y','width','height'].includes(key) && value.trim() && Number.isFinite(Number(value))) { const k=key as 'x'|'y'|'width'|'height'; v[k]=Math.round(Math.max(k==='x'||k==='y'?-10000:100,Math.min(10000,Number(value)))); if(k==='width'||k==='height') v.name='Custom';if(k==='height')v.heightMode='fixed'; }
     });
   }
   move(x: number,y: number,resize=false,snapZoom=0) {
     if(!Number.isFinite(x+y)) return;
-    if (!resize && snapZoom > 0 && this.selected === this.active) { const snapped=snapMove(this.view,this.document.views,x,y,snapZoom); x=snapped.dx; y=snapped.dy; }
-    const id=this.selected, active=this.active;
+    if (!resize && snapZoom > 0 && this.selected === this.active) { const snapped=snapMove(this.frame,this.frames,x,y,snapZoom); x=snapped.dx; y=snapped.dy; }
+    const id=this.selected, active=this.active,frameHeight=this.frame.height;
     this.change(d=>{ const v=d.views.find(v=>v.id===active)!; const n=id===active?v:d.screens.find(s=>s.id===v.screenId)!.layers.find(n=>n.id===id); if(!n)return;
-      if(resize) { if(id!==active && 'widthMode' in n && n.widthMode==='fill') { const current=resolveLayer(n,v.width).width; n.right=v.width-n.x-Math.min(10000,Math.max(1,Math.round(current+x))); } n.width=Math.min(10000,Math.max(id===active?100:1,Math.round(n.width+x))); n.height=Math.min(10000,Math.max(id===active?100:1,Math.round(n.height+y))); if(id===active)v.name='Custom'; }
+      if(resize) { if(id!==active && 'widthMode' in n && n.widthMode==='fill') { const current=resolveLayer(n,v.width).width; n.right=v.width-n.x-Math.min(10000,Math.max(1,Math.round(current+x))); } n.width=Math.min(10000,Math.max(id===active?100:1,Math.round(n.width+x))); n.height=Math.min(10000,Math.max(id===active?100:1,Math.round((id===active?frameHeight:n.height)+y))); if(id===active){v.name='Custom';v.heightMode='fixed';} }
       else {n.x=Math.round(n.x+x);n.y=Math.round(n.y+y);}
     });
   }
   hit(x: number,y: number, tolerance=9): boolean {
-    const n=this.target, v=this.view;
+    const v=this.frame,n=this.selected===v.id?v:this.target;
     const ox=this.selected===v.id?0:v.x, oy=this.selected===v.id?0:v.y;
     if(n && Math.abs(x-ox-n.x-n.width)<tolerance && Math.abs(y-oy-n.y-n.height)<tolerance) return true;
-    for(const f of [...this.document.views].reverse()) {
+    for(const f of [...this.frames].reverse()) {
       if(x<f.x || x>f.x+f.width || y<f.y-tolerance*3 || y>f.y+f.height) continue;
       this.active=f.id;
       const layer=y>=f.y?[...this.layers].reverse().find(n=>x-f.x>=n.x && y-f.y>=n.y && x-f.x<=n.x+n.width && y-f.y<=n.y+n.height):undefined;

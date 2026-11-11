@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {decodeSpacing} from '../studio/spacing';
 export type ElementNode={id:string;identity:string;path:string;parent:string;depth:number;label:string;kind?:string;tag:string;site:number;instance:unknown[]};
-export type ElementFrame={frame:string;page?:string;build:string;plan:string;inspecting:boolean;nodes:ElementNode[];seen:number};
+export type ElementFrame={frame:string;page?:string;build:string;plan:string;inspecting:boolean;nodes:ElementNode[];seen:number;contentHeight?:number;viewportHeight?:number;fullHeight?:boolean;width?:number;url?:string};
 const script=readFileSync(new URL('./element-bridge-client.js',import.meta.url),'utf8');
 const bridges=new Map<string,ElementBridge>();
 export function stopElementBridges(){for(const bridge of bridges.values())bridge.server.stop(true);bridges.clear();}
@@ -57,12 +57,19 @@ export class ElementBridge {
     },cancel:close});
     return new Response(stream,{headers:{'content-type':'text/event-stream','cache-control':'no-store','x-accel-buffering':'no'}});
   }
+  size(frame:ElementFrame,packet:any){
+    if(!Number.isInteger(packet.height)||packet.height<100||packet.height>50000||!Number.isInteger(packet.width)||packet.width<100||packet.width>10000||!Number.isInteger(packet.viewportHeight)||packet.viewportHeight<100||packet.viewportHeight>10000||typeof packet.fullHeight!=='boolean'||typeof packet.url!=='string'||packet.url.length>4096)return false;
+    const changed=frame.contentHeight!==packet.height||frame.width!==packet.width||frame.viewportHeight!==packet.viewportHeight||frame.fullHeight!==packet.fullHeight||frame.url!==packet.url;
+    Object.assign(frame,{contentHeight:packet.height,width:packet.width,viewportHeight:packet.viewportHeight,fullHeight:packet.fullHeight,url:packet.url});
+    if(changed)for(const listener of this.feedback)listener(frame,{kind:'size'});
+    return true;
+  }
   async handle(req:Request):Promise<Response>{
     const url=new URL(req.url),origin=req.headers.get('origin');
     if(url.origin!==this.origin || (origin && origin!==this.origin))return new Response('Forbidden',{status:403});
     if(url.pathname==='/__exact_design/events'&&req.method==='GET')return this.subscribe(req,url);
     if(url.pathname==='/__exact_design/client.js')return new Response(script,{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
-    for(const name of ['spacing-client.js','spacing-geometry.js','design-preview-client.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
+    for(const name of ['spacing-client.js','spacing-geometry.js','design-preview-client.js','full-page-client.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
     if(url.pathname==='/__exact_design/feedback'&&req.method==='POST'){
       const packet=await req.json(),frame=this.frames.get(packet.frame);
       if(!frame||packet.page!==frame.page||packet.plan!==frame.plan)return new Response(null,{status:409});
@@ -72,6 +79,8 @@ export class ElementBridge {
         const measured=decodeSpacing(frame.frame,JSON.stringify({...packet,kind:'exact-design:spacing'}));
         if(measured.id!==packet.id)return new Response(null,{status:400});
         packet.boxes=measured.boxes;
+      }else if(packet.kind==='size'){
+        if(!this.size(frame,packet))return new Response(null,{status:400});
       }else if(packet.kind==='draft-status'){
         if(!Number.isSafeInteger(packet.revision)||typeof packet.error!=='string'||packet.error.length>300)return new Response(null,{status:400});
       }else return new Response(null,{status:400});
@@ -85,13 +94,14 @@ export class ElementBridge {
       if(!this.frames.has(body.frame)&&this.frames.size>=200)return new Response(null,{status:429});
       const nodes=body.nodes.filter((n:any)=>n&&typeof n.id==='string'&&n.id.length<2048&&typeof n.identity==='string'&&n.identity.length<2048&&typeof n.path==='string'&&n.path.length<4096&&typeof n.parent==='string'&&n.parent.length<2048&&typeof n.label==='string'&&n.label.length<=120&&typeof n.tag==='string'&&n.tag.length<40&&Number.isSafeInteger(n.depth)&&n.depth>=0&&n.depth<1000&&Number.isSafeInteger(n.site)&&Array.isArray(n.instance));
       const previous=this.frames.get(body.frame);
-      const frame={frame:body.frame,page:typeof body.page==='string'&&body.page.length<=100?body.page:'',build:body.build,plan:body.plan,inspecting:body.inspecting===true,nodes,seen:Date.now()};
+      const frame={...(previous?.page===body.page?{contentHeight:previous?.contentHeight,viewportHeight:previous?.viewportHeight,fullHeight:previous?.fullHeight,width:previous?.width,url:previous?.url}:{}),frame:body.frame,page:typeof body.page==='string'&&body.page.length<=100?body.page:'',build:body.build,plan:body.plan,inspecting:body.inspecting===true,nodes,seen:Date.now()};
       this.frames.set(body.frame,frame);
+      this.size(frame,{...body,height:body.contentHeight});
       if(previous?.page!==frame.page||previous?.plan!==frame.plan||previous?.inspecting!==frame.inspecting)for(const listener of this.feedback)listener(frame,{kind:'ready'});
       return Response.json({commands:(this.commands.get(body.frame)||[]).filter(c=>c.seq>Number(body.after))});
     }
     if(url.pathname.startsWith('/__exact_design/')||url.pathname.startsWith('/__tamber'))return new Response(null,{status:404});
-    const target=new URL(url.pathname+url.search,this.target);target.searchParams.delete('__ed_frame');
+    const target=new URL(url.pathname+url.search,this.target);for(const key of [...target.searchParams.keys()])if(key.startsWith('__ed_'))target.searchParams.delete(key);
     if(target.origin!==this.target)return new Response(null,{status:400});
     const headers=new Headers(req.headers);for(const name of ['host','origin','referer','connection','accept-encoding'])headers.delete(name);
     if(origin)headers.set('origin',this.target);

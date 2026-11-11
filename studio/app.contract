@@ -32,6 +32,8 @@ shape Layer
   right: number
 
 shape CanvasView
+  canAutoHeight: bool
+  autoHeight: bool
   source: string
   previewSource: string
   layers: Layer[]
@@ -61,6 +63,7 @@ shape ScreenGroup
   layers: Layer[]
 
 shape Document
+  previewRequests: string
   projectName: string
   projectUrl: string
   route: string
@@ -217,10 +220,18 @@ shape Viewport
   width: number
   height: number
 
+shape PreviewSizes
+  requests: string
+  ready: bool
+  signature: string
+
 component Studio
   resource viewport = exactViewport() as shape Viewport
   resource doc = document() as shape Document else empty(name="Untitled")
   state discoveryRevision = 0
+  resource previews = previews(doc.previewRequests) as shape PreviewSizes else empty()
+  resource renderedScene = scene(doc.drawing, previews.signature) as shape Document else empty()
+  derive scene = renderedScene.active != "" ? renderedScene : doc
   resource discovered = discover(doc.projectUrl, doc.groups.map(g => g.route), discoveryRevision) as shape Discovery else empty()
   mutation changed as shape Reply queue refreshes doc then afterEdit
   mutation libraryChanged as shape Reply queue refreshes doc then afterLibrary
@@ -409,6 +420,17 @@ component Studio
     send libraryChanged = library(screenKind, screenName, screenPath, screenPreset)
   action toggleGroup(id: string)
     collapsed = collapsed.includes(id) ? collapsed.filter(value => value != id) : collapsed.concat([id])
+  state fitWhenReady = false
+  state fittedSignature = ""
+  action finishLoadFit
+    fitWhenReady = false
+  task stopLoadFit when fitWhenReady
+    after(2000, finishLoadFit)
+  action fitLoadedScreens
+    fittedSignature = previews.signature
+    resetView()
+  task fitLoaded when fitWhenReady and fittedSignature != previews.signature and previews.ready and previews.requests == doc.previewRequests and not pending(doc) and not pending(renderedScene)
+    after(1, fitLoadedScreens)
   action afterLibrary
     match libraryChanged
       case some(r)
@@ -416,6 +438,8 @@ component Studio
           if top(nav).name != "editor"
             nav = back(nav)
           if r.fit
+            fitWhenReady = true
+            fittedSignature = ""
             collapsed = [""]
             fitBounds(r.minX, r.minY, r.maxX, r.maxY)
       case none
@@ -439,8 +463,8 @@ component Studio
   state clicks = 0
   state freeDrag = false
   derive snapping = dragging and doc.frameSelected and not doc.resizing and not hand and not freeDrag and (dx != 0 or dy != 0)
-  derive dragX = snapping ? snappedDelta(doc.snapX, doc.frameX, dx, zoom) : dx
-  derive dragY = snapping ? snappedDelta(doc.snapY, doc.frameY, dy, zoom) : dy
+  derive dragX = snapping ? snappedDelta(scene.snapX, scene.frameX, dx, zoom) : dx
+  derive dragY = snapping ? snappedDelta(scene.snapY, scene.frameY, dy, zoom) : dy
   action toggleLeft
     leftPanel = leftOpen ? "closed" : "open"
     if viewport.width >= 1000
@@ -461,6 +485,7 @@ component Studio
   action prop(key: string, value: string)
     send changed = edit("property", key, value, 0, 0)
   action down(e: PointerEvent)
+    fitWhenReady = false
     if e.button == 0
       freeDrag = e.altKey
       dragging = true
@@ -486,9 +511,10 @@ component Studio
       dx = 0
       dy = 0
   action wheel(e: WheelEvent)
+    fitWhenReady = false
     preventDefault()
     if e.ctrlKey or e.metaKey
-      let z = min(3, max(0.05, zoom * (1 - e.deltaY * 0.005)))
+      let z = min(3, max(0.01, zoom * (1 - e.deltaY * 0.005)))
       let old = zoom
       zoom = z
       px = e.offsetX - (e.offsetX - px) * z / old
@@ -499,23 +525,26 @@ component Studio
   action zoomIn
     zoom = min(3, zoom + 0.1)
   action zoomOut
-    zoom = max(0.05, zoom - 0.1)
+    zoom = max(0.01, zoom - 0.1)
   action fitBounds(x: number, y: number, right: number, bottom: number)
     let available = viewport.width - ((leftOpen and viewport.width >= 1000 ? 208 : 0) + (rightOpen and viewport.width >= 700 ? 232 : 0)) - 96
-    let z = min(1, max(0.05, min(available / max(1, right - x), (viewport.height - 220) / max(1, bottom - y))))
+    let z = min(1, max(0.01, min(available / max(1, right - x), (viewport.height - 220) / max(1, bottom - y))))
     zoom = z
     px = 48 - x * z
     py = 64 - y * z
   action resetView
-    fitBounds(doc.minX, doc.minY, doc.maxX, doc.maxY)
+    fitBounds(scene.minX, scene.minY, scene.maxX, scene.maxY)
   action afterEdit
     match changed
       case some(r)
         if r.fit
+          fitWhenReady = true
+          fittedSignature = ""
           fitBounds(r.minX, r.minY, r.maxX, r.maxY)
       case none
         hand = hand
   action focusView(id: string, x: number, y: number, w: number, h: number)
+    fitWhenReady = false
     addingViewport = false
     send changed = edit("select", id, "", 0, 0)
     fitBounds(x, y, x + w, y + h)
@@ -591,7 +620,7 @@ component Studio
                         image "symbol:add"
                     scroll flex=1 min-height=0
                       column gap=6 padding-left=8 padding-right=8
-                        for group in doc.groups key=group.id
+                        for group in scene.groups key=group.id
                           column gap=2
                             button press=toggleGroup(group.id) testId=`group-${group.id}` aria-label=group.name aria-expanded=(not collapsed.includes(group.id)) display="flex" align-items="center" gap=6 height=32 padding-left=4 padding-right=8 border-width=0 border-radius=5 background-color="transparent" color="ink.primary"
                               image "symbol:icon.disclosure" width=12 height=12 rotate=(collapsed.includes(group.id) ? 0 : 90) aria-hidden=true
@@ -607,17 +636,17 @@ component Studio
                                   text n.name font-size=12
 
               column flex=1 min-width=0 min-height=0 position="relative" overflow="hidden" background-color="surface.canvas"
-                for v in doc.views key=v.id
+                for v in scene.views key=v.id
                   column position="absolute" left=((hand ? px + dx * zoom : px) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragX : 0)) * zoom) top=((hand ? py + dy * zoom : py) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragY : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragX : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragY : 0)) scale=zoom transform-origin="top left" pointer-events=(editing and v.source.startsWith(designOrigin + "/") ? "auto" : "none") inert=(not editing or not v.source.startsWith(designOrigin + "/")) background-color="paper" border="none" box-shadow="none" testId=`frame-${v.id}`
                     ScreenView(source=v.previewSource, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
-                canvas pointer-events=(editing ? "none" : "auto") surface=design(doc.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dragX), (hand ? 0 : dragY), doc.resizing, snapping) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel cursor=(hand ? (dragging ? "grabbing" : "grab") : (dragging ? (doc.resizing ? "nwse-resize" : "move") : "default")) touch-action="none" testId="canvas" aria-label="Design canvas"
+                canvas pointer-events=(editing ? "none" : "auto") surface=design(scene.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dragX), (hand ? 0 : dragY), doc.resizing, snapping) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel cursor=(hand ? (dragging ? "grabbing" : "grab") : (dragging ? (doc.resizing ? "nwse-resize" : "move") : "default")) touch-action="none" testId="canvas" aria-label="Design canvas"
                 if editing and not designWriting
                   match designChanged
                     case some(result)
                       match spacingMeasured
                         case some(measured)
                           if measured.id != "" and measured.id == result.spacingId and measured.plan == result.spacingPlan and measured.frame == result.spacingFrame
-                            for v in doc.views.filter(v => v.id == measured.frame) key=v.id
+                            for v in scene.views.filter(v => v.id == measured.frame) key=v.id
                               column position="absolute" inset=0 pointer-events="none" testId="spacing-overlay"
                                 for box in measured.boxes key=box.key
                                   column position="absolute" left=(px + (v.x + box.x) * zoom) top=(py + (v.y + box.y) * zoom) width=(box.width * zoom) height=(box.height * zoom) background-color="spacing.wash" border="1px solid spacing.edge" box-sizing="border-box" aria-hidden=true
@@ -729,7 +758,7 @@ component Studio
                       if doc.selected == ""
                         text "Select a screen or layer" color="ink.secondary"
                       if doc.frameSelected
-                        for v in doc.views.filter(v => v.id == doc.active) key=v.id
+                        for v in scene.views.filter(v => v.id == doc.active) key=v.id
                           column gap=20
                             column gap=6
                               text "Name" color="ink.secondary" font-size=11
@@ -757,7 +786,11 @@ component Studio
                                   text "Width" color="ink.secondary" font-size=11
                                   input value=`${v.width}` change=prop("width") class=Field aria-label="Viewport width" testId="frame-width"
                                 column flex=1 min-width=0 gap=6
-                                  text "Height" color="ink.secondary" font-size=11
+                                  row align-items="center" justify-content="space-between" height=14
+                                    text "Height" color="ink.secondary" font-size=11
+                                    if v.canAutoHeight
+                                      button press=prop("heightMode", "content") class=Tool height=18 min-height=18 padding=0 color=(v.autoHeight ? "ink.selected" : "ink.secondary") aria-label="Fit screen height to content" aria-pressed=v.autoHeight title="Fit height to content" testId="auto-height"
+                                        text "Auto" font-size=10
                                   input value=`${v.height}` change=prop("height") class=Field aria-label="Viewport height" testId="frame-height"
                             column gap=4
                               button press=toggleViewportMenu class=Tool width="100%" justify-content="flex-start" gap=8 aria-expanded=addingViewport aria-label="Add viewport" testId="add-viewport"

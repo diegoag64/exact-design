@@ -32,7 +32,7 @@ export function snapAxis(targets: SnapTarget[], position: number, zoom: number):
   for (const target of targets) {
     if (!best || Math.abs(target.value - position) < Math.abs(best.value - position)) best = target;
   }
-  return best && Math.abs(best.value - position) <= SNAP_DISTANCE / Math.max(0.05, zoom) ? best.value : position;
+  return best && Math.abs(best.value - position) <= SNAP_DISTANCE / Math.max(0.01, zoom) ? best.value : position;
 }
 
 export function snapMove(view: View, views: View[], dx: number, dy: number, zoom: number) {

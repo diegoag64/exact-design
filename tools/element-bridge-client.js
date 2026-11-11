@@ -2,6 +2,7 @@
 const frame=new URL(location.href).searchParams.get('__ed_frame')||'preview';
 const page=crypto.randomUUID();
 const nodes=new Map();let command=0,selectionCommand=0,working=false,pushed=false;
+let pageObserver;
 let spacingObserver,measurement={id:'',plan:''};
 let draftObserver,draft={patches:[],revision:0};
 async function renderDraft(){
@@ -38,7 +39,7 @@ addEventListener('pagehide',clearHover);
 function presentElement(el,css){
   const tag=el.tagName.toLowerCase(),text=el.textContent?.trim().replace(/\s+/g,' ').slice(0,120)||'';
   const flex=css.display.includes('flex'),grid=css.display.includes('grid');
-  const scroll=['auto','scroll'].includes(css.overflowY)||['auto','scroll'].includes(css.overflowX);
+  const scroll=el.dataset.edPageScroll!==undefined||['auto','scroll'].includes(css.overflowY)||['auto','scroll'].includes(css.overflowX);
   const leaf=!el.querySelector?.('[data-site]');
   const kind=tag==='button'?'button':tag==='img'||tag==='svg'?'image':['input','textarea','select'].includes(tag)?'input':tag==='main'?'screen':scroll?'scroll':flex?(css.flexDirection.startsWith('row')?'row':'column'):grid?'grid':leaf&&text?'text':'container';
   const names={button:'Button',image:'Image',input:'Input',screen:'Screen',scroll:'Scroll',row:'Row',column:'Column',grid:'Grid',text:'Text',container:'Container'};
@@ -61,7 +62,7 @@ function snapshot(){
     const {kind,label}=presentElement(el,getComputedStyle(el));
     rows.push({id,identity,path,parent:parentId,depth:parentId?(rows.find(r=>r.id===parentId)?.depth??0)+1:0,label,kind,tag,site:Number(el.dataset.site),instance});
   }
-  return {frame,page,build:window.__exactDesignBuild||'',plan:globalThis.exact?.plan||'',inspecting:!!document.getElementById('exact-inspect'),nodes:rows};
+  return {...pageObserver?.snapshot(),frame,page,build:window.__exactDesignBuild||'',plan:globalThis.exact?.plan||'',inspecting:!!document.getElementById('exact-inspect'),nodes:rows};
 }
 async function select(id,sequence){
   const el=nodes.get(id);if(!el?.isConnected||!document.getElementById('exact-inspect'))return;
@@ -103,3 +104,5 @@ async function tick(){
 setInterval(tick,400);void tick();
 import('/__exact_design/spacing-client.js').then(m=>{spacingObserver=m.observeSpacing(id=>nodes.get(id),feedback);spacingObserver.select(measurement.id,measurement.plan);}).catch(()=>{});
 import('/__exact_design/design-preview-client.js').then(m=>{draftObserver=m.designPreview();void renderDraft();}).catch(()=>{});
+
+import('/__exact_design/full-page-client.js').then(m=>{pageObserver=m.fullPage(packet=>feedback({...packet,plan:globalThis.exact?.plan||''}));}).catch(()=>{});

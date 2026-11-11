@@ -15,3 +15,5 @@ export function screenRoute(value: string): string {
 export function screenSource(screen: ScreenSource, project: Project): string {
   return screen.route && project.url ? project.url + screen.route : screen.source;
 }
+
+export function localPreview(value:string){try{const u=new URL(value);return u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname);}catch{return false;}}
