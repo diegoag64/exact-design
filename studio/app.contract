@@ -113,6 +113,12 @@ shape DesignRow
   name: string
   value: string
   shared: bool
+  group: string
+  options: LayoutOption[]
+
+shape LayoutOption
+  value: string
+  label: string
 
 shape DesignReply
   ok: bool
@@ -505,12 +511,21 @@ component Studio
                               text "Undo app change" font-size=12
                           case none
                             text "Select an element in a screen." font-size=12
-                        for property in designRows key=`${designVersion}-${property.id}`
-                          column gap=6
-                            text property.name font-size=11 color="ink.secondary"
-                            input value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
-                            if property.shared
-                              text "Shared style" font-size=11 color="ink.secondary"
+                        if designRows.filter(p => p.shared).length > 0
+                          text "Shared style · updates every use" font-size=11 color="ink.secondary"
+                        for group in ["Layout", "Spacing", "Appearance"] key=group
+                          if designRows.filter(p => p.group == group).length > 0
+                            column gap=12
+                              text group font-weight=600 font-size=12
+                              for property in designRows.filter(p => p.group == group) key=`${designVersion}-${property.id}`
+                                column gap=6
+                                  text property.name font-size=11 color="ink.secondary"
+                                  if property.options.length > 0
+                                    select value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
+                                      for choice in property.options key=choice.value
+                                        option choice.label value=choice.value
+                                  else
+                                    input value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
                     if not editing
                       row align-items="center"
                         text (doc.frameSelected ? "Screen" : "Design") font-weight=600 flex=1

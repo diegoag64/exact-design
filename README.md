@@ -59,9 +59,13 @@ Select a connected viewport, then click **Edit app** in the inspector. Click an 
 
 The inspector offers existing visual attributes that Exact marks editable in the app's Contract source or a shared style. Enter a value and press Enter or leave the field to apply it. For example, select the padding of Morrow's New note button and change Fill from `brand` to `#b34c34`. The attribute changes in the app's source, and its dev server updates the running viewport copies. A shared style affects every element using that style. Changing a token reference here replaces that attribute's value; editing token definitions is not implemented.
 
-Changes write to the connected app immediately, independently of workspace Save. **Undo app change** restores edits from the current editing session through Exact's inverse transactions. **Done editing** returns to arranging frames and ends that session's undo history. Source edits remain on disk after leaving the editor. A hand edit or server restart can invalidate a selection; select again or reconnect before continuing. Conflicting writes and invalid values are refused by Exact's checker.
+The inspector separates **Layout**, **Spacing**, and **Appearance**. Layout includes existing width and height constraints, direction, alignment, distribution, and wrapping. Spacing includes existing padding, margin, and gap attributes. Numbers use pixels; CSS lengths and percentages are also accepted. Padding and margin accept one to four values, such as `8 16` or `8px 16px`. Dropdowns offer the supported alignment and direction values. For example, select Morrow's New note button and change Gap from `8` to `20` to increase the space between its icon and label.
 
-This first editing mode supports local Exact dev servers with the `tamber/1` editing API. Its local write token stays in the helper's memory. Release builds and remote servers cannot be edited. Only properties explicitly offered by the API are editable; expressions, inherited values, layout attributes, text content, and properties without an editable source address remain in the source editor. Typography controls appear only if Exact offers that property as an editable source row. The helper never rewrites Contract files itself.
+Changes write to the connected app immediately, independently of workspace Save. **Undo app change** restores appearance and layout edits from the current editing session. **Done editing** returns to arranging frames and ends that session's undo history. Source edits remain on disk after leaving the editor. A hand edit or server restart can invalidate a selection; select again or reconnect before continuing. Undo refuses to overwrite a later source change.
+
+Appearance writes use Exact's checked transactions. Exact currently refuses direct layout writes through that API, so layout edits use a local source adapter: it checks the selected attribute's file digest and UTF-8 source location, validates a staged project copy with the pinned Exact compiler, checks the original again, then atomically replaces that file. An invalid or conflicting edit leaves the live source unchanged. Layout undo validates and restores the saved source only while the file still matches the edit. Staging files are removed after validation.
+
+Editing supports local Exact dev servers with the `tamber/1` editing API. Its local write token stays in the helper's memory. Release builds and remote servers cannot be edited. Layout controls require an existing literal attribute in the app's own Contract source or a shared style. Responsive expressions, token-based layout values, inherited values, package sources, text content, and attributes without a source address remain in the source editor. This version changes existing attributes; adding new layout rules or restructuring elements is not implemented. Typography controls appear only if Exact offers that property as an editable source row.
 
 ## Edit a screen
 
@@ -85,13 +89,13 @@ bun run build
 bun tools/demo.mjs test web
 ```
 
-The model tests cover hit testing, history, property validation, file migration, export escaping, shared project routes, and discovery parsing and HTTP handling. The interaction tests cover edits, undo, creation, deletion, saving across a reload, live preview, canvas dragging, resizing, project connections, grouped screen variants, and discovery with refresh and failure recovery. `bun run test:ui` and `bun run verify` start the helper and an isolated manifest fixture on ports 5175 and 5176; stop the editor before running them.
+The model and service tests cover hit testing, history, property validation, file migration, export escaping, project routes, discovery, and source editing. Layout tests run the real compiler and cover UTF-8 addresses, expressions, validation failure, conflicts, undo, and path boundaries. The interaction tests cover edits, undo, creation, deletion, saving across a reload, live preview, canvas dragging, resizing, project connections, grouped screen variants, and discovery with refresh and failure recovery. `bun run test:ui` and `bun run verify` start the helper and an isolated manifest fixture on ports 5175 and 5176; stop the editor before running them.
 
 ## Current scope
 
 The editor and editable screen content use Exact Contract components. Canvas 2D draws frame labels and selection handles. Connected apps run in browser frames at independent viewport sizes. A small TypeScript document model owns edits and history. It does not yet depend on OpenPencil.
 
-Each screen has a flat layer list shared by its viewport variants. Existing single-screen documents migrate when opened. Editable layers support fixed and fill widths with normal text wrapping. They retain absolute vertical positions and explicit heights; automatic vertical flow and nested layout are not implemented. Text is edited in the inspector. Contract export uses absolute positioning. Connected apps use their own responsive layout and support source-backed appearance edits through Exact's design protocol. Structural source editing, multi-selection, code import, image layers, and Figma files are not implemented.
+Each screen has a flat layer list shared by its viewport variants. Existing single-screen documents migrate when opened. Editable layers support fixed and fill widths with normal text wrapping. They retain absolute vertical positions and explicit heights; automatic vertical flow and nested layout are not implemented. Text is edited in the inspector. Contract export uses absolute positioning. Connected apps use their own responsive layout and support source-backed appearance, layout, and spacing edits. Structural source editing, multi-selection, code import, image layers, and Figma files are not implemented.
 
 Browser execution is tested. Native macOS and iOS builds have not been qualified. Large documents and advanced text layout also need performance and fidelity testing.
 
@@ -106,6 +110,7 @@ Source files:
 - `studio/discovery.ts`: Exact route manifest validation and screen names.
 - `tools/discovery-server.ts`: the local manifest reader.
 - `tools/design-session.ts`: local inspection, checked source edits, and undo.
+- `tools/layout-source.ts`: source-addressed layout edits and staged compiler validation.
 - `examples/responsive`: a running Exact app for viewport comparisons.
 - `studio/app.tamber`: editor theme.
 
