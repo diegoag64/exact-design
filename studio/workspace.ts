@@ -1,4 +1,5 @@
 import { projectUrl, screenRoute, screenSource, type Project } from './project';
+import { hasRouteParameters } from './discovery';
 import { snapMove, FRAME_GAP } from './snapping';
 import { Editor, initial, validate, exportContract, resolveLayer, type Layer } from './model';
 export type Screen = { id: string; name: string; source: string; route: string; layers: Layer[] };
@@ -83,6 +84,7 @@ export class WorkspaceEditor {
     if(this.document.screens.length>=100 || this.document.views.length>=200) throw new Error('This workspace is full.');
     if(linked && !this.document.project.url) throw new Error('Connect a project first.');
     const route=linked?screenRoute(path):'';
+    if(route && hasRouteParameters(route)) throw new Error('Replace route parameters with a real path, such as /notes/7.');
     if(route && this.document.screens.some(s=>s.route===route)) throw new Error('That route is already in your screen library.');
     const id=this.id('view'),screenId=this.id('screen');
     const [width,height]=presets[preset]??[720,520];

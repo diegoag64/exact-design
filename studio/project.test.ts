@@ -26,6 +26,7 @@ test('blank and legacy screens coexist and duplicate routes do not change histor
   const e=new WorkspaceEditor();e.connectProject('Morrow','http://localhost:5174');e.addScreen('Home','/','Phone',true);
   const before=structuredClone(e.document),history=e.past.length;
   expect(()=>e.addScreen('Again','/','Tablet',true)).toThrow();expect(e.document).toEqual(before);expect(e.past.length).toBe(history);
+  expect(()=>e.addScreen('Detail','/notes/:id','Phone',true)).toThrow('real path');expect(e.document).toEqual(before);
   e.addScreen('Sketch','','Desktop',false);expect(e.source).toBe('');expect(e.view.y).toBeGreaterThan(before.views[1].y);
 });
 test('older workspaces migrate without changing their preview sources',()=>{
