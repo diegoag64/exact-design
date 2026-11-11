@@ -47,6 +47,7 @@ export class ElementBridge {
     if(url.origin!==this.origin || (origin && origin!==this.origin))return new Response('Forbidden',{status:403});
     if(url.pathname==='/__exact_design/events'&&req.method==='GET')return this.subscribe(req,url);
     if(url.pathname==='/__exact_design/client.js')return new Response(script,{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
+    for(const name of ['spacing-client.js','spacing-geometry.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
     if(url.pathname==='/__exact_design/tree' && req.method==='POST'){
       const body=await req.json();
       if(typeof body.frame!=='string'||body.frame.length>100||typeof body.build!=='string'||body.build.length>200||typeof body.plan!=='string'||body.plan.length>100||!Array.isArray(body.nodes)||body.nodes.length>600)return new Response(null,{status:400});

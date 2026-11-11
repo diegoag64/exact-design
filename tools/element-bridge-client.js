@@ -71,3 +71,4 @@ async function tick(){
   }catch{}finally{working=false;}
 }
 setInterval(tick,400);void tick();
+import('/__exact_design/spacing-client.js').then(m=>m.observeSpacing(id=>nodes.get(id))).catch(()=>{});

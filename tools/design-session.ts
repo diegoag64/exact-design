@@ -1,7 +1,8 @@
 import { projectUrl } from '../studio/project';
 import {relative,isAbsolute,resolve} from 'node:path';
-import {layoutProperties,layoutOptions,sourceLiteral,writeLayout,undoLayout,digest,type SourceInverse,type LayoutSite} from './layout-source';
+import {layoutProperties,layoutOptions,layoutValue,sourceLiteral,writeLayout,undoLayout,digest,type SourceInverse,type LayoutSite} from './layout-source';
 import {ElementBridge,bridgeFor,type ElementNode} from './element-bridge';
+import {spacingProperties,spacingRows} from '../studio/spacing';
 
 const properties=new Set(['color','background-color','font-size','font-weight','line-height','letter-spacing','border-radius','opacity']);
 type Row={name:string;editable?:any};
@@ -27,6 +28,19 @@ export function rowOperation(row:Row,value:string) {
   const address=e.rung==='style'?{style:e.style,file:e.file}:{file:e.file,at:e.at,sha256:e.sha256};
   return {op:'set-row',...address,row:e.row,value:numeric?Number(value):value.trim()};
 }
+export function spacingOperation(rows:Row[],property:string,value:string){
+  if(!spacingProperties.includes(property)||value.trim().split(/\s+/).length!==1)throw new Error('Enter one spacing value.');
+  layoutValue(property,value);
+  let index=rows.findIndex(r=>r.editable.row===property);
+  if(index<0)index=rows.findIndex(r=>r.editable.row===(property.startsWith('padding-')?'padding':'gap'));
+  if(index<0)throw new Error('This spacing is computed. Edit it in source.');
+  if(rows[index].editable.row==='padding'){
+    const parts=rows[index].editable.text.trim().split(/\s+/);
+    const sides=[parts[0],parts[1]??parts[0],parts[2]??parts[0],parts[3]??parts[1]??parts[0]];
+    sides[spacingProperties.indexOf(property)]=value.trim();value=sides.join(' ');
+  }
+  return {index,value};
+}
 export class DesignSession {
   client=`exact-design:${crypto.randomUUID()}`;
   cursor=0; epoch=''; files:any={}; selection:any=null; version=0;
@@ -40,6 +54,7 @@ export class DesignSession {
   pendingSelection:{frame:string;path:string;until:number}|null=null;
   restoring:{frame:string;path:string;file:string;line:number;col:number;sha:string;before:string;plan:string;sent:string;since:number}|null=null;
   builds=new Set<string>();
+  deferredSelections:{event:any;until:number;plan:string}[]=[];
   constructor(readonly origin:string,private token:string,private request:typeof fetch=fetch) {}
   async call(body:any,path='/__tamber') {
     const r=await this.request(this.origin+path,{method:'POST',redirect:'error',headers:{'content-type':'application/json','x-exact-tamber-token':this.token},body:JSON.stringify(body)});
@@ -70,10 +85,19 @@ export class DesignSession {
     if(r.missed || JSON.stringify(this.files)!==JSON.stringify(r.files)) {this.selection=null;this.version++;}
     this.files=r.files;
     if(this.pendingSelection&&Date.now()>this.pendingSelection.until)this.pendingSelection=null;
-    for(const event of r.events??[]) {
+    const selections=[...this.deferredSelections,...(r.events??[]).map((event:any)=>({event,until:Date.now()+1500,plan:''}))];
+    this.deferredSelections=[];
+    for(const report of selections) {
+      const event=report.event;
       if(event.event==='selection' && this.builds.has(String(event.build))) {
         const frame=this.bridge&&[...this.bridge.frames.values()].find(f=>f.build===String(event.build));
         const node=frame?.nodes.find(n=>n.site===event.site&&JSON.stringify(n.instance)===JSON.stringify(event.instance??[]));
+        // Exact learns instance paths when its inspector table first loads. Its
+        // selection report can arrive before the preview's next hierarchy snapshot.
+        if(this.bridge&&(!frame||!node)){
+          if(Date.now()<report.until&&(!report.plan||report.plan===frame?.plan)&&this.deferredSelections.length<8)this.deferredSelections.push({...report,plan:frame?.plan??''});
+          continue;
+        }
         if(this.pendingSelection&&(!frame||frame.frame!==this.pendingSelection.frame||node?.path!==this.pendingSelection.path))continue;
         if(this.restoring && (!frame || frame.frame!==this.restoring.frame || !node || node.path!==this.restoring.path))continue;
         if(this.restoring && (frame!.plan===this.restoring.plan || event.readOnly || this.files[this.restoring.file]!==this.restoring.sha))continue;
@@ -123,7 +147,10 @@ export class DesignSession {
     })??[];
     const crumbs:typeof tree=[];let at=frame?.nodes.find(n=>n.id===selected);
     while(at&&crumbs.length<30){const entry=tree.find(n=>n.id===at!.id);if(entry)crumbs.unshift(entry);at=frame?.nodes.find(n=>n.id===at!.parent);}
+    const spacingId=s&&!this.pendingSelection&&!this.restoring?selected:'',spacingPlan=frame?.plan??'';
     return {source:s?.source?`${s.source.file}:${s.source.line}`:'',component:s?.source?.component??'',version:this.version,
+      spacingId,spacingPlan,spacingFrame:frame?.frame??'',spacingConfig:spacingId?JSON.stringify({kind:'exact-design:spacing',id:spacingId,plan:spacingPlan}):'',
+      spacingInputs:spacingRows(rows.map((r,i)=>({id:String(i),property:r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true}))),
       bridgeOrigin:this.bridge?.origin??'',tree,crumbs,selectedLabel:this.picked?.node.label??'',restoring:!!this.restoring,selecting:!!this.pendingSelection,
       message:this.pendingSelection?'Selecting element…':this.restoring?'Updating selection…':s?.readOnly || (s && !rows.length?'This element has no editable visual properties yet.':'Select an element in a screen.'),
       rows:rows.map((r:Row,i:number)=>({id:String(i),name:labels[r.editable.row]??r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true,group:r.editable.rung==='layout'?(r.editable.row.startsWith('padding')||r.editable.row.startsWith('margin')||r.editable.row.includes('gap')?'Spacing':'Layout'):'Appearance',options:layoutOptions(r.editable.row).map(value=>({value,label:optionLabels[value]??value}))})),canUndo:this.inverses.length>0,applied:this.applied};
@@ -147,6 +174,12 @@ export class DesignSession {
       this.armRestore(expected);this.selection=null;this.version++;this.applied=true;
       return this.view();
     } finally {this.busy=false;}
+  }
+  async editSpacing(version:number,property:string,value:string){
+    await this.poll();
+    if(version!==this.version||!this.selection)throw new Error('The source or selection changed. Select the element again.');
+    const operation=spacingOperation(editableRows(this.selection),property,value);
+    return this.edit(version,operation.index,operation.value);
   }
   async undo() {
     if(this.busy || !this.inverses.length) throw new Error('There is no app change to undo.');
@@ -214,6 +247,7 @@ export async function designRequest(body:any) {
     return view;
   }
   if(body.op==='edit') return s.edit(Number(body.version),Number(body.row),body.value);
+  if(body.op==='spacing')return s.editSpacing(Number(body.version),String(body.row),String(body.value));
   if(body.op==='undo') return s.undo();
   if(body.op==='parent') {
     if(!s.selection) throw new Error('Select an element first.');

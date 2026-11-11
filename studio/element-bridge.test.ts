@@ -133,3 +133,19 @@ test('selection restoration waits for the new plan and verifies the source locat
   await s.poll();expect(s.view().restoring).toBe(false);expect(s.view().source).toBe('');
   events=[{event:'selected',build:'page',selected:null}];await s.poll();expect(s.ended).toBe(true);
 });
+test('the first selection waits for instance paths in the next hierarchy snapshot',async()=>{
+  let events:any[]=[];
+  const request=(async(url:string,init:any)=>{
+    const body=JSON.parse(init.body);
+    if(url.endsWith('/events')){const reply={files:{},events,seq:1,epoch:'run'};events=[];return Response.json(reply);}
+    return Response.json({ok:body.method==='hello'?{protocol:'tamber/1.18',files:{}}:{builds:['page']}});
+  }) as typeof fetch;
+  const node={id:'node',identity:'[12,[]]',path:'root/0:div',parent:'',depth:0,label:'Row',tag:'div',site:12,instance:[] as unknown[]};
+  const frame={frame:'phone',build:'page',plan:'plan',inspecting:true,nodes:[node],seen:Date.now()};
+  const s=new DesignSession('http://localhost:5174','fixture',request);
+  s.bridge={frames:new Map([['phone',frame]]),origin:'http://localhost:9999',select(){}} as any;await s.start();s.navigate('node');
+  events=[{event:'selection',build:'page',site:12,instance:[{region:1,key:'home'}],source:{file:'app.contract',line:3},rows:[]}];
+  expect((await s.poll()).selecting).toBe(true);expect(s.view().spacingId).toBe('');
+  node.instance=[{region:1,key:'home'}];
+  const confirmed=await s.poll();expect(confirmed.selecting).toBe(false);expect(confirmed.source).toBe('app.contract:3');expect(confirmed.spacingId).toBe('node');
+});
