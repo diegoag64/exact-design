@@ -1,0 +1,5 @@
+.exact-sdk/
+node_modules/
+.DS_Store
+exact-feasibility.html
+.exact/

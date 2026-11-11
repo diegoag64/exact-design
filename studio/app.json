@@ -1,0 +1,20 @@
+{
+  "$schema": "../.exact-sdk/scripts/app.schema.json",
+  "name": "Exact Design",
+  "short_name": "Exact Design",
+  "id": "dev.exactdesign.studio",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "dev.exactdesign.studio",
+    "name": "Exact Design"
+  },
+  "host": {
+    "web": {}
+  },
+  "deploy": {
+    "store": {
+      "web": "0"
+    }
+  }
+}

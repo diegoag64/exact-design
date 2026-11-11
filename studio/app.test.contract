@@ -1,0 +1,63 @@
+test "edit a layer and undo"
+  size 1440x900
+  tap "layer-title"
+  clock data
+  type "text-content" "A clearer idea."
+  type "text-content" key "Enter"
+  clock data
+  expect state doc.layers.0.text == "A clearer idea."
+  tap "undo"
+  clock data
+  expect state doc.layers.0.text == "A little room to think."
+  tap "redo"
+  clock data
+  expect state doc.layers.0.text == "A clearer idea."
+
+test "create and delete a button"
+  size 1440x900
+  tap "add-button"
+  clock data
+  expect state doc.layers.length == 7
+  tap "delete"
+  clock data
+  expect state doc.layers.length == 6
+
+test "preview uses working Exact controls"
+  size 1440x900
+  tap "preview"
+  tap "preview-button"
+  expect text "preview-clicks" == "Clicked 1"
+  tap "close-preview"
+  tap "export"
+  expect tree has "code"
+  tap "close-export"
+
+test "save and reopen a document"
+  size 1440x900
+  tap "layer-title"
+  clock data
+  type "text-content" "Saved design"
+  type "text-content" key "Enter"
+  clock data
+  tap "save"
+  clock data
+  expect text "save-status" == "Saved"
+  reload
+  clock data
+  expect state doc.layers.0.text == "Saved design"
+
+test "drag and resize on the canvas"
+  size 1440x900
+  tap "canvas" drag 34 17 from 150 145 mouse
+  clock data
+  expect state doc.layers.0.x == 96
+  expect state doc.layers.0.y == 80
+  tap "layer-button"
+  clock data
+  tap "canvas" drag 34 17 from 241 466 mouse
+  clock data
+  expect state doc.layers.5.width == 192
+  expect state doc.layers.5.height == 64
+  tap "undo"
+  clock data
+  expect state doc.layers.5.width == 152

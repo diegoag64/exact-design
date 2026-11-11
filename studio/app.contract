@@ -1,0 +1,253 @@
+shape Layer
+  id: string
+  kind: string
+  name: string
+  x: number
+  y: number
+  width: number
+  height: number
+  fill: string
+  text: string
+  fontSize: number
+  radius: number
+
+shape Document
+  drawing: string
+  name: string
+  layers: Layer[]
+  selected: string
+  canUndo: bool
+  canRedo: bool
+  code: string
+  status: string
+  resizing: bool
+
+shape Reply
+  ok: bool
+
+style Tool
+  width=32
+  height=32
+  padding=6
+  border-width=0
+  border-radius=6
+  background-color="transparent"
+  color="ink.secondary"
+
+style Field
+  width="100%"
+  box-sizing="border-box"
+  height=30
+  border-width=0
+  border-radius=5
+  background-color="surface.field"
+  color="ink.primary"
+  padding-left=8
+  padding-right=8
+  font-size=12
+
+shape Viewport
+  width: number
+
+component Studio
+  resource viewport = exactViewport() as shape Viewport
+  resource doc = document() as shape Document else empty(name="Untitled")
+  mutation changed as shape Reply queue refreshes doc
+  state zoom = 0.85
+  state px = 64
+  state py = 80
+  state dragging = false
+  state hand = false
+  state sx = 0
+  state sy = 0
+  state dx = 0
+  state dy = 0
+  state codeOpen = false
+  state preview = false
+  state clicks = 0
+  action command(op: string, key: string)
+    send changed = edit(op, key, "", 0, 0)
+  action prop(key: string, value: string)
+    send changed = edit("property", key, value, 0, 0)
+  action down(e: PointerEvent)
+    if e.button == 0
+      dragging = true
+      sx = e.offsetX
+      sy = e.offsetY
+      dx = 0
+      dy = 0
+      if not hand
+        send changed = edit("hit", "", "", (e.offsetX - px) / zoom, (e.offsetY - py) / zoom)
+  action move(e: PointerEvent)
+    if dragging
+      dx = (e.offsetX - sx) / zoom
+      dy = (e.offsetY - sy) / zoom
+  action up(e: PointerEvent)
+    if dragging
+      if hand
+        px = px + e.offsetX - sx
+        py = py + e.offsetY - sy
+      else
+        send changed = edit("move", "", "", (e.offsetX - sx) / zoom, (e.offsetY - sy) / zoom)
+      dragging = false
+      dx = 0
+      dy = 0
+  action wheel(e: WheelEvent)
+    preventDefault()
+    if e.ctrlKey or e.metaKey
+      let z = min(3, max(0.25, zoom * (1 - e.deltaY * 0.005)))
+      let old = zoom
+      zoom = z
+      px = e.offsetX - (e.offsetX - px) * z / old
+      py = e.offsetY - (e.offsetY - py) * z / old
+    else
+      px = px - e.deltaX
+      py = py - e.deltaY
+  action zoomIn
+    zoom = min(3, zoom + 0.1)
+  action zoomOut
+    zoom = max(0.25, zoom - 0.1)
+  action resetView
+    zoom = 0.85
+    px = 64
+    py = 80
+  action selectTool
+    hand = false
+  action handTool
+    hand = true
+  action toggleCode
+    codeOpen = not codeOpen
+  action copyCode
+    copyText(doc.code)
+  action togglePreview
+    preview = not preview
+    clicks = 0
+  action previewClick
+    clicks = clicks + 1
+  view
+    main testId="editor" width="100%" height="100%" display="flex" flex-direction="column" background-color="ink.inverse" color="ink.primary" font-family="system-ui" font-size=12
+      row height=48 flex-shrink=0 align-items="center" padding-left=16 padding-right=12 gap=8 border-bottom-width=1 border-bottom-style="solid" border-bottom-color="line.subtle"
+        image "symbol:layers" aria-hidden=true color="ink.primary"
+        if viewport.width >= 700
+          text "Exact Design" font-weight=600
+          text "/" color="ink.muted"
+        text doc.name testId="document-name"
+        row flex=1
+        if doc.status != ""
+          text doc.status color="ink.secondary" testId="save-status"
+        button press=command("save", "") aria-keyshortcuts="Meta+s Control+s" class=Tool aria-label="Save" testId="save"
+          image "symbol:download"
+        button press=command("undo", "") aria-keyshortcuts="Meta+z Control+z" class=Tool disabled=(not doc.canUndo) aria-label="Undo" testId="undo"
+          image "symbol:back"
+        button press=command("redo", "") aria-keyshortcuts="Meta+Shift+z Control+Shift+z" class=Tool disabled=(not doc.canRedo) aria-label="Redo" testId="redo"
+          image "symbol:forward-chevron"
+        button press=togglePreview class=Tool aria-label="Preview" testId="preview"
+          image "symbol:play"
+        button press=toggleCode height=30 border-width=0 border-radius=6 background-color="surface.action" color="ink.inverse" padding-left=12 padding-right=12 testId="export"
+          text "Export" font-size=12
+      row flex=1 min-height=0
+        column display=(viewport.width >= 1000 ? "flex" : "none") width=208 flex-shrink=0 border-right-width=1 border-right-style="solid" border-right-color="line.subtle" padding-top=16 gap=12
+          text "Layers" padding-left=16 font-weight=600
+          row padding-left=16 padding-top=8 padding-bottom=8 gap=8
+            image "symbol:document" aria-hidden=true color="ink.muted"
+            text "Screen" font-weight=500
+          scroll flex=1 min-height=0
+            column gap=2 padding-left=8 padding-right=8
+              for n in doc.layers key=n.id
+                button press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" align-items="center" gap=8 height=32 padding-left=12 padding-right=8 border-width=0 border-radius=5 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.secondary")
+                  image (n.kind == "text" ? "symbol:compose" : n.kind == "button" ? "symbol:select" : "symbol:stop") aria-hidden=true
+                  text n.name font-size=12
+        column flex=1 min-width=0 min-height=0 position="relative" background-color="surface.canvas"
+          canvas surface=design(doc.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dx), (hand ? 0 : dy), doc.resizing) flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel touch-action="none" testId="canvas" aria-label="Design canvas"
+          row position="absolute" bottom=24 left=24 padding=6 gap=4 background-color="ink.inverse" border-radius=10 box-shadow="0 2px 12px #00000012"
+            button press=selectTool aria-keyshortcuts="v" class=Tool background-color=(not hand ? "surface.selected" : "transparent") aria-label="Select" testId="select-tool"
+              image "symbol:select"
+            button press=handTool aria-keyshortcuts="h" class=Tool background-color=(hand ? "surface.selected" : "transparent") aria-label="Pan" testId="hand-tool"
+              image "symbol:reorder"
+            button press=command("add", "rectangle") class=Tool aria-label="Rectangle" testId="add-rectangle"
+              image "symbol:stop"
+            button press=command("add", "text") class=Tool aria-label="Text" testId="add-text"
+              image "symbol:compose"
+            button press=command("add", "button") class=Tool aria-label="Button" testId="add-button"
+              image "symbol:add"
+          row position="absolute" right=20 bottom=(viewport.width >= 700 ? 28 : 94) align-items="center" gap=4 background-color="ink.inverse" border-radius=8 padding=2
+            button press=zoomOut class=Tool aria-label="Zoom out" testId="zoom-out"
+              image "symbol:minus"
+            button press=resetView class=Tool width=48 aria-label="Reset zoom" testId="zoom"
+              text `${round(zoom * 100)}%` font-size=11 font-variant-numeric="tabular-nums"
+            button press=zoomIn class=Tool aria-label="Zoom in" testId="zoom-in"
+              image "symbol:add"
+        scroll display=(viewport.width >= 700 ? "flex" : "none") width=232 flex-shrink=0 border-left-width=1 border-left-style="solid" border-left-color="line.subtle"
+          column padding=16 gap=20
+            row align-items="center"
+              text "Design" font-weight=600 flex=1
+              if doc.selected != ""
+                button press=command("delete", "") class=Tool aria-label="Delete layer" testId="delete"
+                  image "symbol:delete"
+            if doc.selected == ""
+              text "Screen" color="ink.secondary"
+              row gap=8
+                text "720" flex=1 font-variant-numeric="tabular-nums"
+                text "520" flex=1 font-variant-numeric="tabular-nums"
+            for n in doc.layers.filter(n => n.id == doc.selected) key=n.id
+              column gap=18
+                input value=n.name change=prop("name") class=Field aria-label="Layer name" testId="name"
+                column gap=10
+                  text "Layout" font-weight=500
+                  row gap=8
+                    column flex=1 min-width=0 gap=5
+                      text "X" color="ink.muted" font-size=11
+                      input value=`${n.x}` change=prop("x") class=Field aria-label="X position" testId="x"
+                    column flex=1 min-width=0 gap=5
+                      text "Y" color="ink.muted" font-size=11
+                      input value=`${n.y}` change=prop("y") class=Field aria-label="Y position" testId="y"
+                  row gap=8
+                    column flex=1 min-width=0 gap=5
+                      text "W" color="ink.muted" font-size=11
+                      input value=`${n.width}` change=prop("width") class=Field aria-label="Width" testId="width"
+                    column flex=1 min-width=0 gap=5
+                      text "H" color="ink.muted" font-size=11
+                      input value=`${n.height}` change=prop("height") class=Field aria-label="Height" testId="height"
+                column gap=10
+                  text "Fill" font-weight=500
+                  row gap=8 align-items="center"
+                    column width=24 height=24 border-radius=4 background-color=n.fill
+                    input value=n.fill change=prop("fill") class=Field flex=1 min-width=0 aria-label="Fill color" testId="fill"
+                if n.kind != "text"
+                  column gap=8
+                    text "Corner radius" font-weight=500
+                    input value=`${n.radius}` change=prop("radius") class=Field aria-label="Corner radius" testId="radius"
+                if n.kind != "rectangle"
+                  column gap=10
+                    text "Text" font-weight=500
+                    input value=n.text change=prop("text") class=Field aria-label="Text content" testId="text-content"
+                    input value=`${n.fontSize}` change=prop("fontSize") class=Field aria-label="Font size" testId="font-size"
+      if codeOpen
+        column position="absolute" inset=0 background-color="surface.scrim" align-items="center" justify-content="center"
+          column width=680 max-width="90%" height=520 max-height="85%" padding=20 gap=16 border-radius=12 background-color="ink.inverse"
+            row align-items="center" gap=12
+              text "Contract" font-weight=600 flex=1
+              button press=copyCode class=Tool width=60 aria-label="Copy Contract" testId="copy-code"
+                text "Copy"
+              button press=toggleCode class=Tool aria-label="Close export" testId="close-export"
+                image "symbol:close"
+            textarea value=doc.code readonly=true flex=1 width="100%" min-height=0 font-family="monospace" font-size=12 border-width=0 background-color="surface.field" padding=12 box-sizing="border-box" aria-label="Contract source" testId="code"
+      if preview
+        column position="absolute" inset=0 background-color="surface.canvas" align-items="center" justify-content="center" gap=20
+          row width="90%" max-width=720 align-items="center"
+            text "Screen" flex=1
+            if clicks > 0
+              text `Clicked ${clicks}` testId="preview-clicks"
+            button press=togglePreview class=Tool aria-label="Close preview" testId="close-preview"
+              image "symbol:close"
+          scroll width="100%" max-width=720 height=520 overflow-x="scroll"
+            column position="relative" width=720 height=520 background-color="paper" testId="live-screen"
+              for n in doc.layers key=n.id
+                if n.kind == "text"
+                  text n.text position="absolute" left=n.x top=n.y width=n.width height=n.height color=n.fill font-size=n.fontSize
+                else
+                  if n.kind == "button"
+                    button press=previewClick position="absolute" left=n.x top=n.y width=n.width height=n.height background-color=n.fill color="paper" border-radius=n.radius border-width=0 testId=`preview-${n.id}`
+                      text n.text font-size=n.fontSize
+                  else
+                    column position="absolute" left=n.x top=n.y width=n.width height=n.height background-color=n.fill border-radius=n.radius
