@@ -1,3 +1,14 @@
+shape SnapTarget
+  value: number
+  guide: number
+  start: number
+  end: number
+  gap: bool
+
+fn magnitude(n: number): number = max(n, -n)
+
+fn snappedDelta(targets: SnapTarget[], origin: number, delta: number, zoom: number): number = match first(sortBy(targets, t => magnitude(t.value - origin - delta))) { case some(t) => magnitude(t.value - origin - delta) <= 8 / zoom ? t.value - origin : delta, case none => delta }
+
 shape Layer
   id: string
   kind: string
@@ -26,6 +37,10 @@ shape CanvasView
   height: number
 
 shape Document
+  frameX: number
+  frameY: number
+  snapX: SnapTarget[]
+  snapY: SnapTarget[]
   source: string
   views: CanvasView[]
   active: string
@@ -91,8 +106,9 @@ component Studio
   mutation changed as shape Reply queue refreshes doc then afterEdit
   state leftPanel = "auto" persist
   state rightPanel = "auto" persist
-  derive leftOpen = leftPanel == "open" or (leftPanel == "auto" and viewport.width >= 1000)
+  derive leftOpen = (leftPanel == "open" or (leftPanel == "auto" and viewport.width >= 1000)) and (viewport.width >= 700 or rightPanel != "open")
   derive rightOpen = rightPanel == "open" or (rightPanel == "auto" and viewport.width >= 700)
+  derive panelOverlay = (leftOpen and viewport.width < 1000) or (rightOpen and viewport.width < 700)
   state zoom = 0.85
   state px = 64
   state py = 80
@@ -105,6 +121,10 @@ component Studio
   state codeOpen = false
   state preview = false
   state clicks = 0
+  state freeDrag = false
+  derive snapping = dragging and doc.frameSelected and not doc.resizing and not hand and not freeDrag and (dx != 0 or dy != 0)
+  derive dragX = snapping ? snappedDelta(doc.snapX, doc.frameX, dx, zoom) : dx
+  derive dragY = snapping ? snappedDelta(doc.snapY, doc.frameY, dy, zoom) : dy
   action toggleLeft
     leftPanel = leftOpen ? "closed" : "open"
     if viewport.width >= 1000
@@ -122,6 +142,7 @@ component Studio
     send changed = edit("property", key, value, 0, 0)
   action down(e: PointerEvent)
     if e.button == 0
+      freeDrag = e.altKey
       dragging = true
       sx = e.offsetX
       sy = e.offsetY
@@ -131,6 +152,7 @@ component Studio
         send changed = edit("hit", "", `${zoom}`, (e.offsetX - px) / zoom, (e.offsetY - py) / zoom)
   action move(e: PointerEvent)
     if dragging
+      freeDrag = e.altKey
       dx = (e.offsetX - sx) / zoom
       dy = (e.offsetY - sy) / zoom
   action up(e: PointerEvent)
@@ -139,7 +161,7 @@ component Studio
         px = px + e.offsetX - sx
         py = py + e.offsetY - sy
       else
-        send changed = edit("move", "", "", (e.offsetX - sx) / zoom, (e.offsetY - sy) / zoom)
+        send changed = edit("move", (e.altKey ? "free" : "snap"), `${zoom}`, (e.offsetX - sx) / zoom, (e.offsetY - sy) / zoom)
       dragging = false
       dx = 0
       dy = 0
@@ -238,11 +260,11 @@ component Studio
                           text n.name font-size=12
         column flex=1 min-width=0 min-height=0 position="relative" overflow="hidden" background-color="surface.canvas"
           for v in doc.views key=v.id
-            column position="absolute" left=((hand ? px + dx * zoom : px) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dx : 0)) * zoom) top=((hand ? py + dy * zoom : py) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dy : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dx : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dy : 0)) scale=zoom transform-origin="top left" pointer-events="none" inert=true background-color="paper" box-shadow="0 4px 16px #00000012" testId=`frame-${v.id}`
-              ScreenView(source=v.source, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dx), dy=(hand ? 0 : dy), resizing=doc.resizing, activate=previewClick)
-          canvas surface=design(doc.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dx), (hand ? 0 : dy), doc.resizing) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel touch-action="none" testId="canvas" aria-label="Design canvas"
-          row position="absolute" bottom=20 left="50%" translate="-50% 0" padding=6 gap=4 align-items="center" border="1px solid line.subtle" background-color="ink.inverse" border-radius=10 box-shadow="0 2px 12px #00000012"
-            button press=selectTool aria-keyshortcuts="v" class=Tool background-color=(not hand ? "surface.selected" : "transparent") aria-label="Select" title="Select" testId="select-tool"
+            column position="absolute" left=((hand ? px + dx * zoom : px) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragX : 0)) * zoom) top=((hand ? py + dy * zoom : py) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragY : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragX : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragY : 0)) scale=zoom transform-origin="top left" pointer-events="none" inert=true background-color="paper" box-shadow="0 4px 16px #00000012" testId=`frame-${v.id}`
+              ScreenView(source=v.source, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
+          canvas surface=design(doc.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dragX), (hand ? 0 : dragY), doc.resizing, snapping) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel cursor=(hand ? (dragging ? "grabbing" : "grab") : (dragging ? (doc.resizing ? "nwse-resize" : "move") : "default")) touch-action="none" testId="canvas" aria-label="Design canvas"
+          row display=(panelOverlay ? "none" : "flex") position="absolute" bottom=20 left="50%" translate="-50% 0" padding=6 gap=4 align-items="center" border="1px solid line.subtle" background-color="ink.inverse" border-radius=10 box-shadow="0 2px 12px #00000012"
+            button press=selectTool aria-keyshortcuts="v" class=Tool background-color=(not hand ? "surface.selected" : "transparent") aria-label="Select" title="Select (V). Hold Alt to ignore snapping." testId="select-tool"
               image "symbol:icon.pointer"
             button press=handTool aria-keyshortcuts="h" class=Tool background-color=(hand ? "surface.selected" : "transparent") aria-label="Pan" title="Pan" testId="hand-tool"
               image "symbol:icon.pan"
@@ -255,7 +277,7 @@ component Studio
               image "symbol:compose"
             button press=command("add", "button") disabled=(doc.source != "") class=Tool aria-label="Button" title="Button" testId="add-button"
               image "symbol:add"
-          row position="absolute" right=16 bottom=(viewport.width >= 1000 ? 24 : 82) align-items="center" gap=4 background-color="ink.inverse" border-radius=8 padding=2 border="1px solid line.subtle"
+          row display=(panelOverlay ? "none" : "flex") position="absolute" right=16 bottom=(viewport.width >= 1000 ? 24 : 82) align-items="center" gap=4 background-color="ink.inverse" border-radius=8 padding=2 border="1px solid line.subtle"
             button press=zoomOut class=Tool aria-label="Zoom out" title="Zoom out" testId="zoom-out"
               image "symbol:minus"
             button press=resetView class=Tool width=48 aria-label="Fit all screens" title="Fit all screens" testId="zoom"

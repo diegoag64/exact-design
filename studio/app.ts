@@ -1,5 +1,6 @@
 import type { Answer, Sources, Ctx2D, Frame } from './app.contract.d.ts';
 import { WorkspaceEditor, loadWorkspace, validSource } from './workspace';
+import { snapTargets } from './snapping';
 import { render } from './render';
 const editor = new WorkspaceEditor();
 let status = ''; let loaded = false; let resizing = false;
@@ -7,7 +8,9 @@ export const grants = 'fs.read app:/data/design.json\nfs.write app:/data/design.
 const snapshot = () => {
   const document = editor.document;
   const screens = new Map(document.screens.map(screen => [screen.id, screen]));
+  const targets = editor.selected === editor.active ? snapTargets(editor.view, document.views) : {x: [], y: []};
   return {
+    frameX: editor.view.x, frameY: editor.view.y, snapX: targets.x, snapY: targets.y,
     drawing: JSON.stringify({...document, active: editor.active}),
     name: document.name,
     layers: editor.layers,
@@ -38,7 +41,7 @@ const sources: Sources = {
     status = '';
     if(op === 'select') { editor.select(key); resizing = false; }
     if(op === 'hit') resizing = editor.hit(x,y,9 / Math.max(0.05, Number(value) || 1));
-    if(op === 'move') editor.move(x,y,resizing);
+    if(op === 'move') editor.move(x,y,resizing,key === 'snap' ? Number(value) || 1 : 0);
     if(op === 'screen') editor.addView('',true);
     if(op === 'duplicate') editor.addView('',true,true);
     if(op === 'variant') editor.addView(key);
@@ -56,5 +59,5 @@ const sources: Sources = {
   },
 };
 export const answer: Answer = (source, args, store, storage, native) => sources[source](args, store, storage, native);
-export const surfaces = { design: 8 };
+export const surfaces = { design: 9 };
 export function draw(_surface: string, args: unknown[], ctx: Ctx2D, frame: Frame): boolean { render(args, ctx, frame); return false; }

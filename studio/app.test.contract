@@ -226,3 +226,22 @@ test "sidebars can open on a narrow window"
   expect tree has "screen-name"
   tap "toggle-inspector"
   expect tree missing "inspector-panel"
+
+test "frames snap into place as one undo step"
+  size 1440x900
+  tap "view-view-1"
+  clock data
+  tap "variant-phone"
+  clock data
+  tap "canvas" drag 76 76 from 680 52 mouse
+  clock data
+  expect state doc.views.1.x == 900
+  expect state doc.views.1.y == 100
+  tap "canvas" drag -73 -73 from 756 128 mouse
+  clock data
+  expect state doc.views.1.x == 800
+  expect state doc.views.1.y == 0
+  tap "undo"
+  clock data
+  expect state doc.views.1.x == 900
+  expect state doc.views.1.y == 100

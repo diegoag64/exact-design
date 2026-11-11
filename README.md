@@ -11,13 +11,13 @@ bun run setup
 bun run dev
 ```
 
-Open the URL printed by the development server. Use a desktop window at least 1000 pixels wide for both panels. On narrower windows, the panels hide to leave room for the canvas.
+Open the URL printed by the development server. Use a desktop window at least 1000 pixels wide for both panels. The two panel icons in the top bar independently show or hide Screens and the inspector. Your choices survive a reload. On narrower windows, panels start hidden and open over the canvas when needed. The centered toolbar can add a screen even with the sidebar hidden.
 
 Setup downloads Exact at revision `336a059fd1464bee7c61640afb7124ebf276d06d` into the ignored `.exact-sdk` directory. Exact's setup command installs its toolchain requirements. The runtime is pinned because its APIs are still changing.
 
 ## Arrange screens
 
-Click + beside Screens to add a blank screen. Select a screen in the sidebar or click its canvas title to edit its name and viewport dimensions. Drag the title to move the frame; drag the lower-right handle to resize it.
+Click + beside Screens to add a blank screen. Select a screen in the sidebar or click its canvas title to edit its name and viewport dimensions. Drag the title to move the frame; drag the lower-right handle to resize it. Moving frames snap to nearby edges, centers, and an 80-pixel gap beside other frames. Pink guides show the alignment or spacing. Hold Option/Alt while dragging to ignore snapping. A completed drag is one undo step.
 
 Use Add viewport in the inspector to create a linked phone, tablet, or desktop variant. Layer edits apply to every viewport of that screen. The preset buttons above it resize the selected viewport. Duplicate screen creates an independent copy of the content. Deleting the last viewport of a screen removes that screen; the final viewport in the workspace cannot be deleted. Undo restores deleted content.
 

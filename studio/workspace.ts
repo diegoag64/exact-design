@@ -1,3 +1,4 @@
+import { snapMove, FRAME_GAP } from './snapping';
 import { Editor, initial, validate, exportContract, resolveLayer, type Layer } from './model';
 export type Screen = { id: string; name: string; source: string; layers: Layer[] };
 export type View = { id: string; screenId: string; name: string; x: number; y: number; width: number; height: number };
@@ -46,7 +47,7 @@ export class WorkspaceEditor {
     if(this.document.views.length >= 200 || (independent && this.document.screens.length >= 100)) return;
     const id=this.id('view'), screenId=independent?this.id('screen'):this.view.screenId;
     const [width,height]=presets[preset] ?? [this.view.width,this.view.height];
-    const x=Math.max(...this.document.views.map(v=>v.x+v.width))+80, y=this.view.y;
+    const x=Math.max(...this.document.views.map(v=>v.x+v.width))+FRAME_GAP, y=this.view.y;
     const source=structuredClone(this.screen);
     this.change(d=>{
       if(independent) d.screens.push({id:screenId,name:duplicate?`${source.name} copy`:`Screen ${d.screens.length+1}`,source:duplicate?source.source:'',layers:duplicate?source.layers:[]});
@@ -85,8 +86,9 @@ export class WorkspaceEditor {
       if(['x','y','width','height'].includes(key) && value.trim() && Number.isFinite(Number(value))) { const k=key as 'x'|'y'|'width'|'height'; v[k]=Math.round(Math.max(k==='x'||k==='y'?-10000:100,Math.min(10000,Number(value)))); if(k==='width'||k==='height') v.name='Custom'; }
     });
   }
-  move(x: number,y: number,resize=false) {
+  move(x: number,y: number,resize=false,snapZoom=0) {
     if(!Number.isFinite(x+y)) return;
+    if (!resize && snapZoom > 0 && this.selected === this.active) { const snapped=snapMove(this.view,this.document.views,x,y,snapZoom); x=snapped.dx; y=snapped.dy; }
     const id=this.selected, active=this.active;
     this.change(d=>{ const v=d.views.find(v=>v.id===active)!; const n=id===active?v:d.screens.find(s=>s.id===v.screenId)!.layers.find(n=>n.id===id); if(!n)return;
       if(resize) { if(id!==active && 'widthMode' in n && n.widthMode==='fill') { const current=resolveLayer(n,v.width).width; n.right=v.width-n.x-Math.min(10000,Math.max(1,Math.round(current+x))); } n.width=Math.min(10000,Math.max(id===active?100:1,Math.round(n.width+x))); n.height=Math.min(10000,Math.max(id===active?100:1,Math.round(n.height+y))); if(id===active)v.name='Custom'; }
