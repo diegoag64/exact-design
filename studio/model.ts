@@ -62,8 +62,8 @@ export function exportContract(d: Design): string {
   const lines = ['component Screen', '  view', `    column position="relative" width="100%" height=${d.height} overflow="hidden" background-color="#ffffff"`];
   for (const n of d.layers) {
     const geometry = `position="absolute" left=${n.x} top=${n.y} width=${n.widthMode === 'fill' ? q(`max(1px, calc(100% - ${n.x + n.right}px))`) : n.width} height=${n.height}`;
-    if(n.kind === 'text') lines.push(`      text ${q(n.text)} ${geometry} color=${q(n.fill)} font-size=${n.fontSize} line-height=1.2 white-space="pre-wrap" overflow-wrap="anywhere" overflow="hidden"`);
-    else if(n.kind === 'button') lines.push(`      button ${geometry} background-color=${q(n.fill)} color="#ffffff" border-radius=${n.radius} border-width=0 padding=0 display="flex" align-items="center" justify-content="center" box-sizing="border-box" overflow="hidden" aria-label=${q(n.text)}`, `        text ${q(n.text)} font-size=${n.fontSize} line-height=1.2 white-space="pre-wrap" overflow-wrap="anywhere" overflow="hidden"`);
+    if(n.kind === 'text') lines.push(`      text ${q(n.text)} ${geometry} color=${q(n.fill)} font-size=${n.fontSize} line-height=1.2 white-space="pre-wrap" overflow="hidden"`);
+    else if(n.kind === 'button') lines.push(`      button ${geometry} background-color=${q(n.fill)} color="#ffffff" border-radius=${n.radius} border-width=0 padding=0 display="flex" align-items="center" justify-content="center" box-sizing="border-box" overflow="hidden" aria-label=${q(n.text)}`, `        text ${q(n.text)} font-size=${n.fontSize} line-height=1.2 white-space="pre-wrap" overflow="hidden"`);
     else lines.push(`      column ${geometry} background-color=${q(n.fill)} border-radius=${n.radius}`);
   }
   return lines.join('\n') + '\n';

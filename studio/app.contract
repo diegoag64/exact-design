@@ -27,6 +27,7 @@ shape CanvasView
 shape Document
   views: CanvasView[]
   active: string
+  screenId: string
   frameSelected: bool
   width: number
   height: number
@@ -211,8 +212,11 @@ component Studio
                       button press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" align-items="center" gap=8 height=32 padding-left=24 padding-right=8 border-width=0 border-radius=5 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.secondary")
                         image (n.kind == "text" ? "symbol:compose" : n.kind == "button" ? "symbol:select" : "symbol:stop") aria-hidden=true
                         text n.name font-size=12
-        column flex=1 min-width=0 min-height=0 position="relative" background-color="surface.canvas"
-          canvas surface=design(doc.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dx), (hand ? 0 : dy), doc.resizing) flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel touch-action="none" testId="canvas" aria-label="Design canvas"
+        column flex=1 min-width=0 min-height=0 position="relative" overflow="hidden" background-color="surface.canvas"
+          for v in doc.views key=v.id
+            column position="absolute" left=((hand ? px + dx * zoom : px) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dx : 0)) * zoom) top=((hand ? py + dy * zoom : py) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dy : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dx : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dy : 0)) scale=zoom transform-origin="top left" pointer-events="none" inert=true background-color="paper" box-shadow="0 4px 16px #00000012" testId=`frame-${v.id}`
+              ScreenView(layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dx), dy=(hand ? 0 : dy), resizing=doc.resizing, activate=previewClick)
+          canvas surface=design(doc.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dx), (hand ? 0 : dy), doc.resizing) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel touch-action="none" testId="canvas" aria-label="Design canvas"
           row position="absolute" bottom=24 left=24 padding=6 gap=4 background-color="ink.inverse" border-radius=10 box-shadow="0 2px 12px #00000012"
             button press=selectTool aria-keyshortcuts="v" class=Tool background-color=(not hand ? "surface.selected" : "transparent") aria-label="Select" testId="select-tool"
               image "symbol:select"
@@ -288,6 +292,11 @@ component Studio
                     column flex=1 min-width=0 gap=5
                       text "H" color="ink.muted" font-size=11
                       input value=`${n.height}` change=prop("height") class=Field aria-label="Height" testId="height"
+                row gap=4 background-color="surface.field" border-radius=6 padding=3
+                  button press=prop("widthMode", "fixed") class=Tool flex=1 width="auto" height=24 color="ink.primary" background-color=(n.widthMode == "fixed" ? "ink.inverse" : "transparent") aria-label="Fixed width" testId="width-fixed"
+                    text "Fixed" font-size=11
+                  button press=prop("widthMode", "fill") class=Tool flex=1 width="auto" height=24 color="ink.primary" background-color=(n.widthMode == "fill" ? "ink.inverse" : "transparent") aria-label="Fill width" testId="width-fill"
+                    text "Fill" font-size=11
                 column gap=10
                   text "Fill" font-weight=500
                   row gap=8 align-items="center"
@@ -322,12 +331,41 @@ component Studio
               image "symbol:close"
           scroll width="100%" max-width=doc.width height=doc.height max-height="80%" overflow-x="scroll"
             column position="relative" width=doc.width height=doc.height overflow="hidden" background-color="paper" testId="live-screen"
-              for n in doc.layers key=n.id
-                if n.kind == "text"
-                  text n.text position="absolute" left=n.x top=n.y width=n.width height=n.height color=n.fill font-size=n.fontSize
-                else
-                  if n.kind == "button"
-                    button press=previewClick position="absolute" left=n.x top=n.y width=n.width height=n.height background-color=n.fill color="paper" border-radius=n.radius border-width=0 testId=`preview-${n.id}`
-                      text n.text font-size=n.fontSize
-                  else
-                    column position="absolute" left=n.x top=n.y width=n.width height=n.height background-color=n.fill border-radius=n.radius
+              ScreenView(layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick)
+
+component ScreenView
+  props
+    layers: Layer[]
+    prefix: string
+    selected: string
+    dx: number
+    dy: number
+    resizing: bool
+    activate: action
+  view
+    column position="relative" width="100%" height="100%" overflow="hidden" background-color="paper" font-family="system-ui"
+      for n in layers key=n.id
+        ScreenLayer(n=n, prefix=prefix, selected=(selected == n.id), dx=dx, dy=dy, resizing=resizing, activate=activate)
+
+component ScreenLayer
+  props
+    n: Layer
+    prefix: string
+    selected: bool
+    dx: number
+    dy: number
+    resizing: bool
+    activate: action
+  derive x = n.x + (selected and not resizing ? dx : 0)
+  derive y = n.y + (selected and not resizing ? dy : 0)
+  derive w = n.widthMode == "fill" ? `max(1px, calc(100% - ${x + n.right - (selected and resizing ? dx : 0)}px))` : `${max(1, n.width + (selected and resizing ? dx : 0))}px`
+  derive h = max(1, n.height + (selected and resizing ? dy : 0))
+  view
+    if n.kind == "text"
+      text n.text position="absolute" left=x top=y width=w height=h color=n.fill font-size=n.fontSize line-height=1.2 white-space="pre-wrap" overflow="hidden" testId=`${prefix}-${n.id}`
+    else
+      if n.kind == "button"
+        button press=activate position="absolute" left=x top=y width=w height=h background-color=n.fill color="paper" border-radius=n.radius border-width=0 padding=0 display="flex" align-items="center" justify-content="center" box-sizing="border-box" overflow="hidden" testId=`${prefix}-${n.id}`
+          text n.text font-size=n.fontSize line-height=1.2
+      else
+        column position="absolute" left=x top=y width=w height=h background-color=n.fill border-radius=n.radius testId=`${prefix}-${n.id}`
