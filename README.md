@@ -43,7 +43,7 @@ To try the included Exact example, run this in a second terminal:
 bun run demo
 ```
 
-Paste `http://127.0.0.1:5174/` into Preview URL. Its cards sit side by side on wide viewports and stack below 600 pixels. Its button demonstrates interactive preview. Each frame has its own running instance; browser storage remains shared by origin.
+Paste `http://127.0.0.1:5174/` into Preview URL. The example is Morrow, a personal notebook with illustrated covers, search, collections, favorites, and an editor that saves notes locally. Cards use three columns on desktop, two on tablet, and one below 600 pixels. Light and dark themes follow the system setting. Each frame has its own running instance; browser storage remains shared by origin.
 
 ## Edit a screen
 

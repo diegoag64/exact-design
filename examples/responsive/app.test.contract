@@ -1,12 +1,61 @@
-test "phone renders and responds"
+test "phone creates a note and keeps it after reload"
   size 390x844
-  expect state viewport.width == 390
+  clock data
+  expect text "count" == "6 notes"
   tap "create"
-  expect text "count" == "1 idea"
+  clock settle
+  type "note-title" "An afternoon in Lisbon"
+  type "note-body" "Walk along the river, then find a small bookshop."
+  tap "category-Personal"
+  tap "save-note"
+  clock data
+  clock settle
+  expect tree missing "note-editor"
+  expect text "count" == "7 notes"
+  reload
+  clock data
+  expect text "count" == "7 notes"
+  tap "note-7"
+  clock settle
+  expect state title == "An afternoon in Lisbon"
+  expect state body == "Walk along the river, then find a small bookshop."
+  tap "close-note"
+  clock settle
 
-test "desktop gets its own viewport"
+test "favorites and collections filter real notes"
   size 1440x900
-  expect state viewport.width == 1440
-  tap "create"
-  tap "create"
-  expect text "count" == "2 ideas"
+  clock data
+  tap "favorites"
+  expect text "count" == "2 notes"
+  tap "favorite-1"
+  clock data
+  expect text "count" == "1 note"
+  tap "all-notes"
+  tap "filter-Ideas"
+  expect text "count" == "2 notes"
+  expect tree has "note-2"
+  expect tree missing "note-1"
+  reload
+  clock data
+  tap "favorites"
+  expect text "count" == "1 note"
+
+test "search and edit a note"
+  size 768x1024
+  clock data
+  type "search" "Sunday"
+  expect text "count" == "1 note"
+  tap "note-3"
+  clock settle
+  type "note-title" "A quiet weekend"
+  tap "save-note"
+  clock data
+  clock settle
+  tap "clear-search"
+  tap "note-3"
+  clock settle
+  expect state title == "A quiet weekend"
+  tap "close-note"
+  clock settle
+  type "search" "unfindable"
+  expect text "count" == "0 notes"

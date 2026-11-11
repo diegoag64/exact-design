@@ -1,10 +1,13 @@
-tamber example
+tamber morrow
 
 theme
-  page = light-dark(#fafaf9, #1b1c1e)
-  ink = light-dark(#242529, #eeeeef)
-  secondary = light-dark(#696b70, #b3b5bb)
-  card = light-dark(#efeeeb, #292a2e)
-  accent = light-dark(#e8eee8, #29352e)
-  action = light-dark(#292a2d, #eeeeef)
-  on-action = light-dark(#ffffff, #242529)
+  page = light-dark(#f7f7f2, #171b22)
+  surface = light-dark(#ffffff, #222833)
+  field = light-dark(#f0f1eb, #2b3340)
+  line = light-dark(#e4e6dd, #384253)
+  ink = light-dark(#222d35, #edf0f5)
+  secondary = light-dark(#606a63, #b0b9c7)
+  brand = light-dark(#294d9e, #abc3ff)
+  selected = light-dark(#e8edf8, #303f5d)
+  on-brand = light-dark(#ffffff, #192745)
+  scrim = #111b2b66 scheme=fixed

@@ -1,28 +1,182 @@
+routes nav
+  library "/"
+    note "/note"
+
 shape Viewport
   width: number
 
+shape Note
+  id: string
+  title: string
+  body: string
+  excerpt: string
+  collection: string
+  cover: string
+  favorite: bool
+
+shape Notebook
+  error: string
+  notes: Note[]
+
+shape Reply
+  ok: bool
+  error: string
+
+style IconButton
+  font-size=14
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  width=36
+  height=36
+  box-sizing="border-box"
+  padding=8
+  border-width=0
+  border-radius=10
+  background-color="transparent"
+  color="secondary"
+
+style Pill
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  height=36
+  border-width=0
+  border-radius=9
+  padding-left=14
+  padding-right=14
+  background-color="transparent"
+  color="secondary"
+  font-size=13
+  font-weight=500
+
 component App
   resource viewport = exactViewport() as shape Viewport
-  state count = 0
-  action add
-    count = count + 1
+  resource doc = notebook() as shape Notebook else empty()
+  mutation saved as shape Reply queue refreshes doc then afterSave
+  mutation changed as shape Reply queue refreshes doc
+  state mode = "all"
+  state collection = "All"
+  state query = ""
+  state noteId = ""
+  state title = ""
+  state body = ""
+  state category = "Personal"
+  derive visible = doc.notes.filter(n => (mode == "all" or n.favorite) and (collection == "All" or n.collection == collection) and (n.title.toLowerCase().includes(query.toLowerCase()) or n.body.toLowerCase().includes(query.toLowerCase())))
+  derive changeError = match changed { case some(r) => r.error, case none => "" }
+  derive saveError = match saved { case some(r) => r.error, case none => "" }
+  action follow(url: string)
+    nav = go(nav, url)
+  action all
+    mode = "all"
+  action favorites
+    mode = "saved"
+  action chooseCollection(value: string)
+    collection = value
+  action search(value: string)
+    query = value
+  action clearSearch
+    query = ""
+  action create
+    nav = go(nav, path("note"))
+    noteId = ""
+    title = ""
+    body = ""
+    category = "Personal"
+  action open(n: Note)
+    nav = go(nav, path("note"))
+    noteId = n.id
+    title = n.title
+    body = n.body
+    category = n.collection
+  action close
+    nav = back(nav)
+  action editTitle(value: string)
+    title = value
+  action editBody(value: string)
+    body = value
+  action choose(value: string)
+    category = value
+  action save
+    send saved = edit("save", noteId, title, body, category)
+  action afterSave
+    if match saved { case some(r) => r.ok, case none => false }
+      nav = back(nav)
+  action favorite(id: string)
+    send changed = edit("favorite", id, "", "", "")
   view
-    scroll width="100%" height="100%" background-color="page" color="ink" font-family="system-ui"
-      column max-width=1000 margin-left="auto" margin-right="auto" padding=(viewport.width < 600 ? 24 : 48) gap=32
-        row align-items="center"
-          text "Studio" font-size=16 font-weight=600 flex=1
-          text "Workspace" color="secondary" font-size=13
-        column gap=10
-          text "A little room to think." font-size=(viewport.width < 600 ? 28 : 40) font-weight=600 line-height=1.15
-          text "Keep your ideas together. Make something good." color="secondary" font-size=16 line-height=1.5
-        column flex-direction=(viewport.width < 600 ? "column" : "row") gap=16 testId="cards"
-          column flex=1 min-width=0 padding=24 gap=12 background-color="card" border-radius=16
-            text "Your next idea" font-size=20 font-weight=500
-            text "Space for the things you haven’t quite figured out yet." color="secondary" font-size=15 line-height=1.5
-          column flex=1 min-width=0 padding=24 gap=12 background-color="accent" border-radius=16
-            text "In good company" font-size=20 font-weight=500
-            text "Bring a few people along. Great work starts with a conversation." color="secondary" font-size=15 line-height=1.5
-        row align-items="center" gap=16
-          button press=add background-color="action" color="on-action" border-width=0 border-radius=8 padding=12 testId="create"
-            text "New idea" font-size=14
-          text `${count} ${count == 1 ? "idea" : "ideas"}` font-size=14 color="secondary" testId="count"
+    main navigationKey=`${top(nav).id}` navigationBack="close" navigate=follow width="100%" height="100%" display="flex" flex-direction="column" background-color="page" color="ink" font-family="system-ui"
+      for entry in stack(nav) key=entry.id
+        if entry.name == "library"
+          column navigationKey=`${entry.id}` position="absolute" inset=0
+            row flex-shrink=0 height=72 background-color="surface" border-bottom="1px solid line"
+              row width="100%" max-width=1160 box-sizing="border-box" margin-left="auto" margin-right="auto" padding-left=(viewport.width < 600 ? 20 : 36) padding-right=(viewport.width < 600 ? 20 : 36) align-items="center" gap=10
+                column width=30 height=30 background-color="brand" border-radius=9 align-items="center" justify-content="center"
+                  image "symbol:book" color="on-brand" font-size=16 aria-hidden=true
+                text "Morrow" font-family="Georgia, serif" font-size=25 letter-spacing="-0.6px"
+                row flex=1
+                button press=create display="flex" align-items="center" gap=8 height=36 padding-left=14 padding-right=14 border-width=0 border-radius=10 background-color="brand" color="on-brand" aria-label="New note" testId="create"
+                  image "symbol:add" aria-hidden=true
+                  text "New note" font-size=13 font-weight=500
+            scroll flex=1 min-height=0
+              column width="100%" box-sizing="border-box" max-width=1160 margin-left="auto" margin-right="auto" padding=(viewport.width < 600 ? 20 : 36) gap=26
+                column gap=10 padding-top=(viewport.width < 600 ? 10 : 12) padding-bottom=6
+                  text "Room for your thoughts." font-family="Georgia, serif" font-size=(viewport.width < 600 ? 32 : 44) letter-spacing="-1px" line-height=1.12
+                  text "Keep the things you don’t want to forget." font-size=14 color="secondary" line-height=1.5
+                column gap=18
+                  row flex-wrap="wrap" align-items="center" gap=14
+                    row gap=3 background-color="field" border-radius=11 padding=3
+                      button press=all class=Pill background-color=(mode == "all" ? "surface" : "transparent") color=(mode == "all" ? "ink" : "secondary") aria-pressed=(mode == "all") testId="all-notes"
+                        text "All notes"
+                      button press=favorites class=Pill background-color=(mode == "saved" ? "surface" : "transparent") color=(mode == "saved" ? "ink" : "secondary") aria-pressed=(mode == "saved") testId="favorites"
+                        text "Favorites"
+                    row flex=1
+                    row width=(viewport.width < 600 ? "100%" : "260px") height=40 align-items="center" gap=8 padding-left=12 padding-right=6 box-sizing="border-box" background-color="surface" border="1px solid line" border-radius=10
+                      image "symbol:search" color="secondary" aria-hidden=true
+                      input value=query input=search flex=1 min-width=0 border-width=0 background-color="transparent" color="ink" font-size=13 placeholder="Find a thought…" aria-label="Search notes" testId="search"
+                      if query != ""
+                        button press=clearSearch class=IconButton width=28 height=28 aria-label="Clear search" testId="clear-search"
+                          image "symbol:close"
+                  row gap=8 align-items="center" flex-wrap="wrap"
+                    for item in ["All", "Personal", "Work", "Ideas"] key=item
+                      button press=chooseCollection(item) class=Pill height=30 padding-left=12 padding-right=12 background-color=(collection == item ? "selected" : "transparent") color=(collection == item ? "brand" : "secondary") aria-pressed=(collection == item) testId=`filter-${item}`
+                        text item font-size=12
+                    row flex=1
+                    text `${visible.length} ${visible.length == 1 ? "note" : "notes"}` color="secondary" font-size=12 testId="count"
+                if doc.error != "" or changeError != ""
+                  text (doc.error != "" ? doc.error : changeError) role="alert" color="ink" font-size=13
+                row flex-wrap="wrap" gap=20 align-items="stretch" testId="cards"
+                  for n in visible key=n.id
+                    column width=(viewport.width < 600 ? "100%" : viewport.width < 1000 ? "calc(50% - 10px)" : "calc((100% - 40px) / 3)") box-sizing="border-box" min-width=0 background-color="surface" border="1px solid line" border-radius=16 overflow="hidden" testId=`card-${n.id}`
+                      button press=open(n) display="flex" flex-direction="column" align-items="stretch" flex=1 padding=0 border-width=0 background-color="transparent" color="ink" text-align="left" aria-label=n.title testId=`note-${n.id}`
+                        image `assets/covers/${n.cover}.svg` width="100%" height=(viewport.width < 600 ? 146 : 126) object-fit="cover" aria-hidden=true
+                        column padding=20 gap=10
+                          text n.title font-family="Georgia, serif" font-size=21 font-weight=400 line-height=1.2 letter-spacing="-0.3px"
+                          text n.excerpt color="secondary" font-size=13 font-weight=400 line-height=1.6
+                      row align-items="center" padding-left=20 padding-right=12 padding-bottom=12 gap=8
+                        text n.collection font-size=11 color="secondary" flex=1
+                        button press=favorite(n.id) class=IconButton color=(n.favorite ? "brand" : "secondary") aria-label=(n.favorite ? "Remove from favorites" : "Add to favorites") aria-pressed=n.favorite testId=`favorite-${n.id}`
+                          image (n.favorite ? "symbol:bookmark-fill" : "symbol:bookmark")
+                if visible.length == 0
+                  column padding=40 align-items="center" gap=12
+                    image "symbol:book" font-size=24 color="secondary" aria-hidden=true
+                    text "A little room for something new." font-family="Georgia, serif" font-size=24 text-align="center"
+                    text (query != "" ? "Try another search." : "Your notes will appear here.") color="secondary" font-size=14
+        if entry.name == "note"
+          column navigationKey=`${entry.id}` navigationPresentation="modal" position="absolute" inset=0 background-color="scrim" align-items="center" justify-content="center" padding=(viewport.width < 600 ? 12 : 32) box-sizing="border-box"
+            column aria-label="Edit note" width=620 max-width="100%" height=600 max-height="100%" background-color="surface" border-radius=20 overflow="hidden" box-shadow="0 24px 80px #00000026" testId="note-editor"
+              row padding=16 align-items="center" gap=8 border-bottom="1px solid line"
+                button press=close class=IconButton aria-keyshortcuts="Escape" aria-label="Close note" testId="close-note"
+                  image "symbol:close"
+                row flex=1
+                if saveError != ""
+                  text saveError color="secondary" font-size=12
+                button press=save disabled=(title.trim() == "" or pending(saved)) height=36 border-width=0 border-radius=9 padding-left=18 padding-right=18 background-color="brand" color="on-brand" testId="save-note"
+                  text "Save" font-size=13 font-weight=500
+              column padding=(viewport.width < 600 ? 20 : 32) gap=20 flex=1 min-height=0
+                row gap=4 flex-wrap="wrap"
+                  for c in ["Personal", "Work", "Ideas"] key=c
+                    button press=choose(c) class=Pill height=30 background-color=(category == c ? "selected" : "transparent") color=(category == c ? "brand" : "secondary") testId=`category-${c}`
+                      text c font-size=12
+                input value=title input=editTitle placeholder="Untitled thought" aria-label="Note title" testId="note-title" font-family="Georgia, serif" font-size=28 color="ink" background-color="transparent" border-width=0 width="100%" box-sizing="border-box" padding=0
+                textarea value=body input=editBody placeholder="Start anywhere…" aria-label="Note body" testId="note-body" flex=1 min-height=0 width="100%" box-sizing="border-box" padding=0 border-width=0 background-color="transparent" color="ink" font-family="system-ui" font-size=16 line-height=1.7 resize="none"

@@ -1,5 +1,10 @@
 {
-  "name": "Responsive example",
-  "app": { "id": "dev.exactdesign.responsive", "name": "Responsive example" },
-  "host": { "web": {} }
+  "name": "Morrow",
+  "app": {
+    "id": "dev.exactdesign.responsive",
+    "name": "Morrow"
+  },
+  "host": {
+    "web": {}
+  }
 }
