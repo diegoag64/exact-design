@@ -455,3 +455,16 @@ test "an empty manifest still offers a blank or manual screen"
   tap "add-screen"
   clock data
   expect tree has "discovery-empty"
+
+test "source editing refuses a server without Exact editing support"
+  size 1440x900
+  tap "view-view-1"
+  clock data
+  type "preview-url" "http://127.0.0.1:5176/"
+  type "preview-url" key "Enter"
+  clock data
+  tap "edit-app"
+  clock data
+  expect tree has "design-error"
+  expect state editing == false
+  expect tree has "viewport-preset"

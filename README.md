@@ -41,7 +41,7 @@ Discovery reads the `routes.json` file produced by Exact's web build and dev ser
 
 Click the project name in the sidebar to change its server address. Every linked screen follows that change. Disconnect keeps the current preview URLs, and Undo restores the connection. Existing standalone Preview URLs still work; connecting a project adopts matching URLs into its route library. The inspector edits a linked screen's route or a standalone screen's Preview URL.
 
-The canvas lets you arrange and resize frames. Use Preview to interact with the active app. Edit the connected app's Contract files in its repository; its dev server updates the frames. Clearing Preview URL restores that screen's editable layers. Export and layer tools are disabled while a screen is connected.
+The canvas lets you arrange and resize frames. Use Preview to interact with the active app, or Edit app to select its elements and change supported visual properties. Clearing Preview URL restores that screen's editable layers. Export and layer tools are disabled while a screen is connected.
 
 Exact's dev server restricts framing to its configured tool origin. Use `127.0.0.1` for the editor URL and restart the app server with `EXACT_TOOL_PORT` matching the editor port if a frame is blank. The app server must remain running. Other servers must allow embedding from the editor origin.
 
@@ -52,6 +52,16 @@ bun run demo
 ```
 
 Connect a project named Morrow at `http://127.0.0.1:5174`. The Add screen form discovers **Library** at `/` and **Note** at `/note`; choose either and add viewport variants. The example is a personal notebook with illustrated covers, search, collections, favorites, and an editor that saves notes locally. Cards use three columns on desktop, two on tablet, and one below 600 pixels. Light and dark themes follow the system setting. Each frame has its own running instance; browser storage remains shared by origin.
+
+## Edit a connected app
+
+Select a connected viewport, then click **Edit app** in the inspector. Click an element inside a screen to inspect its source. Use **Select component** to move up to the containing component. Click a button’s padding to select the button rather than its text label. Exact's inspect mode captures these clicks instead of activating the app.
+
+The inspector offers existing visual attributes that Exact marks editable in the app's Contract source or a shared style. Enter a value and press Enter or leave the field to apply it. For example, select the padding of Morrow's New note button and change Fill from `brand` to `#b34c34`. The attribute changes in the app's source, and its dev server updates the running viewport copies. A shared style affects every element using that style. Changing a token reference here replaces that attribute's value; editing token definitions is not implemented.
+
+Changes write to the connected app immediately, independently of workspace Save. **Undo app change** restores edits from the current editing session through Exact's inverse transactions. **Done editing** returns to arranging frames and ends that session's undo history. Source edits remain on disk after leaving the editor. A hand edit or server restart can invalidate a selection; select again or reconnect before continuing. Conflicting writes and invalid values are refused by Exact's checker.
+
+This first editing mode supports local Exact dev servers with the `tamber/1` editing API. Its local write token stays in the helper's memory. Release builds and remote servers cannot be edited. Only properties explicitly offered by the API are editable; expressions, inherited values, layout attributes, text content, and properties without an editable source address remain in the source editor. Typography controls appear only if Exact offers that property as an editable source row. The helper never rewrites Contract files itself.
 
 ## Edit a screen
 
@@ -81,7 +91,7 @@ The model tests cover hit testing, history, property validation, file migration,
 
 The editor and editable screen content use Exact Contract components. Canvas 2D draws frame labels and selection handles. Connected apps run in browser frames at independent viewport sizes. A small TypeScript document model owns edits and history. It does not yet depend on OpenPencil.
 
-Each screen has a flat layer list shared by its viewport variants. Existing single-screen documents migrate when opened. Editable layers support fixed and fill widths with normal text wrapping. They retain absolute vertical positions and explicit heights; automatic vertical flow and nested layout are not implemented. Text is edited in the inspector. Contract export uses absolute positioning. Connected apps use their own responsive layout. Editing their source through the inspector, multi-selection, code import, image layers, and Figma files are not implemented.
+Each screen has a flat layer list shared by its viewport variants. Existing single-screen documents migrate when opened. Editable layers support fixed and fill widths with normal text wrapping. They retain absolute vertical positions and explicit heights; automatic vertical flow and nested layout are not implemented. Text is edited in the inspector. Contract export uses absolute positioning. Connected apps use their own responsive layout and support source-backed appearance edits through Exact's design protocol. Structural source editing, multi-selection, code import, image layers, and Figma files are not implemented.
 
 Browser execution is tested. Native macOS and iOS builds have not been qualified. Large documents and advanced text layout also need performance and fidelity testing.
 
@@ -95,6 +105,7 @@ Source files:
 - `studio/project.ts`: project URL and screen route validation.
 - `studio/discovery.ts`: Exact route manifest validation and screen names.
 - `tools/discovery-server.ts`: the local manifest reader.
+- `tools/design-session.ts`: local inspection, checked source edits, and undo.
 - `examples/responsive`: a running Exact app for viewport comparisons.
 - `studio/app.tamber`: editor theme.
 

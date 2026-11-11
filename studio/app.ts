@@ -51,6 +51,18 @@ const reply = (fit=false,error='') => {
   return {ok:error==='',error,fit,minX:d.minX,minY:d.minY,maxX:d.maxX,maxY:d.maxY};
 };
 const sources: Sources = {
+  design: async ([op,session,url,version,row,value]) => {
+    const empty={ok:false,error:'',session,origin:'',source:'',component:'',version:0,message:'',rows:[],canUndo:false,applied:false};
+    try {
+      const origin=url?new URL(url).origin:'';
+      const response=await fetch(`${DISCOVERY_API}/design`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,session,url:origin,version,row,value})});
+      const result=await response.json();
+      return {...empty,...result,origin:op==='open'?origin:'',session:op==='close'?'':result.session??session};
+    } catch(e) {
+      if((e as {code?:string}).code==='bake') throw e;
+      return {...empty,error:'Could not reach the editing helper. Reconnect before making another change.'};
+    }
+  },
   discover: async ([owner,existing,revision]) => {
     if(!owner) return {owner,routes:[],error:''};
     try {
