@@ -84,8 +84,6 @@ test "linked viewports share edits and persist dimensions"
   type "frame-width" "430"
   type "frame-width" key "Enter"
   clock data
-  tap "save"
-  clock data
   reload
   clock data
   expect state doc.views.1.width == 430
@@ -187,8 +185,6 @@ test "connect a live app and persist its linked viewports"
   tap "preview"
   expect tree has "preview-app"
   tap "close-preview"
-  tap "save"
-  clock data
   reload
   clock data
   expect state doc.source == "http://127.0.0.1:5174/"
@@ -258,6 +254,24 @@ test "frames snap into place as one undo step"
   clock data
   expect state doc.views.1.x == 900
   expect state doc.views.1.y == 100
+  reload
+  clock data
+  expect state doc.views.1.x == 900
+  expect state doc.views.1.y == 100
+
+test "canvas pan and zoom restore without saving"
+  size 1440x900
+  tap "hand-tool"
+  tap "canvas" drag 120 60 from 150 150 mouse
+  tap "zoom-in"
+  expect state px == 184
+  expect state py == 140
+  expect text "zoom" == "95%"
+  reload
+  clock data
+  expect state px == 184
+  expect state py == 140
+  expect text "zoom" == "95%"
 
 test "project screens share a server and group their viewports"
   size 1440x900
@@ -299,8 +313,6 @@ test "project screens share a server and group their viewports"
   tap "undo"
   clock data
   expect state doc.source == "http://127.0.0.1:5174/note"
-  tap "save"
-  clock data
   reload
   clock data
   expect state doc.projectName == "Morrow"
@@ -320,6 +332,47 @@ test "project screens share a server and group their viewports"
   clock settle
   expect text "project-name" == "Morrow"
   expect text "project-url" == "http://127.0.0.1:5174"
+
+test "project setup and viewport settings restore automatically without Save"
+  size 1440x900
+  tap "project-connection"
+  clock settle
+  type "project-name" "Morrow"
+  type "project-url" "http://127.0.0.1:5176"
+  tap "save-project"
+  clock data
+  clock settle
+  tap "add-screen"
+  clock settle
+  type "new-screen-name" "Library"
+  type "new-screen-route" "/"
+  tap "create-screen"
+  clock data
+  clock settle
+  tap "add-viewport"
+  tap "variant-tablet"
+  clock data
+  type "frame-width" "820"
+  type "frame-width" key "Enter"
+  clock data
+  tap "zoom-in"
+  reload
+  clock data
+  expect state doc.projectName == "Morrow"
+  expect state doc.projectUrl == "http://127.0.0.1:5176"
+  expect state doc.groups.length == 2
+  expect state doc.groups.1.views.length == 2
+  expect state doc.active == "view-3"
+  expect state doc.selected == "view-3"
+  expect state doc.source == "http://127.0.0.1:5176/"
+  expect state doc.width == 820
+  expect state doc.height == 1024
+  tap "delete"
+  clock data
+  reload
+  clock data
+  expect state doc.views.length == 2
+  expect state doc.groups.1.views.length == 1
 
 test "invalid connections and duplicate routes stay in the form"
   size 1440x900

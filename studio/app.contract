@@ -255,7 +255,7 @@ component Studio
           designVersion = r.version
       case none
         hand = hand
-  state collapsed = [""]
+  state collapsed = [""] persist
   state addingViewport = false
   action toggleViewportMenu
     addingViewport = not addingViewport
@@ -333,9 +333,9 @@ component Studio
   derive leftOpen = (leftPanel == "open" or (leftPanel == "auto" and viewport.width >= 1000)) and (viewport.width >= 700 or rightPanel != "open")
   derive rightOpen = rightPanel == "open" or (rightPanel == "auto" and viewport.width >= 700)
   derive panelOverlay = (leftOpen and viewport.width < 1000) or (rightOpen and viewport.width < 700)
-  state zoom = 0.85
-  state px = 64
-  state py = 80
+  state zoom = 0.85 persist
+  state px = 64 persist
+  state py = 80 persist
   state dragging = false
   state hand = false
   state sx = 0

@@ -79,7 +79,7 @@ Select a layer on the canvas or in the left panel. Drag it to move it, or drag i
 
 The bottom toolbar adds rectangles, text, and buttons. Use the pan tool or scroll the trackpad to move around. Pinch to zoom. Click the percentage to fit all screens.
 
-Save writes the current document, project connection, and screen library to this app's local storage. Use the same development URL and port to reopen browser documents. Save is explicit; unsaved changes do not survive a reload.
+The workspace saves automatically after changes, including the project connection, screen library, viewport sizes and positions, and active selection. Canvas pan, zoom, collapsed screen groups, and sidebar visibility also restore when you return. Reopen the same browser URL and port to use its local storage. Earlier saved documents load automatically. Save remains available to retry a failed write. App editing sessions start fresh after a reload.
 
 The canvas and Preview use the same Exact components for editable layers. Preview buttons increment a small click counter to demonstrate interaction. Export opens the active viewport’s generated Contract source for copying. Export preserves Fill width rules instead of baking the active viewport width. The exported buttons have no action assigned; connect their behavior in your application.
 
@@ -95,7 +95,7 @@ bun run build
 bun tools/demo.mjs test web
 ```
 
-The model and service tests cover hit testing, history, property validation, file migration, export escaping, project routes, discovery, source editing, bridge boundaries, and source-verified selection restoration. Layout tests run the real compiler and cover UTF-8 addresses, expressions, validation failure, conflicts, undo, and path boundaries. The interaction tests cover edits, undo, creation, deletion, saving across a reload, live preview, canvas dragging, resizing, project connections, grouped screen variants, discovery, layer collapse, breadcrumbs, and selection retention. `bun run test:ui` and `bun run verify` start the helper and an isolated fixture on ports 5175 and 5176; stop the editor before running them.
+The model and service tests cover hit testing, history, property validation, file migration, automatic persistence, ordered writes and recovery, export escaping, project routes, discovery, source editing, bridge boundaries, and source-verified selection restoration. Layout tests run the real compiler and cover UTF-8 addresses, expressions, validation failure, conflicts, undo, and path boundaries. The interaction tests cover edits, undo, creation, deletion, automatic restoration across a reload, canvas pan and zoom, live preview, canvas dragging, resizing, project connections, grouped screen variants, discovery, layer collapse, breadcrumbs, and selection retention. `bun run test:ui` and `bun run verify` start the helper and an isolated fixture on ports 5175 and 5176; stop the editor before running them.
 
 ## Current scope
 
@@ -109,6 +109,7 @@ Source files:
 
 - `studio/app.contract`: editor UI and pointer interactions.
 - `studio/app.ts`: Exact data sources and local persistence.
+- `studio/persistence.ts`: workspace restoration and ordered automatic saves.
 - `studio/model.ts`: document model, editing commands, and Contract export.
 - `studio/render.ts`: canvas labels and selection handles.
 - `studio/workspace.ts`: screens, viewports, responsive geometry, and live app URLs.
