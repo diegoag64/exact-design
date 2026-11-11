@@ -1,6 +1,7 @@
 import { projectUrl } from '../studio/project';
 import {relative,isAbsolute,resolve} from 'node:path';
-import {layoutProperties,layoutOptions,sourceLiteral,writeLayout,undoLayout,type SourceInverse,type LayoutSite} from './layout-source';
+import {layoutProperties,layoutOptions,sourceLiteral,writeLayout,undoLayout,digest,type SourceInverse,type LayoutSite} from './layout-source';
+import {ElementBridge,bridgeFor,type ElementNode} from './element-bridge';
 
 const properties=new Set(['color','background-color','font-size','font-weight','line-height','letter-spacing','border-radius','opacity']);
 type Row={name:string;editable?:any};
@@ -31,6 +32,10 @@ export class DesignSession {
   cursor=0; epoch=''; files:any={}; selection:any=null; version=0;
   inverses:(string|SourceInverse)[]=[]; applied=false; busy=false;
   app='';
+  bridge:ElementBridge|null=null;
+  preferredFrame='';
+  picked:{frame:string;node:ElementNode}|null=null;
+  restoring:{frame:string;path:string;file:string;line:number;col:number;sha:string;before:string;plan:string;sent:string;since:number}|null=null;
   builds=new Set<string>();
   constructor(readonly origin:string,private token:string,private request:typeof fetch=fetch) {}
   async call(body:any,path='/__tamber') {
@@ -45,19 +50,46 @@ export class DesignSession {
     this.files=hello.files;
     this.app=hello.local===true && typeof hello.app==='string' && isAbsolute(hello.app)?hello.app:'';
     await this.poll();
-    const inspecting=await this.call({method:'inspect',client:this.client,on:true});
-    this.builds=new Set(inspecting.builds??[]);this.selection=null;this.version++;
+    if(!this.bridge){
+      const inspecting=await this.call({method:'inspect',client:this.client,on:true});
+      this.builds=new Set(inspecting.builds??[]);
+    }
+    this.selection=null;this.version++;
     return this.view();
   }
   async poll() {
+    if(this.bridge)for(const frame of this.bridge.frames.values())if(frame.build&&!this.builds.has(frame.build)){
+      try{await this.call({method:'inspect',client:this.client,build:frame.build,on:true});this.builds.add(frame.build);}catch{/* The page can report its ID before registration completes. */}
+    }
     const r=await this.call({client:this.client,after:this.cursor,...(this.epoch?{epoch:this.epoch}:{}),wait:false},'/__tamber/events');
     if(this.epoch && this.epoch!==r.epoch) throw new Error('The app server restarted. Finish editing and reconnect.');
     this.epoch=r.epoch; this.cursor=r.seq;
     if(r.missed || JSON.stringify(this.files)!==JSON.stringify(r.files)) {this.selection=null;this.version++;}
     this.files=r.files;
     for(const event of r.events??[]) {
-      if(event.event==='selection' && this.builds.has(String(event.build))) {this.selection=await this.withLayout(event);this.version++;this.applied=false;}
+      if(event.event==='selection' && this.builds.has(String(event.build))) {
+        const frame=this.bridge&&[...this.bridge.frames.values()].find(f=>f.build===String(event.build));
+        const node=frame?.nodes.find(n=>n.site===event.site&&JSON.stringify(n.instance)===JSON.stringify(event.instance??[]));
+        if(this.restoring && (!frame || frame.frame!==this.restoring.frame || !node || node.path!==this.restoring.path))continue;
+        if(this.restoring && (frame!.plan===this.restoring.plan || event.readOnly || this.files[this.restoring.file]!==this.restoring.sha))continue;
+        if(this.restoring&&(event.source?.file!==this.restoring.file||event.source?.line!==this.restoring.line||event.source?.col!==this.restoring.col)){this.restoring=null;this.selection=null;this.version++;continue;}
+        if(frame&&node)this.picked={frame:frame.frame,node};
+        this.selection=await this.withLayout(event);this.version++;this.applied=false;this.restoring=null;
+      }
       if(event.event==='selected' && event.selected===null && this.builds.has(String(event.build))) {this.selection=null;this.version++;}
+    }
+    if(this.selection&&this.bridge){
+      const frame=[...this.bridge.frames.values()].find(f=>f.build===String(this.selection.build));
+      const node=frame?.nodes.find(n=>n.site===this.selection.site&&JSON.stringify(n.instance)===JSON.stringify(this.selection.instance??[]));
+      if(frame&&node)this.picked={frame:frame.frame,node};
+    }
+    if(this.restoring&&this.bridge){
+      const pending=this.restoring,frame=this.bridge.frames.get(pending.frame);
+      if(Date.now()-pending.since>15000 || (this.files[pending.file]!==pending.sha&&this.files[pending.file]!==pending.before)){this.restoring=null;}
+      else if(frame?.inspecting&&frame.plan!==pending.plan&&pending.sent!==frame.plan){
+        const matches=frame.nodes.filter(n=>n.path===pending.path);
+        if(matches.length===1){this.bridge.select(frame.frame,matches[0].id);pending.sent=frame.plan;}
+      }
     }
     return this.view();
   }
@@ -77,8 +109,18 @@ export class DesignSession {
   }
   view() {
     const s=this.selection, rows=editableRows(s);
+    const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??[...this.bridge.frames.values()][0]);
+    const selected=this.picked?.node.id??'';
+    const tree=frame?.nodes.map(n=>{
+      const ancestors:string[]=[];let at=frame.nodes.find(p=>p.id===n.parent);
+      while(at&&ancestors.length<100){ancestors.push(at.id);at=frame.nodes.find(p=>p.id===at!.parent);}
+      return {id:n.id,label:n.label,depth:n.depth,kind:n.tag,ancestors,hasChildren:frame.nodes.some(p=>p.parent===n.id),selected:n.id===selected};
+    })??[];
+    const crumbs:typeof tree=[];let at=frame?.nodes.find(n=>n.id===selected);
+    while(at&&crumbs.length<30){const entry=tree.find(n=>n.id===at!.id);if(entry)crumbs.unshift(entry);at=frame?.nodes.find(n=>n.id===at!.parent);}
     return {source:s?.source?`${s.source.file}:${s.source.line}`:'',component:s?.source?.component??'',version:this.version,
-      message:s?.readOnly || (s && !rows.length?'This element has no editable visual properties yet.':'Select an element in a screen.'),
+      bridgeOrigin:this.bridge?.origin??'',tree,crumbs,selectedLabel:this.picked?.node.label??'',restoring:!!this.restoring,
+      message:this.restoring?'Updating selection…':s?.readOnly || (s && !rows.length?'This element has no editable visual properties yet.':'Select an element in a screen.'),
       rows:rows.map((r:Row,i:number)=>({id:String(i),name:labels[r.editable.row]??r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true,group:r.editable.rung==='layout'?(r.editable.row.startsWith('padding')||r.editable.row.startsWith('margin')||r.editable.row.includes('gap')?'Spacing':'Layout'):'Appearance',options:layoutOptions(r.editable.row).map(value=>({value,label:optionLabels[value]??value}))})),canUndo:this.inverses.length>0,applied:this.applied};
   }
   async edit(version:number,index:number,value:string) {
@@ -89,13 +131,15 @@ export class DesignSession {
       if(version!==this.version || !this.selection) throw new Error('The source or selection changed. Select the element again.');
       const row=editableRows(this.selection)[index];
       if(!row) throw new Error('This property is no longer editable.');
-      if(row.editable.rung==='layout') this.inverses.push(await writeLayout(this.app,row.editable.site,value));
+      let expected:any;
+      if(row.editable.rung==='layout') {const inverse=await writeLayout(this.app,row.editable.site,value);this.inverses.push(inverse);expected={...this.files,[inverse.file]:digest(inverse.after)};}
       else {
         const r=await this.call({method:'transaction',client:this.client,files:this.files,ops:[rowOperation(row,value)]});
         if(r.inverse)this.inverses.push(r.inverse);
+        expected=r.files;
       }
       if(this.inverses.length>100)this.inverses.shift();
-      this.selection=null;this.version++;this.applied=true;
+      this.armRestore(expected);this.selection=null;this.version++;this.applied=true;
       return this.view();
     } finally {this.busy=false;}
   }
@@ -104,12 +148,24 @@ export class DesignSession {
     this.busy=true;
     try {
       const inverse=this.inverses.at(-1)!;
+      let expected:any;
       if(typeof inverse==='string') {
-        const r=await this.call({method:'undo',client:this.client,inverse});this.files=r.files;
-      } else await undoLayout(this.app,inverse);
+        const r=await this.call({method:'undo',client:this.client,inverse});this.files=r.files;expected=r.files;
+      } else {await undoLayout(this.app,inverse);expected={...this.files,[inverse.file]:digest(inverse.before)};}
+      this.armRestore(expected);
       this.inverses.pop();this.selection=null;this.version++;this.applied=false;
       return this.view();
     } finally {this.busy=false;}
+  }
+  armRestore(files:any){
+    const frame=this.picked&&this.bridge?.frames.get(this.picked.frame),source=this.selection?.source;
+    if(frame&&this.picked&&source?.file&&files?.[source.file])this.restoring={frame:frame.frame,path:this.picked.node.path,file:source.file,line:source.line,col:source.col,sha:files[source.file],before:this.files[source.file],plan:frame.plan,sent:'',since:Date.now()};
+  }
+  navigate(id:string){
+    const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??[...this.bridge.frames.values()][0]);
+    if(!frame?.nodes.some(n=>n.id===id))throw new Error('This element is no longer on the screen.');
+    this.restoring=null;this.bridge!.select(frame.frame,id);
+    return this.view();
   }
   async close() {await this.call({method:'inspect',client:this.client,on:false});}
 }
@@ -126,7 +182,9 @@ export async function designRequest(body:any) {
     if(!r.ok) throw new Error('This app does not expose Exact’s development editing API.');
     const {token}=await r.json().catch(()=>({}));
     if(typeof token!=='string'||!token) throw new Error('No local editing session is available.');
-    const session=new DesignSession(origin,token),view=await session.start(),id=crypto.randomUUID();
+    const session=new DesignSession(origin,token);session.bridge=bridgeFor(origin);session.preferredFrame=typeof body.row==='string'?body.row:'';
+    const view=await session.start();
+    const id=crypto.randomUUID();
     sessions.set(id,{session,seen:Date.now()});
     return {session:id,...view};
   }
@@ -142,5 +200,6 @@ export async function designRequest(body:any) {
     await s.call({method:'inspect',client:s.client,build:s.selection.build,select:{up:1}});
     return s.view();
   }
+  if(body.op==='select')return s.navigate(String(body.row));
   throw new Error('Unknown design action.');
 }
