@@ -1,16 +1,19 @@
 import type { Answer, Sources, Ctx2D, Frame } from './app.contract.d.ts';
 import { WorkspaceEditor, validSource } from './workspace';
 import { WorkspacePersistence } from './persistence';
-import { decodeSpacing } from './spacing';
+import {DraftStorage} from './draft-storage';
+import { emptySpacing } from './spacing';
 import { screenSource } from './project';
 import { parseRoutes, type DiscoveredScreen } from './discovery';
 import { snapTargets } from './snapping';
 import { render } from './render';
 const editor = new WorkspaceEditor();
 const persistence = new WorkspacePersistence(editor);
+const drafts=new DraftStorage();
+const designOrigins=new Map<string,string>();
 let status = ''; let resizing = false;
 export const DISCOVERY_API = 'http://127.0.0.1:5175';
-export const grants = `fs.read app:/data/design.json\nfs.write app:/data/design.json\nnet.fetch ${DISCOVERY_API}`;
+export const grants = `fs.read app:/data/design.json\nfs.write app:/data/design.json\nfs.read app:/data/design-drafts.json\nfs.write app:/data/design-drafts.json\nnet.fetch ${DISCOVERY_API}`;
 let discoveryCache: {owner:string;revision:number;routes:DiscoveredScreen[];error:string}|undefined;
 const previewBridges=new Map<string,string>();
 async function discoverProject(owner:string,revision:number) {
@@ -57,18 +60,28 @@ const reply = (fit=false,error='') => {
   return {ok:error==='',error,fit,minX:d.minX,minY:d.minY,maxX:d.maxX,maxY:d.maxY};
 };
 const sources: Sources = {
-  spacingMeasure: ([frame,payload]) => decodeSpacing(frame,payload),
-  design: async ([op,session,url,version,row,value]) => {
-    const empty={ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,selectionRevision:0,message:'',rows:[],canUndo:false,applied:false,spacingId:'',spacingPlan:'',spacingFrame:'',spacingConfig:'',spacingInputs:[]};
+  previewSignal: ([session]) => {
+    if(!session)return {revision:0,updateRevision:0,measurement:emptySpacing()};
+    return fetch(`${DISCOVERY_API}/design/events?session=${encodeURIComponent(session)}`,{exactStream:event=>{
+      if(event.type!=='message'||typeof event.data!=='string')return null;
+      return JSON.parse(event.data);
+    }});
+  },
+  design: async ([op,session,url,version,row,value], _store, storage) => {
+    const empty={draftCount:0,draftState:'',draftError:'',canApply:false,ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,selectionRevision:0,message:'',rows:[],canUndo:false,applied:false,spacingId:'',spacingPlan:'',spacingFrame:'',spacingInputs:[]};
     try {
-      const origin=url?new URL(url).origin:'';
-      const response=await fetch(`${DISCOVERY_API}/design`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,session,url:origin,version,row,value})});
+      await drafts.load(storage.fs);
+      const origin=url?new URL(url).origin:designOrigins.get(session)??'';
+      const draftState=op==='open'?drafts.get(origin):'';
+      const response=await fetch(`${DISCOVERY_API}/design`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,session,url:origin,version,row,value,draftState})});
       const result=await response.json();
-      if(op==='open'&&result.ok&&result.bridgeOrigin)previewBridges.set(origin,result.bridgeOrigin);
+      if(op==='open'&&result.ok){designOrigins.set(result.session,origin);if(result.bridgeOrigin)previewBridges.set(origin,result.bridgeOrigin);}
+      if(result.ok&&typeof result.draftState==='string'&&origin)await drafts.save(storage.fs,origin,result.draftState);
+      if(op==='close')designOrigins.delete(session);
       return {...empty,...result,origin:op==='open'?origin:'',session:op==='close'?'':result.session??session};
     } catch(e) {
       if((e as {code?:string}).code==='bake') throw e;
-      return {...empty,error:'Could not reach the editing helper. Reconnect before making another change.'};
+      return {...empty,error:e instanceof Error?e.message:'Could not reach the editing helper. Reconnect before making another change.'};
     }
   },
   discover: async ([owner,existing,revision]) => {

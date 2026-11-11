@@ -30,7 +30,7 @@ test('layout values accept sizing and spacing without accepting expressions or c
   expect(layoutValue('flex-direction','column')).toBe('"column"');
   for(const [attr,value] of [['gap','-1'],['padding','calc(2px)'],['width','100000'],['gap','1; color=red'],['align-items','bogus']]) expect(()=>layoutValue(attr,value)).toThrow();
 });
-test('a design session joins real layout source, groups controls, writes and undoes it',async()=>{
+test('a design session joins real layout source and applies a staged draft',async()=>{
   const app=await mkdtemp(join(tmpdir(),'exact-layout-session-'));let events:any[]=[];
   await writeFile(join(app,'app.contract'),source);
   const files=async()=>({'app.contract':digest(await readFile(join(app,'app.contract'),'utf8'))});
@@ -46,8 +46,8 @@ test('a design session joins real layout source, groups controls, writes and und
     const location=site();
     events=[{event:'selection',build:'page',source:{file:'app.contract',line:3},rows:[{name:'gap',source:'authored',origin:'own',layout:true,attr:'gap',at:{file:join(app,'app.contract'),line:location.line,col:location.col,sha256:location.sha256},editable:{rung:null}}]}];
     const selected=await s.poll();expect(selected.rows[0]).toMatchObject({name:'Gap',value:'12',group:'Spacing',shared:false});
-    await s.edit(selected.version,0,'24');expect(await readFile(join(app,'app.contract'),'utf8')).toContain('gap=24');
-    await s.undo();expect(await readFile(join(app,'app.contract'),'utf8')).toBe(source);
+    await s.edit(selected.version,0,'24');expect(await readFile(join(app,'app.contract'),'utf8')).toBe(source);await s.apply();expect(await readFile(join(app,'app.contract'),'utf8')).toContain('gap=24');
+    await writeFile(join(app,'app.contract'),source);expect(await readFile(join(app,'app.contract'),'utf8')).toBe(source);
   } finally {await rm(app,{recursive:true,force:true});}
 });
 test('checks a staged source and writes atomically; undo preserves intervening edits',async()=>{
@@ -74,7 +74,7 @@ test('cannot write sources outside the connected app, including through symlinks
     expect(await readFile(join(root,'external.contract'),'utf8')).toBe(source);
   } finally {await rm(root,{recursive:true,force:true});}
 });
-test('on-canvas spacing edits preserve shorthand sides and use the same source undo history',async()=>{
+test('on-canvas spacing drafts preserve shorthand sides before Apply',async()=>{
   const app=await mkdtemp(join(tmpdir(),'exact-canvas-spacing-'));let events:any[]=[];
   await writeFile(join(app,'app.contract'),source);
   const files=async()=>({'app.contract':digest(await readFile(join(app,'app.contract'),'utf8'))});
@@ -92,11 +92,12 @@ test('on-canvas spacing edits preserve shorthand sides and use the same source u
     const session=new DesignSession('http://localhost:5174','fixture',request);await session.start();select();
     let selected=await session.poll();
     await session.editSpacing(selected.version,'padding-top','24');
+    expect(await readFile(join(app,'app.contract'),'utf8')).toBe(source);await session.apply();
     expect(await readFile(join(app,'app.contract'),'utf8')).toContain('padding="24px 16px 8px 16px"');
-    await session.undo();expect(await readFile(join(app,'app.contract'),'utf8')).toBe(source);
-    select();selected=await session.poll();await session.editSpacing(selected.version,'column-gap','20');
+    await writeFile(join(app,'app.contract'),source);expect(await readFile(join(app,'app.contract'),'utf8')).toBe(source);
+    select();selected=await session.poll();await session.editSpacing(selected.version,'column-gap','20');await session.apply();
     expect(await readFile(join(app,'app.contract'),'utf8')).toContain('gap="12px 20px"');
-    await session.undo();expect(await readFile(join(app,'app.contract'),'utf8')).toBe(source);
+    await writeFile(join(app,'app.contract'),source);expect(await readFile(join(app,'app.contract'),'utf8')).toBe(source);
     await expect(session.editSpacing(selected.version,'padding-top','30')).rejects.toThrow('changed');
   }finally{await rm(app,{recursive:true,force:true});}
 });

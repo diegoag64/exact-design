@@ -129,7 +129,7 @@ test('selection restoration waits for the new plan and verifies the source locat
   s.hover('old');s.hover('');
   expect(hovers).toEqual([['phone','old'],['phone','']]);expect(s.view()).toEqual(picked);
   s.hover('old');s.hover('removed');expect(hovers.at(-1)).toEqual(['phone','']);expect(s.view()).toEqual(picked);
-  await s.edit(picked.version,0,'#000');expect(s.view().restoring).toBe(true);
+  await s.edit(picked.version,0,'#000');await s.apply();expect(s.view().restoring).toBe(true);
   await s.poll();expect(commands.length).toBe(0);
   // A literal source edit can renumber every plan site without moving the element.
   frame.plan='new-plan';frame.nodes=[{...node,id:'new',identity:'[40,[]]',site:40}];
@@ -182,4 +182,22 @@ test('undo before a rebuild retains the source location and restores on the orig
   await s.poll();expect(commands).toEqual([['phone','node']]);
   events=[{event:'selection',build:'page',site:2,instance:[],source:{file:'app.contract',line:3,col:1},rows:[]}];
   expect((await s.poll()).restoring).toBe(false);expect(s.view().source).toBe('app.contract:3');
+});
+
+test('canvas picks are pushed to the tree without waiting for the inspection poll; old pages cannot select',async()=>{
+  const bridge=new ElementBridge('http://127.0.0.1:1');
+  const node={id:'node',identity:'[2,[]]',path:'root/0:button',parent:'',depth:0,label:'Save',tag:'button',site:2,instance:[]};
+  const post=(path:string,body:any)=>fetch(bridge.origin+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+  try{
+    await post('/__exact_design/tree',{frame:'phone',page:'current',build:'build',plan:'plan',inspecting:true,nodes:[node]});
+    const session=new DesignSession('http://localhost:1','fixture');session.bridge=bridge;
+    bridge.feedback.add(session.receivePreview);
+    const stream=session.preview.subscribe(new Request('http://localhost/events')).body!.getReader();await stream.read();
+    expect((await post('/__exact_design/feedback',{kind:'pick',frame:'phone',page:'old',plan:'plan',id:'node'})).status).toBe(409);
+    expect(session.picked).toBe(null);
+    expect((await post('/__exact_design/feedback',{kind:'pick',frame:'phone',page:'current',plan:'plan',id:'node'})).ok).toBe(true);
+    expect(session.view().tree[0].selected).toBe(true);expect(session.view().selecting).toBe(true);
+    expect(new TextDecoder().decode((await stream.read()).value)).toContain('"updateRevision":1');
+    await stream.cancel();session.preview.close();
+  }finally{bridge.server.stop(true);}
 });

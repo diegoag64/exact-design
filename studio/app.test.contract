@@ -561,18 +561,31 @@ test "navigate rendered layers and keep selection through edits and undo"
   tap "selected-element-name" hover
   clock data
   expect state hoveredElement == ""
+  request POST "http://127.0.0.1:5176/fixture/mark" {}
   type "design-property-0" "#123456"
   type "design-property-0" key "Enter"
   clock data
-  clock +3500 real
-  clock data
+  clock +150 real
   expect text "design-property-0" == "#123456"
   expect text "selected-element-name" == "Save"
+  expect tree has "apply-design"
+  expect text "draft-count" == "1 unsaved change"
+  request POST "http://127.0.0.1:5176/fixture/assert-draft" {}
   tap "undo-app-design"
   clock data
-  clock +3500 real
-  clock data
   expect text "design-property-0" == "#ffffff"
+  expect tree missing "apply-design"
+  request POST "http://127.0.0.1:5176/fixture/assert-draft" {}
+  type "design-property-0" "#123456"
+  type "design-property-0" key "Enter"
+  clock data
+  tap "apply-design"
+  clock data
+  clock +1800 real
+  clock data
+  expect text "design-property-0" == "#123456"
+  expect tree missing "apply-design"
+  request POST "http://127.0.0.1:5176/fixture/assert-applied" {}
   tap "element-parent"
   clock +1300 real
   clock data
@@ -615,3 +628,44 @@ test "reveal an offscreen canvas selection and reveal it again after manual scro
   clock +100 real
   expect tree has "element-43"
   expect state revealedLayerRevision == 2
+
+
+test "save a design draft across editor reloads and discard without writing code"
+  size 1440x900
+  request POST "http://127.0.0.1:5176/mode" {"mode":"elements"}
+  tap "view-view-1"
+  clock data
+  type "preview-url" "http://127.0.0.1:5176/"
+  type "preview-url" key "Enter"
+  clock data
+  tap "edit-app"
+  clock data
+  clock +1800 real
+  tap "element-2"
+  clock +300 real
+  clock data
+  type "design-property-0" "#123456"
+  type "design-property-0" key "Enter"
+  clock data
+  expect tree has "apply-design"
+  tap "edit-app"
+  clock data
+  tap "edit-app"
+  clock data
+  clock +500 real
+  expect tree has "apply-design"
+  reload
+  clock data
+  tap "edit-app"
+  clock data
+  clock +1800 real
+  expect tree has "apply-design"
+  tap "element-2"
+  clock +300 real
+  clock data
+  expect text "design-property-0" == "#123456"
+  tap "discard-design"
+  clock data
+  expect tree missing "apply-design"
+  expect text "design-property-0" == "#ffffff"
+  request POST "http://127.0.0.1:5176/fixture/assert-color?value=%23ffffff" {}

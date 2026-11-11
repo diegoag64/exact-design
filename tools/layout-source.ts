@@ -45,7 +45,7 @@ export function patchLayout(source:string,site:LayoutSite,value:string) {
   if(!literal) throw new Error('This value is an expression or has moved. Edit it in source.');
   return source.slice(0,literal.start)+layoutValue(site.attr,value)+source.slice(literal.end);
 }
-async function ownFile(app:string,file:string) {
+export async function ownFile(app:string,file:string) {
   const root=await realpath(app),path=await realpath(resolve(root,file)),rel=relative(root,path);
   if(!rel || rel.startsWith('..'+sep)||rel==='..'||!path.endsWith('.contract')) throw new Error('Only this app’s Contract sources can be edited.');
   return {root,path,rel};
@@ -54,7 +54,7 @@ export async function sourceLiteral(app:string,site:LayoutSite) {
   const {path}=await ownFile(app,site.file),source=await readFile(path,'utf8');
   return digest(source)===site.sha256?literalAt(source,site):null;
 }
-export async function checkLayout(app:string,file:string,source:string) {
+export async function checkLayout(app:string,file:string,source:string,replacements?:Record<string,string>) {
   const cache=resolve(app,'.exact');await mkdir(cache,{recursive:true});
   const stage=await mkdtemp(resolve(cache,'layout-check-'));
   try {
@@ -71,6 +71,7 @@ export async function checkLayout(app:string,file:string,source:string) {
     }
     for(const name of ['assets','node_modules']) {try {await symlink(await realpath(resolve(app,name)),resolve(stage,name),'dir');}catch{/* optional */}}
     const staged=resolve(stage,file);await mkdir(dirname(staged),{recursive:true});await Bun.write(staged,source);
+    for(const [name,text]of Object.entries(replacements??{})){const path=resolve(stage,name);await mkdir(dirname(path),{recursive:true});await Bun.write(path,text);}
     const compiler=resolve(import.meta.dir,'../.exact-sdk/target/debug/contract');
     const process=Bun.spawn([compiler,'build',resolve(stage,'app.contract'),'--json','--errors-only'],{cwd:stage,stdout:'pipe',stderr:'pipe'});
     const timer=setTimeout(()=>process.kill(),15000);
@@ -84,7 +85,7 @@ export async function checkLayout(app:string,file:string,source:string) {
   } finally {await rm(stage,{recursive:true,force:true});}
 }
 export type SourceInverse={file:string;before:string;after:string};
-async function replaceSource(path:string,before:string,after:string) {
+export async function replaceSource(path:string,before:string,after:string) {
   const temp=path+'.exact-design-'+randomUUID();
   try {
     const mode=(await stat(path)).mode;

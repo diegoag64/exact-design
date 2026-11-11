@@ -1,8 +1,12 @@
+import {readFile} from 'node:fs/promises';
 import { projectUrl } from '../studio/project';
 import {relative,isAbsolute,resolve} from 'node:path';
-import {layoutProperties,layoutOptions,layoutValue,sourceLiteral,writeLayout,undoLayout,digest,type SourceInverse,type LayoutSite} from './layout-source';
+import {layoutProperties,layoutOptions,layoutValue,sourceLiteral,digest,type LayoutSite} from './layout-source';
 import {ElementBridge,bridgeFor,type ElementNode} from './element-bridge';
 import {spacingProperties,spacingRows} from '../studio/spacing';
+import {emptySpacing} from '../studio/spacing';
+import {PreviewChannel} from './preview-channel';
+import {DesignDraft,applyDesignDraft,bindingTargets,bindingKey,previewValue,type DesignBinding,type DesignPatch} from './design-drafts';
 
 const properties=new Set(['color','background-color','font-size','font-weight','line-height','letter-spacing','border-radius','opacity']);
 type Row={name:string;editable?:any};
@@ -49,7 +53,20 @@ export class DesignSession {
   client=`exact-design:${crypto.randomUUID()}`;
   cursor=0; epoch=''; files:any={}; selection:any=null; version=0;
   selectionRevision=0;
-  inverses:(string|SourceInverse)[]=[]; applied=false; busy=false;
+  preview=new PreviewChannel();
+  drafts=new DesignDraft();
+  draftError='';
+  sourceMap:any=null;
+  handoff:DesignPatch[]=[];
+  receivePreview=(frame:any,packet:any)=>{
+    if(packet.kind==='pick'){
+      this.pick(frame.frame,packet.id);
+      this.preview.publish(true,emptySpacing(frame.frame));
+    }else if(packet.kind==='ready'){this.syncDrafts();this.preview.publish(true);}
+    else if(packet.kind==='spacing'&&frame.frame===this.picked?.frame&&packet.id===this.picked.node.id)this.preview.publish(false,{frame:frame.frame,id:packet.id,plan:packet.plan,boxes:packet.boxes});
+    else if(packet.kind==='draft-status'&&packet.revision===this.drafts.revision&&packet.error!==this.draftError){this.draftError=packet.error;this.preview.publish(true);}
+  };
+  applied=false; busy=false;
   app='';
   bridge:ElementBridge|null=null;
   preferredFrame='';
@@ -73,6 +90,7 @@ export class DesignSession {
     if(!hello.protocol?.startsWith('tamber/1.')) throw new Error('This Exact editing protocol is not supported.');
     this.files=hello.files;
     this.app=hello.local===true && typeof hello.app==='string' && isAbsolute(hello.app)?hello.app:'';
+    this.bridge?.feedback?.add(this.receivePreview);
     await this.poll();
     if(!this.bridge){
       const inspecting=await this.call({method:'inspect',client:this.client,on:true});
@@ -143,8 +161,20 @@ export class DesignSession {
     }));
     return {...event,rows};
   }
+  binding(row:Row):DesignBinding {
+    const e=row.editable,at=e.site??e.at??(row as any).at;
+    const file=e.site?.file??e.file??at?.file;
+    if(!file||!at?.line||!at?.col)throw new Error('This property has no writable source binding.');
+    const name=this.app?relative(this.app,resolve(this.app,file)):file;
+    return {file:name,line:at.line,col:at.col,sha256:e.sha256??at.sha256??this.files[name],property:e.row,shared:e.rung==='style'||e.site?.shared===true};
+  }
+  currentRows(){return editableRows(this.selection).map(row=>{
+    let patch;try{patch=this.drafts.patches.get(bindingKey(this.binding(row)));}catch{}
+    return patch?{...row,editable:{...row.editable,text:patch.value}}:row;
+  });}
+  syncDrafts(){this.bridge?.preview?.([...this.handoff,...this.drafts.snapshot()].map(p=>p.preview),this.drafts.revision);}
   view() {
-    const s=this.selection, rows=editableRows(s);
+    const s=this.selection, rows=this.currentRows();this.syncDrafts();
     const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??[...this.bridge.frames.values()][0]);
     const selected=this.picked?.node.id??'';
     const tree=frame?.nodes.map(n=>{
@@ -155,12 +185,14 @@ export class DesignSession {
     const crumbs:typeof tree=[];let at=frame?.nodes.find(n=>n.id===selected);
     while(at&&crumbs.length<30){const entry=tree.find(n=>n.id===at!.id);if(entry)crumbs.unshift(entry);at=frame?.nodes.find(n=>n.id===at!.parent);}
     const spacingId=s&&!this.pendingSelection&&!this.restoring?selected:'',spacingPlan=frame?.plan??'';
+    if(frame)this.bridge?.measure?.(frame.frame,spacingId);
     return {source:s?.source?`${s.source.file}:${s.source.line}`:'',component:s?.source?.component??'',version:this.version,selectionRevision:this.selectionRevision,
-      spacingId,spacingPlan,spacingFrame:frame?.frame??'',spacingConfig:spacingId?JSON.stringify({kind:'exact-design:spacing',id:spacingId,plan:spacingPlan}):'',
+      spacingId,spacingPlan,spacingFrame:frame?.frame??'',
       spacingInputs:spacingRows(rows.map((r,i)=>({id:String(i),property:r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true}))),
+      draftCount:this.drafts.count,draftState:this.drafts.serialize(),draftError:this.draftError||(this.drafts.conflict(this.files)?'The source changed. Discard this draft before editing the new source.':''),canApply:this.drafts.count>0&&!this.drafts.conflict(this.files)&&!this.draftError,
       bridgeOrigin:this.bridge?.origin??'',tree,crumbs,selectedLabel:this.picked?.node.label??'',restoring:!!this.restoring,selecting:!!this.pendingSelection,
       message:this.pendingSelection?'Selecting element…':this.restoring?'Updating selection…':s?.readOnly || (s && !rows.length?'No editable properties.':'Select an element in a screen.'),
-      rows:rows.map((r:Row,i:number)=>({id:String(i),name:labels[r.editable.row]??r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true,group:r.editable.rung==='layout'?(r.editable.row.startsWith('padding')||r.editable.row.startsWith('margin')||r.editable.row.includes('gap')?'Spacing':'Layout'):'Appearance',options:layoutOptions(r.editable.row).map(value=>({value,label:optionLabels[value]??value}))})),canUndo:this.inverses.length>0,applied:this.applied};
+      rows:rows.map((r:Row,i:number)=>({id:String(i),name:labels[r.editable.row]??r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true,group:r.editable.rung==='layout'?(r.editable.row.startsWith('padding')||r.editable.row.startsWith('margin')||r.editable.row.includes('gap')?'Spacing':'Layout'):'Appearance',options:layoutOptions(r.editable.row).map(value=>({value,label:optionLabels[value]??value}))})),canUndo:this.drafts.past.length>0,applied:this.applied};
   }
   async edit(version:number,index:number,value:string) {
     if(this.busy) throw new Error('A change is still being applied.');
@@ -170,37 +202,43 @@ export class DesignSession {
       if(version!==this.version || !this.selection) throw new Error('The source or selection changed. Select the element again.');
       const row=editableRows(this.selection)[index];
       if(!row) throw new Error('This property is no longer editable.');
-      let expected:any;
-      if(row.editable.rung==='layout') {const inverse=await writeLayout(this.app,row.editable.site,value);this.inverses.push(inverse);expected={...this.files,[inverse.file]:digest(inverse.after)};}
-      else {
-        const r=await this.call({method:'transaction',client:this.client,files:this.files,ops:[rowOperation(row,value)]});
-        if(r.inverse)this.inverses.push(r.inverse);
-        expected=r.files;
-      }
-      if(this.inverses.length>100)this.inverses.shift();
-      this.armRestore(expected);this.selection=null;this.version++;this.applied=true;
+      const binding=this.binding(row),key=bindingKey(binding),next=previewValue(binding.property,value);
+      const frame=this.picked&&this.bridge?.frames.get(this.picked.frame);
+      let targets;
+      if(this.app&&frame){
+        if(this.sourceMap?.digest!==frame.plan){try{this.sourceMap=JSON.parse(await readFile(resolve(this.app,'target/web-dist/app.plan.map.json'),'utf8'));}catch{this.sourceMap=null;}}
+        if(this.sourceMap?.digest===frame.plan)targets=bindingTargets(this.sourceMap,this.app,binding);
+        if(!targets?.length)throw new Error('This build has no matching preview source map. Reconnect after it rebuilds.');
+      }else if(binding.shared)throw new Error('Shared style drafts require a local Exact source map.');
+      this.drafts.stage({key,binding,original:row.editable.text,value:next.author,preview:{key,site:this.picked?.node.site??0,plan:frame?.plan??'',property:binding.property,value:next.css,scope:binding.shared?'style':'site',targets},operation:row.editable.rung==='layout'?null:rowOperation(row,next.author)},this.files);
+      this.draftError='';this.version++;this.applied=false;
       return this.view();
     } finally {this.busy=false;}
   }
+  async apply(){
+    if(this.busy||!this.drafts.count)throw new Error('There is no design draft to apply.');
+    this.busy=true;
+    try{
+      await this.poll();
+      if(this.drafts.conflict(this.files))throw new Error('The source changed. The draft was not applied.');
+      if(this.draftError)throw new Error(this.draftError);
+      const patches=this.drafts.snapshot();let expected:any;
+      if(this.app){const inverse=await applyDesignDraft(this.app,patches);expected={...this.files,...Object.fromEntries(inverse.map(i=>[i.file,digest(i.after)]))};}
+      else{
+        const result=await this.call({method:'transaction',client:this.client,files:this.files,ops:patches.map(p=>{if(!p.operation)throw new Error('Layout drafts require a local Exact project.');return p.operation;})});
+        expected=result.files;
+      }
+      this.armRestore(expected);this.handoff=patches;this.drafts.clear();this.selection=null;this.version++;this.applied=true;
+      return this.view();
+    }finally{this.busy=false;}
+  }
+  undo(){if(this.busy)throw new Error('A change is still being applied.');this.drafts.undo();this.draftError='';this.version++;return this.view();}
+  discard(){if(this.busy)throw new Error('A change is still being applied.');this.drafts.clear();this.draftError='';this.version++;return this.view();}
   async editSpacing(version:number,property:string,value:string){
     await this.poll();
     if(version!==this.version||!this.selection)throw new Error('The source or selection changed. Select the element again.');
-    const operation=spacingOperation(editableRows(this.selection),property,value);
+    const operation=spacingOperation(this.currentRows(),property,value);
     return this.edit(version,operation.index,operation.value);
-  }
-  async undo() {
-    if(this.busy || !this.inverses.length) throw new Error('There is no app change to undo.');
-    this.busy=true;
-    try {
-      const inverse=this.inverses.at(-1)!;
-      let expected:any;
-      if(typeof inverse==='string') {
-        const r=await this.call({method:'undo',client:this.client,inverse});this.files=r.files;expected=r.files;
-      } else {await undoLayout(this.app,inverse);expected={...this.files,[inverse.file]:digest(inverse.before)};}
-      this.armRestore(expected);
-      this.inverses.pop();this.selection=null;this.version++;this.applied=false;
-      return this.view();
-    } finally {this.busy=false;}
   }
   armRestore(files:any){
     const frame=this.picked&&this.bridge?.frames.get(this.picked.frame),previous=this.restoring,source=this.selection?.source??previous;
@@ -211,11 +249,14 @@ export class DesignSession {
     const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??[...this.bridge.frames.values()][0]);
     const node=frame?.nodes.find(n=>n.id===id);
     if(!frame||!node)throw new Error('This element is no longer on the screen.');
-    this.picked={frame:frame.frame,node};this.selection=null;this.version++;
-    this.selectionRevision++;
-    this.pendingSelection={frame:frame.frame,path:node.path,until:Date.now()+1000};
-    this.restoring=null;this.bridge!.select(frame.frame,id);
+    this.pick(frame.frame,id);this.bridge!.select(frame.frame,id);
     return this.view();
+  }
+  pick(frameId:string,id:string){
+    const frame=this.bridge?.frames.get(frameId),node=frame?.nodes.find(n=>n.id===id);
+    if(!frame||!node)return;
+    this.picked={frame:frame.frame,node};this.selection=null;this.version++;this.selectionRevision++;
+    this.pendingSelection={frame:frame.frame,path:node.path,until:Date.now()+1000};this.restoring=null;
   }
   hover(id:string){
     const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??[...this.bridge.frames.values()][0]);
@@ -224,9 +265,14 @@ export class DesignSession {
     if(next)this.bridge!.hover(next,id);
     this.hoveredFrame=next;
   }
-  async close() {this.hover('');await this.call({method:'inspect',client:this.client,on:false});}
+  async close() {this.hover('');this.bridge?.feedback?.delete(this.receivePreview);this.preview.close();await this.call({method:'inspect',client:this.client,on:false});}
 }
 const sessions=new Map<string,{session:DesignSession;seen:number}>();
+export function designEvents(id:string,request:Request){
+  const entry=sessions.get(id);
+  if(!entry)return new Response('The editing session ended.',{status:404});
+  entry.seen=Date.now();return entry.session.preview.subscribe(request);
+}
 const optionLabels:Record<string,string>={row:'Row',column:'Column','row-reverse':'Row reversed','column-reverse':'Column reversed',stretch:'Stretch','flex-start':'Start',center:'Center','flex-end':'End',baseline:'Baseline','space-between':'Space between','space-around':'Space around','space-evenly':'Space evenly',nowrap:'No wrap',wrap:'Wrap','wrap-reverse':'Wrap reversed'};
 const labels:Record<string,string>={'background-color':'Fill',color:'Text color','font-size':'Font size','font-weight':'Weight','line-height':'Line height','letter-spacing':'Letter spacing','border-radius':'Corner radius',opacity:'Opacity'};
 Object.assign(labels,{'flex-direction':'Direction','align-items':'Align items','justify-content':'Distribute','flex-wrap':'Wrap',width:'Width',height:'Height','min-width':'Min width','max-width':'Max width','min-height':'Min height','max-height':'Max height',gap:'Gap','row-gap':'Row gap','column-gap':'Column gap',padding:'Padding','padding-top':'Padding top','padding-right':'Padding right','padding-bottom':'Padding bottom','padding-left':'Padding left',margin:'Margin','margin-top':'Margin top','margin-right':'Margin right','margin-bottom':'Margin bottom','margin-left':'Margin left'});
@@ -240,10 +286,12 @@ export async function designRequest(body:any) {
     const {token}=await r.json().catch(()=>({}));
     if(typeof token!=='string'||!token) throw new Error('No local editing session is available.');
     const session=new DesignSession(origin,token);session.bridge=bridgeFor(origin);session.preferredFrame=typeof body.row==='string'?body.row:'';
-    const view=await session.start();
+    await session.start();
+    try{if(typeof body.draftState==='string'&&body.draftState)session.drafts.restore(body.draftState);}
+    catch(error){await session.close();throw error;}
     const id=crypto.randomUUID();
     sessions.set(id,{session,seen:Date.now()});
-    return {session:id,...view};
+    return {session:id,...session.view()};
   }
   const entry=sessions.get(body.session);
   if(!entry) throw new Error('The editing session ended. Connect again.');
@@ -256,6 +304,8 @@ export async function designRequest(body:any) {
     return view;
   }
   if(body.op==='edit') return s.edit(Number(body.version),Number(body.row),body.value);
+  if(body.op==='apply')return s.apply();
+  if(body.op==='discard')return s.discard();
   if(body.op==='spacing')return s.editSpacing(Number(body.version),String(body.row),String(body.value));
   if(body.op==='undo') return s.undo();
   if(body.op==='parent') {

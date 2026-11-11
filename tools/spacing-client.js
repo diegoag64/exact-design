@@ -1,10 +1,11 @@
 import {measureSpacing} from './spacing-geometry.js';
 
-export function observeSpacing(nodeFor){
-  let selected=null,animation=0,last='';
+export function observeSpacing(nodeFor,report){
+  let selected=null,animation=0,last='',sending=false;
   const send=boxes=>{
-    const message=JSON.stringify({kind:'exact-design:spacing',id:selected?.id??'',plan:selected?.plan??'',boxes});
-    if(message!==last){last=message;parent.postMessage(message,'*');}
+    const packet={kind:'spacing',id:selected?.id??'',plan:selected?.plan??globalThis.exact?.plan??'',boxes},message=JSON.stringify(packet);
+    if(message===last||sending)return;
+    sending=true;Promise.resolve(report(packet)).then(ok=>{if(ok)last=message;}).finally(()=>{sending=false;});
   };
   const clear=()=>{cancelAnimationFrame(animation);selected=null;send([]);};
   function draw(){
@@ -13,15 +14,12 @@ export function observeSpacing(nodeFor){
     send(measureSpacing(el,getComputedStyle,{width:innerWidth,height:innerHeight}));
     animation=requestAnimationFrame(draw);
   }
-  addEventListener('message',event=>{
-    if(event.source!==parent||typeof event.data!=='string')return;
-    if(!event.data){clear();return;}
-    let message;try{message=JSON.parse(event.data);}catch{return;}
-    if(message.kind!=='exact-design:spacing')return;
-    if(selected?.id===message.id&&selected?.plan===message.plan)return;
+  function select(id,plan){
+    if(selected?.id===id&&selected?.plan===plan)return;
     clear();
-    if(typeof message.id!=='string'||!message.id||message.plan!==globalThis.exact?.plan)return;
-    selected={id:message.id,plan:message.plan};draw();
-  });
+    if(typeof id!=='string'||!id||plan!==globalThis.exact?.plan)return;
+    selected={id,plan};draw();
+  }
   addEventListener('pagehide',clear);
+  return {select,clear};
 }

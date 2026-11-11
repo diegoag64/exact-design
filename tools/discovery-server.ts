@@ -1,6 +1,6 @@
 import { projectUrl } from '../studio/project';
 import { parseRoutes } from '../studio/discovery';
-import { designRequest } from './design-session';
+import { designRequest,designEvents } from './design-session';
 
 const MAX_BYTES = 1024 * 1024;
 function localOrigin(origin: string): boolean {
@@ -27,12 +27,17 @@ export async function readRoutes(origin: string, request: typeof fetch = fetch) 
   return parseRoutes(body);
 }
 export function startDiscoveryServer(port=5175) {
-  return Bun.serve({hostname:'127.0.0.1',port,maxRequestBodySize:4096,
+  return Bun.serve({hostname:'127.0.0.1',port,maxRequestBodySize:524288,idleTimeout:255,
     async fetch(req) {
       const url=new URL(req.url), origin=req.headers.get('origin');
       if(url.hostname!=='127.0.0.1' || (origin && !localOrigin(origin))) return new Response('Forbidden',{status:403});
-      const headers = { 'access-control-allow-origin':origin??'http://127.0.0.1:5173', 'access-control-allow-methods':'POST, OPTIONS', 'access-control-allow-headers':'content-type', 'cache-control':'no-store', vary:'Origin' };
+      const headers = { 'access-control-allow-origin':origin??'http://127.0.0.1:5173', 'access-control-allow-methods':'GET, POST, OPTIONS', 'access-control-allow-headers':'content-type', 'cache-control':'no-store', vary:'Origin' };
       if(url.pathname==='/health' && req.method==='GET') return Response.json({service:'exact-design-discovery'},{headers});
+      if(url.pathname==='/design/events'&&req.method==='GET'){
+        const response=designEvents(url.searchParams.get('session')??'',req);
+        for(const [key,value]of Object.entries(headers))response.headers.set(key,value);
+        return response;
+      }
       if(!['/discover','/design'].includes(url.pathname)) return new Response(null,{status:404,headers});
       if(req.method==='OPTIONS') return new Response(null,{status:204,headers});
       if(req.method!=='POST' || !req.headers.get('content-type')?.startsWith('application/json')) return new Response(null,{status:405,headers});

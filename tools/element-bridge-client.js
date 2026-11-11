@@ -2,6 +2,24 @@
 const frame=new URL(location.href).searchParams.get('__ed_frame')||'preview';
 const page=crypto.randomUUID();
 const nodes=new Map();let command=0,selectionCommand=0,working=false,pushed=false;
+let spacingObserver,measurement={id:'',plan:''};
+let draftObserver,draft={patches:[],revision:0};
+async function renderDraft(){
+  if(!draftObserver)return;
+  const current=draft;
+  try{await draftObserver.apply(current.patches);if(current===draft)void feedback({kind:'draft-status',revision:current.revision,plan:globalThis.exact?.plan||'',error:''});}
+  catch(error){if(current===draft)void feedback({kind:'draft-status',revision:current.revision,plan:globalThis.exact?.plan||'',error:String(error.message??error).slice(0,300)});}
+}
+async function feedback(packet){
+  try{return (await fetch('/__exact_design/feedback',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...packet,frame,page})})).ok;}catch{return false;}
+}
+window.__exactDesignPick=(x,y)=>{
+  if(!document.getElementById('exact-inspect'))return;
+  const root=document.getElementById('exact-root');
+  const el=document.elementsFromPoint(x,y).find(el=>root?.contains(el))?.closest('[data-site]');
+  const id=[...nodes].find(([,node])=>node===el)?.[0];
+  if(id)void feedback({kind:'pick',id,plan:globalThis.exact?.plan||''});
+};
 const style=document.createElement('style');style.textContent='#exact-inspect{display:none!important}';document.head.append(style);
 const outline=document.createElement('div');outline.dataset.edHover='';outline.setAttribute('aria-hidden','true');
 outline.style.cssText='position:fixed;pointer-events:none;z-index:2147483647;box-sizing:border-box;border:1px solid #3b82f6;';
@@ -67,6 +85,8 @@ async function deliver(task){
   command=task.seq;
   if(task.op==='select'){selectionCommand=task.seq;if(task.plan===globalThis.exact?.plan)await select(task.id,task.seq);}
   if(task.op==='hover')hover(task.id,task.plan);
+  if(task.op==='measure'){measurement={id:task.id,plan:task.plan};spacingObserver?.select(task.id,task.plan);}
+  if(task.op==='draft'){draft={patches:task.patches||[],revision:task.draftRevision};void renderDraft();}
 }
 const events=new EventSource('/__exact_design/events?frame='+encodeURIComponent(frame));
 events.onopen=()=>{pushed=true;};events.onerror=()=>{pushed=false;clearHover();};
@@ -81,4 +101,5 @@ async function tick(){
   }catch{}finally{working=false;}
 }
 setInterval(tick,400);void tick();
-import('/__exact_design/spacing-client.js').then(m=>m.observeSpacing(id=>nodes.get(id))).catch(()=>{});
+import('/__exact_design/spacing-client.js').then(m=>{spacingObserver=m.observeSpacing(id=>nodes.get(id),feedback);spacingObserver.select(measurement.id,measurement.plan);}).catch(()=>{});
+import('/__exact_design/design-preview-client.js').then(m=>{draftObserver=m.designPreview();void renderDraft();}).catch(()=>{});
