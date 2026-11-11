@@ -4,19 +4,43 @@ export type ElementNode={id:string;identity:string;path:string;parent:string;dep
 export type ElementFrame={frame:string;build:string;plan:string;inspecting:boolean;nodes:ElementNode[];seen:number};
 const script=readFileSync(new URL('./element-bridge-client.js',import.meta.url),'utf8');
 const bridges=new Map<string,ElementBridge>();
+export function stopElementBridges(){for(const bridge of bridges.values())bridge.server.stop(true);bridges.clear();}
 export function bridgeFor(origin:string){let bridge=bridges.get(origin);if(!bridge){const port=20000+parseInt(createHash('sha256').update(origin).digest('hex').slice(0,6),16)%30000;bridge=new ElementBridge(origin,port);bridges.set(origin,bridge);}return bridge;}
 export class ElementBridge {
   frames=new Map<string,ElementFrame>();seq=0;
   commands=new Map<string,{seq:number;op:string;id:string;plan:string}[]>();
+  listeners=new Map<string,Set<ReadableStreamDefaultController<Uint8Array>>>();
   server:ReturnType<typeof Bun.serve>;
   constructor(readonly target:string,port=0){
     this.server=Bun.serve({hostname:'127.0.0.1',port,maxRequestBodySize:512*1024,idleTimeout:255,fetch:req=>this.handle(req)});
   }
   get origin(){return this.server.url.origin;}
-  select(frame:string,id:string){this.commands.set(frame,[{seq:++this.seq,op:'select',id,plan:this.frames.get(frame)?.plan??''}]);}
+  select(frame:string,id:string){
+    const command={seq:++this.seq,op:'select',id,plan:this.frames.get(frame)?.plan??''};
+    this.commands.set(frame,[command]);
+    for(const listener of this.listeners.get(frame)??[])try{listener.enqueue(this.event(command));}catch{this.listeners.get(frame)?.delete(listener);}
+  }
+  event(command:{seq:number}){return new TextEncoder().encode(`id: ${command.seq}\ndata: ${JSON.stringify(command)}\n\n`);}
+  subscribe(req:Request,url:URL){
+    const frame=url.searchParams.get('frame')??'';
+    if(!frame||frame.length>100)return new Response(null,{status:400});
+    if((!this.listeners.has(frame)&&this.listeners.size>=200)||(this.listeners.get(frame)?.size??0)>=4)return new Response(null,{status:429});
+    const listeners=this.listeners.get(frame)??new Set<ReadableStreamDefaultController<Uint8Array>>();this.listeners.set(frame,listeners);
+    const after=Number(req.headers.get('last-event-id')??url.searchParams.get('after')??0)||0;
+    let controller:ReadableStreamDefaultController<Uint8Array>,timer:ReturnType<typeof setInterval>|undefined;
+    const close=()=>{if(timer)clearInterval(timer);listeners.delete(controller);if(!listeners.size)this.listeners.delete(frame);req.signal.removeEventListener('abort',close);try{controller.close();}catch{}};
+    const stream=new ReadableStream<Uint8Array>({start:c=>{
+      controller=c;listeners.add(c);c.enqueue(new TextEncoder().encode(': connected\n\n'));
+      for(const command of this.commands.get(frame)??[])if(command.seq>after)c.enqueue(this.event(command));
+      timer=setInterval(()=>{try{c.enqueue(new TextEncoder().encode(': keepalive\n\n'));}catch{close();}},15000);timer.unref();
+      req.signal.addEventListener('abort',close,{once:true});
+    },cancel:close});
+    return new Response(stream,{headers:{'content-type':'text/event-stream','cache-control':'no-store','x-accel-buffering':'no'}});
+  }
   async handle(req:Request):Promise<Response>{
     const url=new URL(req.url),origin=req.headers.get('origin');
     if(url.origin!==this.origin || (origin && origin!==this.origin))return new Response('Forbidden',{status:403});
+    if(url.pathname==='/__exact_design/events'&&req.method==='GET')return this.subscribe(req,url);
     if(url.pathname==='/__exact_design/client.js')return new Response(script,{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
     if(url.pathname==='/__exact_design/tree' && req.method==='POST'){
       const body=await req.json();

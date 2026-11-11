@@ -12,4 +12,7 @@ for(const signal of ['SIGINT','SIGTERM']) process.on(signal,()=>child.kill(signa
 try {
   const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>resolve(code??1));});
   process.exitCode=code;
-} finally {helper?.stop(true);}
+} finally {
+  helper?.stop(true);
+  if(helper){const {stopElementBridges}=await import('./element-bridge.ts');stopElementBridges();}
+}

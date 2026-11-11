@@ -138,6 +138,7 @@ shape DesignReply
   crumbs: ElementNode[]
   selectedLabel: string
   restoring: bool
+  selecting: bool
 
 shape ElementNode
   id: string
@@ -184,7 +185,7 @@ component Studio
   resource discovered = discover(doc.projectUrl, doc.groups.map(g => g.route), discoveryRevision) as shape Discovery else empty()
   mutation changed as shape Reply queue refreshes doc then afterEdit
   mutation libraryChanged as shape Reply queue refreshes doc then afterLibrary
-  mutation designChanged as shape DesignReply queue refreshes doc then afterDesign
+  mutation designChanged as shape DesignReply queue then afterDesign
   state designSession = ""
   state collapsedElements = [""]
   action toggleElement(id: string)
@@ -193,6 +194,7 @@ component Studio
   state designWriting = false
   state designVersion = 0
   derive editing = designSession != ""
+  derive selectingElement = match designChanged { case some(r) => r.selecting, case none => false }
   derive designRows = match designChanged { case some(r) => r.rows, case none => [] }
   derive elementTree = match designChanged { case some(r) => r.tree, case none => [] }
   derive appCanUndo = match designChanged { case some(r) => r.canUndo, case none => false }
@@ -214,8 +216,10 @@ component Studio
   action pollDesign
     if not pending(designChanged)
       send designChanged = design("poll", designSession, "", 0, "", "")
-  task designPoll when editing
+  task designPoll when editing and not selectingElement
     every(750, pollDesign)
+  task selectionPoll when editing and selectingElement
+    every(50, pollDesign)
   action editDesign(row: string, value: string)
     designWriting = true
     send designChanged = design("edit", designSession, "", designVersion, row, value)
@@ -238,6 +242,7 @@ component Studio
             designError = ""
           if r.origin != ""
             designOrigin = r.origin
+            refresh doc
           designSession = r.session
           designVersion = r.version
       case none

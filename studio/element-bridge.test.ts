@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {ElementBridge} from '../tools/element-bridge';
+import {ElementBridge,bridgeFor,stopElementBridges} from '../tools/element-bridge';
 import {DesignSession} from '../tools/design-session';
 
 test('preview proxy injects before bootstrap, forwards routes, and refuses token and foreign-origin requests',async()=>{
@@ -30,6 +30,28 @@ test('tree commands are scoped to a frame and the plan it reported',async()=>{
     expect((await(await post('phone',tasks[0].seq)).json()).commands).toEqual([]);
   }finally{bridge.server.stop(true);}
 });
+test('selection commands are pushed without another tree poll',async()=>{
+  const bridge=new ElementBridge('http://127.0.0.1:1'),abort=new AbortController();
+  try{
+    const response=await fetch(bridge.origin+'/__exact_design/events?frame=phone',{signal:abort.signal});
+    expect(response.headers.get('content-type')).toBe('text/event-stream');
+    const reader=response.body!.getReader(),decoder=new TextDecoder();
+    expect(decoder.decode((await reader.read()).value)).toContain(': connected');
+    bridge.select('tablet','other');bridge.select('phone','target');
+    const pushed=decoder.decode((await reader.read()).value);
+    expect(pushed).toContain('"id":"target"');expect(pushed).not.toContain('"id":"other"');
+    await reader.cancel();
+  }finally{abort.abort();bridge.server.stop(true);}
+});
+test('shutdown releases cached preview ports so a restart can reuse them',()=>{
+  const target='http://127.0.0.1:51991';
+  try{
+    const first=bridgeFor(target),origin=first.origin;
+    stopElementBridges();
+    const restarted=bridgeFor(target);
+    expect(restarted).not.toBe(first);expect(restarted.origin).toBe(origin);
+  }finally{stopElementBridges();}
+});
 test('selection restoration waits for the new plan and verifies the source location',async()=>{
   let files={'app.contract':'before'},events:any[]=[];
   const node={id:'old',identity:'[2,[]]',path:'root/0:button',parent:'',depth:0,label:'Save',tag:'button',site:2,instance:[]};
@@ -56,6 +78,11 @@ test('selection restoration waits for the new plan and verifies the source locat
   await s.poll();expect(commands).toEqual([['phone','new']]);
   events=[{event:'selection',build:'page',site:40,instance:[],source,rows:[]}];
   await s.poll();expect(s.view().restoring).toBe(false);expect(s.view().selectedLabel).toBe('Save');
+  const immediate=s.navigate('new');expect(immediate.selecting).toBe(true);expect(immediate.tree[0].selected).toBe(true);expect(immediate.rows).toEqual([]);
+  events=[{event:'selection',build:'page',site:2,instance:[],source,rows:[]}];
+  await s.poll();expect(s.view().selecting).toBe(true);
+  events=[{event:'selection',build:'page',site:40,instance:[],source,rows:[]}];
+  await s.poll();expect(s.view().selecting).toBe(false);
   s.restoring={frame:'phone',path:node.path,file:'app.contract',line:10,col:5,sha:'after',before:'after',plan:'new-plan',sent:'',since:Date.now()};
   frame.plan='third-plan';events=[{event:'selection',build:'page',site:40,instance:[],source:{...source,line:99},rows:[]}];
   await s.poll();expect(s.view().restoring).toBe(false);expect(s.view().source).toBe('');

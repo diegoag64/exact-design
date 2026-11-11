@@ -55,7 +55,7 @@ const reply = (fit=false,error='') => {
 };
 const sources: Sources = {
   design: async ([op,session,url,version,row,value]) => {
-    const empty={ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,source:'',component:'',version:0,message:'',rows:[],canUndo:false,applied:false};
+    const empty={ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,message:'',rows:[],canUndo:false,applied:false};
     try {
       const origin=url?new URL(url).origin:'';
       const response=await fetch(`${DISCOVERY_API}/design`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,session,url:origin,version,row,value})});

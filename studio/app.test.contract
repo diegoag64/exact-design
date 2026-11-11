@@ -486,7 +486,7 @@ test "navigate rendered layers and keep selection through edits and undo"
   expect tree missing "element-2"
   tap "fold-element-1"
   tap "element-2"
-  clock +1500 real
+  clock +300 real
   clock data
   expect text "breadcrumb-2" == "Save"
   expect text "design-property-0" == "#ffffff"

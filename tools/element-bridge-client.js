@@ -1,6 +1,6 @@
 // Runs only in the local development proxy, never in the app's source.
 const frame=new URL(location.href).searchParams.get('__ed_frame')||'preview';
-const nodes=new Map();let command=0,working=false;
+const nodes=new Map();let command=0,working=false,pushed=false;
 const style=document.createElement('style');style.textContent='#exact-inspect{display:none!important}';document.head.append(style);
 function snapshot(){
   nodes.clear();const rows=[],ids=new Map();
@@ -21,10 +21,11 @@ function snapshot(){
   }
   return {frame,build:window.__exactDesignBuild||'',plan:globalThis.exact?.plan||'',inspecting:!!document.getElementById('exact-inspect'),nodes:rows};
 }
-async function select(id){
+async function select(id,sequence){
   const el=nodes.get(id);if(!el?.isConnected||!document.getElementById('exact-inspect'))return;
   el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
   await new Promise(requestAnimationFrame);
+  if(sequence!==command)return;
   const rect=el.getBoundingClientRect(),x=Math.max(1,Math.min(innerWidth-1,rect.left+rect.width/2)),y=Math.max(1,Math.min(innerHeight-1,rect.top+rect.height/2));
   // The inspector's gate receives the press. Keep descendants out of hit testing
   // briefly so a container can be selected even when children cover its padding.
@@ -32,16 +33,26 @@ async function select(id){
   const mask=document.createElement('style');mask.textContent=`[data-ed-pick="${marker}"] *{pointer-events:none!important}`;document.head.append(mask);
   try{
     const inspector=await import('/__dev/inspect.js');
+    if(sequence!==command)return;
     for(const type of ['pointerdown','pointerup'])inspector.gate(new PointerEvent(type,{bubbles:true,clientX:x,clientY:y,pointerId:991,button:0}));
   }
   finally{mask.remove();el.removeAttribute('data-ed-pick');}
 }
+async function deliver(task){
+  if(!Number.isSafeInteger(task.seq)||task.seq<=command)return;
+  command=task.seq;
+  if(task.op==='select'&&task.plan===globalThis.exact?.plan)await select(task.id,task.seq);
+}
+const events=new EventSource('/__exact_design/events?frame='+encodeURIComponent(frame));
+events.onopen=()=>{pushed=true;};events.onerror=()=>{pushed=false;};
+events.onmessage=e=>{try{void deliver(JSON.parse(e.data)).catch(()=>{});}catch{}};
 async function tick(){
   if(working)return;working=true;
   try{
     const response=await fetch('/__exact_design/tree',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...snapshot(),after:command})});
     if(!response.ok)return;
-    for(const task of (await response.json()).commands||[]){command=task.seq;if(task.op==='select'&&task.plan===globalThis.exact?.plan)await select(task.id);}
+    const tasks=(await response.json()).commands||[];
+    if(!pushed)for(const task of tasks)await deliver(task);
   }catch{}finally{working=false;}
 }
 setInterval(tick,400);void tick();

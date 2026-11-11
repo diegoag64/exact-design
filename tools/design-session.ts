@@ -36,6 +36,7 @@ export class DesignSession {
   preferredFrame='';
   ended=false;
   picked:{frame:string;node:ElementNode}|null=null;
+  pendingSelection:{frame:string;path:string;until:number}|null=null;
   restoring:{frame:string;path:string;file:string;line:number;col:number;sha:string;before:string;plan:string;sent:string;since:number}|null=null;
   builds=new Set<string>();
   constructor(readonly origin:string,private token:string,private request:typeof fetch=fetch) {}
@@ -67,15 +68,17 @@ export class DesignSession {
     this.epoch=r.epoch; this.cursor=r.seq;
     if(r.missed || JSON.stringify(this.files)!==JSON.stringify(r.files)) {this.selection=null;this.version++;}
     this.files=r.files;
+    if(this.pendingSelection&&Date.now()>this.pendingSelection.until)this.pendingSelection=null;
     for(const event of r.events??[]) {
       if(event.event==='selection' && this.builds.has(String(event.build))) {
         const frame=this.bridge&&[...this.bridge.frames.values()].find(f=>f.build===String(event.build));
         const node=frame?.nodes.find(n=>n.site===event.site&&JSON.stringify(n.instance)===JSON.stringify(event.instance??[]));
+        if(this.pendingSelection&&(!frame||frame.frame!==this.pendingSelection.frame||node?.path!==this.pendingSelection.path))continue;
         if(this.restoring && (!frame || frame.frame!==this.restoring.frame || !node || node.path!==this.restoring.path))continue;
         if(this.restoring && (frame!.plan===this.restoring.plan || event.readOnly || this.files[this.restoring.file]!==this.restoring.sha))continue;
         if(this.restoring&&(event.source?.file!==this.restoring.file||event.source?.line!==this.restoring.line||event.source?.col!==this.restoring.col)){this.restoring=null;this.selection=null;this.version++;continue;}
         if(frame&&node)this.picked={frame:frame.frame,node};
-        this.selection=await this.withLayout(event);this.version++;this.applied=false;this.restoring=null;
+        this.selection=await this.withLayout(event);this.version++;this.applied=false;this.restoring=null;this.pendingSelection=null;
       }
       if(event.event==='selected' && event.selected===null && this.builds.has(String(event.build))) {this.selection=null;this.version++;this.ended=true;}
     }
@@ -120,8 +123,8 @@ export class DesignSession {
     const crumbs:typeof tree=[];let at=frame?.nodes.find(n=>n.id===selected);
     while(at&&crumbs.length<30){const entry=tree.find(n=>n.id===at!.id);if(entry)crumbs.unshift(entry);at=frame?.nodes.find(n=>n.id===at!.parent);}
     return {source:s?.source?`${s.source.file}:${s.source.line}`:'',component:s?.source?.component??'',version:this.version,
-      bridgeOrigin:this.bridge?.origin??'',tree,crumbs,selectedLabel:this.picked?.node.label??'',restoring:!!this.restoring,
-      message:this.restoring?'Updating selection…':s?.readOnly || (s && !rows.length?'This element has no editable visual properties yet.':'Select an element in a screen.'),
+      bridgeOrigin:this.bridge?.origin??'',tree,crumbs,selectedLabel:this.picked?.node.label??'',restoring:!!this.restoring,selecting:!!this.pendingSelection,
+      message:this.pendingSelection?'Selecting element…':this.restoring?'Updating selection…':s?.readOnly || (s && !rows.length?'This element has no editable visual properties yet.':'Select an element in a screen.'),
       rows:rows.map((r:Row,i:number)=>({id:String(i),name:labels[r.editable.row]??r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true,group:r.editable.rung==='layout'?(r.editable.row.startsWith('padding')||r.editable.row.startsWith('margin')||r.editable.row.includes('gap')?'Spacing':'Layout'):'Appearance',options:layoutOptions(r.editable.row).map(value=>({value,label:optionLabels[value]??value}))})),canUndo:this.inverses.length>0,applied:this.applied};
   }
   async edit(version:number,index:number,value:string) {
@@ -164,7 +167,10 @@ export class DesignSession {
   }
   navigate(id:string){
     const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??[...this.bridge.frames.values()][0]);
-    if(!frame?.nodes.some(n=>n.id===id))throw new Error('This element is no longer on the screen.');
+    const node=frame?.nodes.find(n=>n.id===id);
+    if(!frame||!node)throw new Error('This element is no longer on the screen.');
+    this.picked={frame:frame.frame,node};this.selection=null;this.version++;
+    this.pendingSelection={frame:frame.frame,path:node.path,until:Date.now()+1000};
     this.restoring=null;this.bridge!.select(frame.frame,id);
     return this.view();
   }
