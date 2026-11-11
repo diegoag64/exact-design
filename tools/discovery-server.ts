@@ -1,5 +1,6 @@
 import { projectUrl } from '../studio/project';
 import { parseRoutes } from '../studio/discovery';
+import { designRequest } from './design-session';
 
 const MAX_BYTES = 1024 * 1024;
 function localOrigin(origin: string): boolean {
@@ -32,11 +33,15 @@ export function startDiscoveryServer(port=5175) {
       if(url.hostname!=='127.0.0.1' || (origin && !localOrigin(origin))) return new Response('Forbidden',{status:403});
       const headers = { 'access-control-allow-origin':origin??'http://127.0.0.1:5173', 'access-control-allow-methods':'POST, OPTIONS', 'access-control-allow-headers':'content-type', 'cache-control':'no-store', vary:'Origin' };
       if(url.pathname==='/health' && req.method==='GET') return Response.json({service:'exact-design-discovery'},{headers});
-      if(url.pathname!=='/discover') return new Response(null,{status:404,headers});
+      if(!['/discover','/design'].includes(url.pathname)) return new Response(null,{status:404,headers});
       if(req.method==='OPTIONS') return new Response(null,{status:204,headers});
       if(req.method!=='POST' || !req.headers.get('content-type')?.startsWith('application/json')) return new Response(null,{status:405,headers});
       try {
         const body=await req.json();
+        if(url.pathname==='/design') {
+          try {return Response.json({ok:true,error:'',...await designRequest(body)},{headers});}
+          catch(e) {return Response.json({ok:false,error:e instanceof Error?e.message:'Could not update the app.'},{headers});}
+        }
         if(typeof body?.url!=='string') throw new Error('Choose a project server first.');
         const routes=await readRoutes(body.url);
         return Response.json({routes,error:''},{headers});
