@@ -537,12 +537,17 @@ test "navigate rendered layers and keep selection through edits and undo"
   expect state elementTree.length == 4
   tap "fold-element-1"
   expect tree missing "element-2"
-  tap "fold-element-1"
+  request POST "http://127.0.0.1:5176/fixture/select" {"site":2}
+  clock +1000 real
+  clock data
+  expect tree has "element-2"
+  expect state revealedLayerRevision == 1
   tap "element-2"
   clock +300 real
   clock data
   expect text "selected-element-name" == "Save"
   expect text "selected-element-kind" == "Button"
+  expect state revealedLayerRevision == 2
   expect tree missing "element-breadcrumbs"
   expect text "design-property-0" == "#ffffff"
   clock +1000 real
@@ -579,3 +584,34 @@ test "navigate rendered layers and keep selection through edits and undo"
   expect state editing == false
   expect tree missing "spacing-overlay"
   expect tree has "screens-panel"
+
+test "reveal an offscreen canvas selection and reveal it again after manual scrolling"
+  size 1440x900
+  request POST "http://127.0.0.1:5176/mode" {"mode":"elements-long"}
+  tap "view-view-1"
+  clock data
+  type "preview-url" "http://127.0.0.1:5176/"
+  type "preview-url" key "Enter"
+  clock data
+  tap "edit-app"
+  clock data
+  clock +3500 real
+  expect state elementTree.length == 44
+  tap "fold-element-0"
+  expect tree missing "element-43"
+  request POST "http://127.0.0.1:5176/fixture/select" {"site":139}
+  clock +1000 real
+  expect tree has "element-43"
+  expect text "selected-element-name" == "Layer 40"
+  expect state revealedLayerRevision == 1
+  tap "element-tree" wheel 0 -2000
+  clock +1000 real
+  expect state revealedLayerRevision == 1
+  request POST "http://127.0.0.1:5176/fixture/select" {"site":139}
+  clock +1000 real
+  expect state revealedLayerRevision == 2
+  tap "toggle-screens"
+  tap "toggle-screens"
+  clock +100 real
+  expect tree has "element-43"
+  expect state revealedLayerRevision == 2

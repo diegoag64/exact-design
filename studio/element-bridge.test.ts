@@ -125,6 +125,7 @@ test('selection restoration waits for the new plan and verifies the source locat
   const source={file:'app.contract',line:10,col:5};
   events=[{event:'selection',build:'page',site:2,instance:[],source,rows:[{name:'background_color',editable:{rung:'template',file:'app.contract',at:{line:10,col:10},sha256:'before',row:'background-color',text:'#fff'}}]}];
   const picked=await s.poll();expect(picked.crumbs[0].label).toBe('Save');
+  expect(picked.selectionRevision).toBe(1);expect((await s.poll()).selectionRevision).toBe(1);
   s.hover('old');s.hover('');
   expect(hovers).toEqual([['phone','old'],['phone','']]);expect(s.view()).toEqual(picked);
   s.hover('old');s.hover('removed');expect(hovers.at(-1)).toEqual(['phone','']);expect(s.view()).toEqual(picked);
@@ -137,11 +138,16 @@ test('selection restoration waits for the new plan and verifies the source locat
   frame.page='generation-2';await s.poll();expect(commands).toEqual([['phone','new'],['phone','new']]);
   events=[{event:'selection',build:'page',site:40,instance:[],source,rows:[]}];
   await s.poll();expect(s.view().restoring).toBe(false);expect(s.view().selectedLabel).toBe('Save');
+  expect(s.view().selectionRevision).toBe(1);
   const immediate=s.navigate('new');expect(immediate.selecting).toBe(true);expect(immediate.tree[0].selected).toBe(true);expect(immediate.rows).toEqual([]);
+  expect(immediate.selectionRevision).toBe(2);
   events=[{event:'selection',build:'page',site:2,instance:[],source,rows:[]}];
   await s.poll();expect(s.view().selecting).toBe(true);
   events=[{event:'selection',build:'page',site:40,instance:[],source,rows:[]}];
   await s.poll();expect(s.view().selecting).toBe(false);
+  expect(s.view().selectionRevision).toBe(2);
+  events=[{event:'selection',build:'page',site:40,instance:[],source,rows:[]}];
+  expect((await s.poll()).selectionRevision).toBe(3);
   s.restoring={frame:'phone',path:node.path,file:'app.contract',line:10,col:5,sha:'after',before:'after',plan:'new-plan',sent:'',since:Date.now()};
   frame.plan='third-plan';events=[{event:'selection',build:'page',site:40,instance:[],source:{...source,line:99},rows:[]}];
   await s.poll();expect(s.view().restoring).toBe(false);expect(s.view().source).toBe('');

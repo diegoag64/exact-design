@@ -154,6 +154,7 @@ shape DesignReply
   source: string
   component: string
   version: number
+  selectionRevision: number
   message: string
   rows: DesignRow[]
   canUndo: bool
@@ -234,6 +235,21 @@ component Studio
       hoveredElement = next
       send hoverChanged = design("hover", designSession, "", 0, next, "")
   state collapsedElements = [""]
+  state revealedLayerRevision = -1
+  action revealSelectedLayer
+    match designChanged
+      case some(r)
+        collapsedElements = collapsedElements.filter(id => not r.crumbs.map(c => c.id).includes(id))
+        match first(r.tree.filter(e => e.selected))
+          case some(selected)
+            scrollIntoView(`layer-row-${selected.id}`, block="nearest", inline="nearest", behavior="instant")
+          case none
+            hand = hand
+        revealedLayerRevision = r.selectionRevision
+      case none
+        hand = hand
+  task revealLayerPanel when editing and leftOpen
+    after(1, revealSelectedLayer)
   action toggleElement(id: string)
     collapsedElements = collapsedElements.includes(id) ? collapsedElements.filter(value => value != id) : collapsedElements.concat([id])
   state designOrigin = ""
@@ -247,6 +263,7 @@ component Studio
   state designError = ""
   action startEditing
     collapsedElements = [""]
+    revealedLayerRevision = -1
     designWriting = true
     rightPanel = "open"
     send designChanged = design("open", "", doc.source, 0, doc.active, "")
@@ -313,7 +330,8 @@ component Studio
           if r.spacingFrame != ""
             postMessage(r.spacingConfig, r.spacingFrame)
           spacingFrame = r.spacingFrame
-          collapsedElements = collapsedElements.filter(id => not r.crumbs.map(c => c.id).includes(id))
+          if leftOpen and r.selectionRevision != revealedLayerRevision
+            revealSelectedLayer()
           if r.version != designVersion or r.session == ""
             spacingProperty = ""
             designError = ""
@@ -548,7 +566,7 @@ component Studio
                       column padding-left=8 padding-right=8 gap=2
                         for element, i in elementTree key=element.id
                           if element.ancestors.filter(id => collapsedElements.includes(id)).length == 0
-                            row hover=hoverElement(element.id) align-items="center" padding-left=(min(element.depth, 8) * 10) background-color=(element.selected ? "surface.selected" : "transparent") border-radius=5
+                            row id=`layer-row-${element.id}` hover=hoverElement(element.id) align-items="center" padding-left=(min(element.depth, 8) * 10) background-color=(element.selected ? "surface.selected" : "transparent") border-radius=5
                               if element.hasChildren
                                 button press=toggleElement(element.id) class=Tool width=20 height=28 padding=3 aria-label=`Toggle ${element.label}` aria-expanded=(not collapsedElements.includes(element.id)) testId=`fold-element-${i}`
                                   image "symbol:icon.disclosure" width=10 height=10 rotate=(collapsedElements.includes(element.id) ? 0 : 90)

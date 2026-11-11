@@ -48,6 +48,7 @@ export function spacingOperation(rows:Row[],property:string,value:string){
 export class DesignSession {
   client=`exact-design:${crypto.randomUUID()}`;
   cursor=0; epoch=''; files:any={}; selection:any=null; version=0;
+  selectionRevision=0;
   inverses:(string|SourceInverse)[]=[]; applied=false; busy=false;
   app='';
   bridge:ElementBridge|null=null;
@@ -107,6 +108,7 @@ export class DesignSession {
         if(this.restoring && (!frame || frame.frame!==this.restoring.frame || !node || node.path!==this.restoring.path))continue;
         if(this.restoring && ((!this.restoring.allowSamePlan&&frame!.plan===this.restoring.plan) || event.readOnly || this.files[this.restoring.file]!==this.restoring.sha))continue;
         if(this.restoring&&(event.source?.file!==this.restoring.file||event.source?.line!==this.restoring.line||event.source?.col!==this.restoring.col)){this.restoring=null;this.selection=null;this.version++;continue;}
+        if(!this.pendingSelection&&!this.restoring)this.selectionRevision++;
         if(frame&&node)this.picked={frame:frame.frame,node};
         this.selection=await this.withLayout(event);this.version++;this.applied=false;this.restoring=null;this.pendingSelection=null;
       }
@@ -153,7 +155,7 @@ export class DesignSession {
     const crumbs:typeof tree=[];let at=frame?.nodes.find(n=>n.id===selected);
     while(at&&crumbs.length<30){const entry=tree.find(n=>n.id===at!.id);if(entry)crumbs.unshift(entry);at=frame?.nodes.find(n=>n.id===at!.parent);}
     const spacingId=s&&!this.pendingSelection&&!this.restoring?selected:'',spacingPlan=frame?.plan??'';
-    return {source:s?.source?`${s.source.file}:${s.source.line}`:'',component:s?.source?.component??'',version:this.version,
+    return {source:s?.source?`${s.source.file}:${s.source.line}`:'',component:s?.source?.component??'',version:this.version,selectionRevision:this.selectionRevision,
       spacingId,spacingPlan,spacingFrame:frame?.frame??'',spacingConfig:spacingId?JSON.stringify({kind:'exact-design:spacing',id:spacingId,plan:spacingPlan}):'',
       spacingInputs:spacingRows(rows.map((r,i)=>({id:String(i),property:r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true}))),
       bridgeOrigin:this.bridge?.origin??'',tree,crumbs,selectedLabel:this.picked?.node.label??'',restoring:!!this.restoring,selecting:!!this.pendingSelection,
@@ -210,6 +212,7 @@ export class DesignSession {
     const node=frame?.nodes.find(n=>n.id===id);
     if(!frame||!node)throw new Error('This element is no longer on the screen.');
     this.picked={frame:frame.frame,node};this.selection=null;this.version++;
+    this.selectionRevision++;
     this.pendingSelection={frame:frame.frame,path:node.path,until:Date.now()+1000};
     this.restoring=null;this.bridge!.select(frame.frame,id);
     return this.view();
