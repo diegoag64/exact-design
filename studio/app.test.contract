@@ -192,3 +192,37 @@ test "connect a live app and persist its linked viewports"
   clock data
   expect tree has "layer-title"
   expect tree missing "view-1-app"
+
+test "sidebar visibility is independent and remembered"
+  size 1440x900
+  tap "toggle-screens"
+  expect tree missing "screens-panel"
+  expect tree has "inspector-panel"
+  tap "toggle-inspector"
+  expect tree missing "inspector-panel"
+  reload
+  clock data
+  expect tree missing "screens-panel"
+  expect tree missing "inspector-panel"
+  tap "toggle-screens"
+  expect tree has "screens-panel"
+  tap "toggle-inspector"
+  expect tree has "inspector-panel"
+  tap "new-screen"
+  clock data
+  expect state doc.views.length == 2
+
+test "sidebars can open on a narrow window"
+  size 390x844
+  expect tree missing "screens-panel"
+  expect tree missing "inspector-panel"
+  tap "toggle-screens"
+  expect tree has "screens-panel"
+  tap "view-view-1"
+  clock data
+  tap "toggle-inspector"
+  expect tree missing "screens-panel"
+  expect tree has "inspector-panel"
+  expect tree has "screen-name"
+  tap "toggle-inspector"
+  expect tree missing "inspector-panel"

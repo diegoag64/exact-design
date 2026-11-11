@@ -57,6 +57,7 @@ shape Reply
   maxY: number
 
 style Tool
+  box-sizing="border-box"
   display="flex"
   align-items="center"
   justify-content="center"
@@ -88,6 +89,10 @@ component Studio
   resource viewport = exactViewport() as shape Viewport
   resource doc = document() as shape Document else empty(name="Untitled")
   mutation changed as shape Reply queue refreshes doc then afterEdit
+  state leftPanel = "auto" persist
+  state rightPanel = "auto" persist
+  derive leftOpen = leftPanel == "open" or (leftPanel == "auto" and viewport.width >= 1000)
+  derive rightOpen = rightPanel == "open" or (rightPanel == "auto" and viewport.width >= 700)
   state zoom = 0.85
   state px = 64
   state py = 80
@@ -100,6 +105,17 @@ component Studio
   state codeOpen = false
   state preview = false
   state clicks = 0
+  action toggleLeft
+    leftPanel = leftOpen ? "closed" : "open"
+    if viewport.width >= 1000
+      px = px + (leftOpen ? 208 : -208)
+    else
+      if not leftOpen and viewport.width < 700
+        rightPanel = "closed"
+  action toggleRight
+    rightPanel = rightOpen ? "closed" : "open"
+    if not rightOpen and viewport.width < 700
+      leftPanel = "closed"
   action command(op: string, key: string)
     send changed = edit(op, key, "", 0, 0)
   action prop(key: string, value: string)
@@ -143,7 +159,7 @@ component Studio
   action zoomOut
     zoom = max(0.05, zoom - 0.1)
   action fitBounds(x: number, y: number, right: number, bottom: number)
-    let available = viewport.width - (viewport.width >= 1000 ? 440 : viewport.width >= 700 ? 232 : 0) - 96
+    let available = viewport.width - ((leftOpen and viewport.width >= 1000 ? 208 : 0) + (rightOpen and viewport.width >= 700 ? 232 : 0)) - 96
     let z = min(1, max(0.05, min(available / max(1, right - x), (viewport.height - 220) / max(1, bottom - y))))
     zoom = z
     px = 48 - x * z
@@ -175,145 +191,155 @@ component Studio
     clicks = clicks + 1
   view
     main testId="editor" width="100%" height="100%" display="flex" flex-direction="column" background-color="ink.inverse" color="ink.primary" font-family="system-ui" font-size=12
-      row height=48 flex-shrink=0 align-items="center" padding-left=16 padding-right=12 gap=8 border-bottom-width=1 border-bottom-style="solid" border-bottom-color="line.subtle"
+      row height=48 flex-shrink=0 align-items="center" padding-left=12 padding-right=12 gap=6 border-bottom-width=1 border-bottom-style="solid" border-bottom-color="line.subtle"
+        button press=toggleLeft class=Tool aria-label=(leftOpen ? "Hide screens" : "Show screens") aria-pressed=leftOpen title="Screens" testId="toggle-screens"
+          image "symbol:icon.panel-left"
         image "symbol:layers" aria-hidden=true color="ink.primary"
         if viewport.width >= 700
-          text "Exact Design" font-weight=600
+          text "Exact Design" font-weight=600 font-size=12
           text "/" color="ink.muted"
-        text doc.name testId="document-name"
+        text doc.name testId="document-name" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
         row flex=1
         if doc.status != ""
           text doc.status color="ink.secondary" testId="save-status"
-        button press=command("save", "") aria-keyshortcuts="Meta+s Control+s" class=Tool aria-label="Save" testId="save"
+        button press=command("save", "") aria-keyshortcuts="Meta+s Control+s" class=Tool aria-label="Save" title="Save" testId="save"
           image "symbol:download"
-        button press=command("undo", "") aria-keyshortcuts="Meta+z Control+z" class=Tool disabled=(not doc.canUndo) aria-label="Undo" testId="undo"
+        button press=command("undo", "") aria-keyshortcuts="Meta+z Control+z" class=Tool display=(viewport.width >= 700 ? "flex" : "none") disabled=(not doc.canUndo) aria-label="Undo" title="Undo" testId="undo"
           image "symbol:back"
-        button press=command("redo", "") aria-keyshortcuts="Meta+Shift+z Control+Shift+z" class=Tool disabled=(not doc.canRedo) aria-label="Redo" testId="redo"
+        button press=command("redo", "") aria-keyshortcuts="Meta+Shift+z Control+Shift+z" class=Tool display=(viewport.width >= 700 ? "flex" : "none") disabled=(not doc.canRedo) aria-label="Redo" title="Redo" testId="redo"
           image "symbol:forward-chevron"
-        button press=togglePreview class=Tool aria-label="Preview" testId="preview"
+        button press=togglePreview class=Tool aria-label="Preview" title="Preview" testId="preview"
           image "symbol:play"
         button press=toggleCode disabled=(doc.source != "") height=30 border-width=0 border-radius=6 background-color="surface.action" color="ink.inverse" padding-left=12 padding-right=12 testId="export"
           text "Export" font-size=12
-      row flex=1 min-height=0
-        column display=(viewport.width >= 1000 ? "flex" : "none") width=208 flex-shrink=0 border-right-width=1 border-right-style="solid" border-right-color="line.subtle" padding-top=16 gap=12
-          row padding-left=16 padding-right=8 align-items="center"
-            text "Screens" font-weight=600 flex=1
-            button press=command("screen", "") class=Tool aria-label="Add screen" testId="add-screen"
-              image "symbol:add"
-          scroll flex=1 min-height=0
-            column gap=2 padding-left=8 padding-right=8
-              for v in doc.views key=v.id
-                column gap=2
-                  button press=focusView(v.id, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${v.screenName}, ${v.name}` display="flex" align-items="center" gap=8 min-height=36 padding=8 border-width=0 border-radius=5 background-color=(doc.active == v.id ? "surface.selected" : "transparent") color=(doc.active == v.id ? "ink.selected" : "ink.secondary")
-                    image "symbol:document" aria-hidden=true
-                    column flex=1 min-width=0 align-items="start" gap=3
-                      text v.screenName font-size=12
-                      text `${v.name} · ${v.width} × ${v.height}` font-size=11 color=(doc.active == v.id ? "ink.selected" : "ink.muted")
-                  if doc.active == v.id and v.source == ""
-                    for n in v.layers key=n.id
-                      button press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" align-items="center" gap=8 height=32 padding-left=24 padding-right=8 border-width=0 border-radius=5 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.secondary")
-                        image (n.kind == "text" ? "symbol:compose" : n.kind == "button" ? "symbol:select" : "symbol:stop") aria-hidden=true
-                        text n.name font-size=12
+        column width=1 height=20 background-color="line.subtle" margin-left=4 margin-right=4
+        button press=toggleRight class=Tool aria-label=(rightOpen ? "Hide inspector" : "Show inspector") aria-pressed=rightOpen title="Inspector" testId="toggle-inspector"
+          image "symbol:icon.panel-right"
+      row flex=1 min-height=0 position="relative"
+        if leftOpen
+          column testId="screens-panel" position=(viewport.width >= 1000 ? "relative" : "absolute") left=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=208 flex-shrink=0 border-right-width=1 border-right-style="solid" border-right-color="line.subtle" padding-top=12 gap=8
+            row padding-left=16 padding-right=8 align-items="center"
+              text "Screens" font-weight=600 flex=1
+              button press=command("screen", "") class=Tool aria-label="Add screen" testId="add-screen"
+                image "symbol:add"
+            scroll flex=1 min-height=0
+              column gap=2 padding-left=8 padding-right=8
+                for v in doc.views key=v.id
+                  column gap=2
+                    button press=focusView(v.id, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${v.screenName}, ${v.name}` display="flex" align-items="center" gap=8 min-height=36 padding=8 border-width=0 border-radius=5 background-color=(doc.active == v.id ? "surface.selected" : "transparent") color=(doc.active == v.id ? "ink.selected" : "ink.secondary")
+                      image "symbol:document" aria-hidden=true
+                      column flex=1 min-width=0 align-items="start" gap=3
+                        text v.screenName font-size=12
+                        text `${v.name} · ${v.width} × ${v.height}` font-size=11 color=(doc.active == v.id ? "ink.selected" : "ink.muted")
+                    if doc.active == v.id and v.source == ""
+                      for n in v.layers key=n.id
+                        button press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" align-items="center" gap=8 height=32 padding-left=24 padding-right=8 border-width=0 border-radius=5 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.secondary")
+                          image (n.kind == "text" ? "symbol:compose" : n.kind == "button" ? "symbol:select" : "symbol:stop") aria-hidden=true
+                          text n.name font-size=12
         column flex=1 min-width=0 min-height=0 position="relative" overflow="hidden" background-color="surface.canvas"
           for v in doc.views key=v.id
             column position="absolute" left=((hand ? px + dx * zoom : px) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dx : 0)) * zoom) top=((hand ? py + dy * zoom : py) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dy : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dx : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dy : 0)) scale=zoom transform-origin="top left" pointer-events="none" inert=true background-color="paper" box-shadow="0 4px 16px #00000012" testId=`frame-${v.id}`
               ScreenView(source=v.source, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dx), dy=(hand ? 0 : dy), resizing=doc.resizing, activate=previewClick)
           canvas surface=design(doc.drawing, doc.selected, zoom, (hand ? px + dx * zoom : px), (hand ? py + dy * zoom : py), (hand ? 0 : dx), (hand ? 0 : dy), doc.resizing) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up wheel=wheel touch-action="none" testId="canvas" aria-label="Design canvas"
-          row position="absolute" bottom=24 left=24 padding=6 gap=4 background-color="ink.inverse" border-radius=10 box-shadow="0 2px 12px #00000012"
-            button press=selectTool aria-keyshortcuts="v" class=Tool background-color=(not hand ? "surface.selected" : "transparent") aria-label="Select" testId="select-tool"
-              image "symbol:select"
-            button press=handTool aria-keyshortcuts="h" class=Tool background-color=(hand ? "surface.selected" : "transparent") aria-label="Pan" testId="hand-tool"
-              image "symbol:reorder"
-            button press=command("add", "rectangle") disabled=(doc.source != "") class=Tool aria-label="Rectangle" testId="add-rectangle"
+          row position="absolute" bottom=20 left="50%" translate="-50% 0" padding=6 gap=4 align-items="center" border="1px solid line.subtle" background-color="ink.inverse" border-radius=10 box-shadow="0 2px 12px #00000012"
+            button press=selectTool aria-keyshortcuts="v" class=Tool background-color=(not hand ? "surface.selected" : "transparent") aria-label="Select" title="Select" testId="select-tool"
+              image "symbol:icon.pointer"
+            button press=handTool aria-keyshortcuts="h" class=Tool background-color=(hand ? "surface.selected" : "transparent") aria-label="Pan" title="Pan" testId="hand-tool"
+              image "symbol:icon.pan"
+            column width=1 height=20 background-color="line.subtle" margin-left=2 margin-right=2
+            button press=command("screen", "") class=Tool aria-label="New screen" title="New screen" testId="new-screen"
+              image "symbol:document"
+            button press=command("add", "rectangle") disabled=(doc.source != "") class=Tool aria-label="Rectangle" title="Rectangle" testId="add-rectangle"
               image "symbol:stop"
-            button press=command("add", "text") disabled=(doc.source != "") class=Tool aria-label="Text" testId="add-text"
+            button press=command("add", "text") disabled=(doc.source != "") class=Tool aria-label="Text" title="Text" testId="add-text"
               image "symbol:compose"
-            button press=command("add", "button") disabled=(doc.source != "") class=Tool aria-label="Button" testId="add-button"
+            button press=command("add", "button") disabled=(doc.source != "") class=Tool aria-label="Button" title="Button" testId="add-button"
               image "symbol:add"
-          row position="absolute" right=20 bottom=(viewport.width >= 700 ? 28 : 94) align-items="center" gap=4 background-color="ink.inverse" border-radius=8 padding=2
-            button press=zoomOut class=Tool aria-label="Zoom out" testId="zoom-out"
+          row position="absolute" right=16 bottom=(viewport.width >= 1000 ? 24 : 82) align-items="center" gap=4 background-color="ink.inverse" border-radius=8 padding=2 border="1px solid line.subtle"
+            button press=zoomOut class=Tool aria-label="Zoom out" title="Zoom out" testId="zoom-out"
               image "symbol:minus"
-            button press=resetView class=Tool width=48 aria-label="Fit all screens" testId="zoom"
+            button press=resetView class=Tool width=48 aria-label="Fit all screens" title="Fit all screens" testId="zoom"
               text `${round(zoom * 100)}%` font-size=11 font-variant-numeric="tabular-nums"
-            button press=zoomIn class=Tool aria-label="Zoom in" testId="zoom-in"
+            button press=zoomIn class=Tool aria-label="Zoom in" title="Zoom in" testId="zoom-in"
               image "symbol:add"
-        scroll display=(viewport.width >= 700 ? "flex" : "none") width=232 flex-shrink=0 border-left-width=1 border-left-style="solid" border-left-color="line.subtle"
-          column padding=16 gap=20
-            row align-items="center"
-              text "Design" font-weight=600 flex=1
-              if doc.selected != ""
-                button press=command("delete", "") class=Tool aria-label="Delete selection" testId="delete"
-                  image "symbol:delete"
-            if doc.selected == ""
-              text "Select a screen or layer" color="ink.secondary"
-            if doc.frameSelected
-              for v in doc.views.filter(v => v.id == doc.active) key=v.id
-                column gap=18
-                  input value=v.screenName change=prop("name") class=Field aria-label="Screen name" testId="screen-name"
-                  input value=v.source change=prop("source") class=Field placeholder="Preview URL" aria-label="Preview URL" testId="preview-url"
-                  row gap=8
-                    column flex=1 min-width=0 gap=5
-                      text "W" color="ink.muted" font-size=11
-                      input value=`${v.width}` change=prop("width") class=Field aria-label="Viewport width" testId="frame-width"
-                    column flex=1 min-width=0 gap=5
-                      text "H" color="ink.muted" font-size=11
-                      input value=`${v.height}` change=prop("height") class=Field aria-label="Viewport height" testId="frame-height"
-                  row gap=4
-                    button press=prop("preset", "Phone") class=Tool flex=1 width="auto" aria-label="Phone viewport" testId="preset-phone"
-                      text "Phone" font-size=11
-                    button press=prop("preset", "Tablet") class=Tool flex=1 width="auto" aria-label="Tablet viewport" testId="preset-tablet"
-                      text "Tablet" font-size=11
-                    button press=prop("preset", "Desktop") class=Tool flex=1 width="auto" aria-label="Desktop viewport" testId="preset-desktop"
-                      text "Desktop" font-size=11
-                  column gap=6
-                    text "Add viewport" font-weight=500
+        if rightOpen
+          scroll testId="inspector-panel" position=(viewport.width >= 700 ? "relative" : "absolute") right=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=232 flex-shrink=0 border-left-width=1 border-left-style="solid" border-left-color="line.subtle"
+            column padding=16 gap=20
+              row align-items="center"
+                text "Design" font-weight=600 flex=1
+                if doc.selected != ""
+                  button press=command("delete", "") class=Tool aria-label="Delete selection" testId="delete"
+                    image "symbol:delete"
+              if doc.selected == ""
+                text "Select a screen or layer" color="ink.secondary"
+              if doc.frameSelected
+                for v in doc.views.filter(v => v.id == doc.active) key=v.id
+                  column gap=18
+                    input value=v.screenName change=prop("name") class=Field aria-label="Screen name" testId="screen-name"
+                    input value=v.source change=prop("source") class=Field placeholder="Preview URL" aria-label="Preview URL" testId="preview-url"
+                    row gap=8
+                      column flex=1 min-width=0 gap=5
+                        text "W" color="ink.muted" font-size=11
+                        input value=`${v.width}` change=prop("width") class=Field aria-label="Viewport width" testId="frame-width"
+                      column flex=1 min-width=0 gap=5
+                        text "H" color="ink.muted" font-size=11
+                        input value=`${v.height}` change=prop("height") class=Field aria-label="Viewport height" testId="frame-height"
                     row gap=4
-                      button press=command("variant", "Phone") class=Tool flex=1 width="auto" aria-label="Add phone variant" testId="variant-phone"
+                      button press=prop("preset", "Phone") class=Tool flex=1 width="auto" aria-label="Phone viewport" testId="preset-phone"
                         text "Phone" font-size=11
-                      button press=command("variant", "Tablet") class=Tool flex=1 width="auto" aria-label="Add tablet variant" testId="variant-tablet"
+                      button press=prop("preset", "Tablet") class=Tool flex=1 width="auto" aria-label="Tablet viewport" testId="preset-tablet"
                         text "Tablet" font-size=11
-                      button press=command("variant", "Desktop") class=Tool flex=1 width="auto" aria-label="Add desktop variant" testId="variant-desktop"
+                      button press=prop("preset", "Desktop") class=Tool flex=1 width="auto" aria-label="Desktop viewport" testId="preset-desktop"
                         text "Desktop" font-size=11
-                  button press=command("duplicate", "") class=Tool width="100%" box-sizing="border-box" aria-label="Duplicate screen" testId="duplicate-screen"
-                    text "Duplicate screen" font-size=12
-            for n in doc.layers.filter(n => n.id == doc.selected) key=n.id
-              column gap=18
-                input value=n.name change=prop("name") class=Field aria-label="Layer name" testId="name"
-                column gap=10
-                  text "Layout" font-weight=500
-                  row gap=8
-                    column flex=1 min-width=0 gap=5
-                      text "X" color="ink.muted" font-size=11
-                      input value=`${n.x}` change=prop("x") class=Field aria-label="X position" testId="x"
-                    column flex=1 min-width=0 gap=5
-                      text "Y" color="ink.muted" font-size=11
-                      input value=`${n.y}` change=prop("y") class=Field aria-label="Y position" testId="y"
-                  row gap=8
-                    column flex=1 min-width=0 gap=5
-                      text "W" color="ink.muted" font-size=11
-                      input value=`${n.width}` change=prop("width") class=Field aria-label="Width" testId="width"
-                    column flex=1 min-width=0 gap=5
-                      text "H" color="ink.muted" font-size=11
-                      input value=`${n.height}` change=prop("height") class=Field aria-label="Height" testId="height"
-                row gap=4 background-color="surface.field" border-radius=6 padding=3
-                  button press=prop("widthMode", "fixed") class=Tool flex=1 width="auto" height=24 color="ink.primary" background-color=(n.widthMode == "fixed" ? "ink.inverse" : "transparent") aria-label="Fixed width" testId="width-fixed"
-                    text "Fixed" font-size=11
-                  button press=prop("widthMode", "fill") class=Tool flex=1 width="auto" height=24 color="ink.primary" background-color=(n.widthMode == "fill" ? "ink.inverse" : "transparent") aria-label="Fill width" testId="width-fill"
-                    text "Fill" font-size=11
-                column gap=10
-                  text "Fill" font-weight=500
-                  row gap=8 align-items="center"
-                    column width=24 height=24 border-radius=4 background-color=n.fill
-                    input value=n.fill change=prop("fill") class=Field flex=1 min-width=0 aria-label="Fill color" testId="fill"
-                if n.kind != "text"
-                  column gap=8
-                    text "Corner radius" font-weight=500
-                    input value=`${n.radius}` change=prop("radius") class=Field aria-label="Corner radius" testId="radius"
-                if n.kind != "rectangle"
+                    column gap=6
+                      text "Add viewport" font-weight=500
+                      row gap=4
+                        button press=command("variant", "Phone") class=Tool flex=1 width="auto" aria-label="Add phone variant" testId="variant-phone"
+                          text "Phone" font-size=11
+                        button press=command("variant", "Tablet") class=Tool flex=1 width="auto" aria-label="Add tablet variant" testId="variant-tablet"
+                          text "Tablet" font-size=11
+                        button press=command("variant", "Desktop") class=Tool flex=1 width="auto" aria-label="Add desktop variant" testId="variant-desktop"
+                          text "Desktop" font-size=11
+                    button press=command("duplicate", "") class=Tool width="100%" box-sizing="border-box" aria-label="Duplicate screen" testId="duplicate-screen"
+                      text "Duplicate screen" font-size=12
+              for n in doc.layers.filter(n => n.id == doc.selected) key=n.id
+                column gap=18
+                  input value=n.name change=prop("name") class=Field aria-label="Layer name" testId="name"
                   column gap=10
-                    text "Text" font-weight=500
-                    input value=n.text change=prop("text") class=Field aria-label="Text content" testId="text-content"
-                    input value=`${n.fontSize}` change=prop("fontSize") class=Field aria-label="Font size" testId="font-size"
+                    text "Layout" font-weight=500
+                    row gap=8
+                      column flex=1 min-width=0 gap=5
+                        text "X" color="ink.muted" font-size=11
+                        input value=`${n.x}` change=prop("x") class=Field aria-label="X position" testId="x"
+                      column flex=1 min-width=0 gap=5
+                        text "Y" color="ink.muted" font-size=11
+                        input value=`${n.y}` change=prop("y") class=Field aria-label="Y position" testId="y"
+                    row gap=8
+                      column flex=1 min-width=0 gap=5
+                        text "W" color="ink.muted" font-size=11
+                        input value=`${n.width}` change=prop("width") class=Field aria-label="Width" testId="width"
+                      column flex=1 min-width=0 gap=5
+                        text "H" color="ink.muted" font-size=11
+                        input value=`${n.height}` change=prop("height") class=Field aria-label="Height" testId="height"
+                  row gap=4 background-color="surface.field" border-radius=6 padding=3
+                    button press=prop("widthMode", "fixed") class=Tool flex=1 width="auto" height=24 color="ink.primary" background-color=(n.widthMode == "fixed" ? "ink.inverse" : "transparent") aria-label="Fixed width" testId="width-fixed"
+                      text "Fixed" font-size=11
+                    button press=prop("widthMode", "fill") class=Tool flex=1 width="auto" height=24 color="ink.primary" background-color=(n.widthMode == "fill" ? "ink.inverse" : "transparent") aria-label="Fill width" testId="width-fill"
+                      text "Fill" font-size=11
+                  column gap=10
+                    text "Fill" font-weight=500
+                    row gap=8 align-items="center"
+                      column width=24 height=24 border-radius=4 background-color=n.fill
+                      input value=n.fill change=prop("fill") class=Field flex=1 min-width=0 aria-label="Fill color" testId="fill"
+                  if n.kind != "text"
+                    column gap=8
+                      text "Corner radius" font-weight=500
+                      input value=`${n.radius}` change=prop("radius") class=Field aria-label="Corner radius" testId="radius"
+                  if n.kind != "rectangle"
+                    column gap=10
+                      text "Text" font-weight=500
+                      input value=n.text change=prop("text") class=Field aria-label="Text content" testId="text-content"
+                      input value=`${n.fontSize}` change=prop("fontSize") class=Field aria-label="Font size" testId="font-size"
       if codeOpen
         column position="absolute" inset=0 background-color="surface.scrim" align-items="center" justify-content="center"
           column width=680 max-width="90%" height=520 max-height="85%" padding=20 gap=16 border-radius=12 background-color="ink.inverse"

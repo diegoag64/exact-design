@@ -14,3 +14,9 @@ theme
   ink.selected = light-dark(#4563d6, #b4c1ff)
   ink.inverse = light-dark(#ffffff, #242426)
   paper = #ffffff scheme=fixed
+
+icons
+  icon.panel-left = icon(sf "sidebar.left", svg "icons/panel-left.svg")
+  icon.panel-right = icon(sf "sidebar.right", svg "icons/panel-right.svg")
+  icon.pointer = icon(sf "cursorarrow", svg "icons/pointer.svg")
+  icon.pan = icon(sf "arrow.up.and.down.and.arrow.left.and.right", svg "icons/pan.svg")
