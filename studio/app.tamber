@@ -20,3 +20,4 @@ icons
   icon.panel-right = icon(sf "sidebar.right", svg "icons/panel-right.svg")
   icon.pointer = icon(sf "cursorarrow", svg "icons/pointer.svg")
   icon.pan = icon(sf "arrow.up.and.down.and.arrow.left.and.right", svg "icons/pan.svg")
+  icon.disclosure = icon(sf "chevron.right", svg "icons/disclosure.svg")

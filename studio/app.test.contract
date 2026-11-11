@@ -93,7 +93,11 @@ test "linked viewports share edits and persist dimensions"
 test "create rename duplicate and delete screens"
   size 1440x900
   tap "add-screen"
+  clock settle
+  type "new-screen-name" "Draft"
+  tap "create-screen"
   clock data
+  clock settle
   expect state doc.views.length == 2
   expect state doc.layers.length == 0
   type "screen-name" "Settings"
@@ -209,7 +213,11 @@ test "sidebar visibility is independent and remembered"
   tap "toggle-inspector"
   expect tree has "inspector-panel"
   tap "new-screen"
+  clock settle
+  type "new-screen-name" "Draft"
+  tap "create-screen"
   clock data
+  clock settle
   expect state doc.views.length == 2
 
 test "sidebars can open on a narrow window"
@@ -245,3 +253,102 @@ test "frames snap into place as one undo step"
   clock data
   expect state doc.views.1.x == 900
   expect state doc.views.1.y == 100
+
+test "project screens share a server and group their viewports"
+  size 1440x900
+  tap "project-connection"
+  clock settle
+  type "project-name" "Morrow"
+  type "project-url" "http://127.0.0.1:5174/"
+  tap "save-project"
+  clock data
+  clock settle
+  expect state doc.projectName == "Morrow"
+  tap "add-screen"
+  clock settle
+  type "new-screen-name" "Compose"
+  type "new-screen-route" "/note"
+  tap "create-screen"
+  clock data
+  clock settle
+  expect state doc.source == "http://127.0.0.1:5174/note"
+  expect state doc.groups.length == 2
+  tap "variant-tablet"
+  clock data
+  expect state doc.groups.1.views.length == 2
+  tap "group-screen-2"
+  expect tree missing "view-view-2"
+  expect tree missing "view-view-3"
+  tap "group-screen-2"
+  expect tree has "view-view-2"
+  expect tree has "view-view-3"
+  tap "project-connection"
+  clock settle
+  type "project-url" "http://127.0.0.1:6000"
+  tap "save-project"
+  clock data
+  clock settle
+  expect state doc.views.1.source == "http://127.0.0.1:6000/note"
+  expect state doc.views.2.source == "http://127.0.0.1:6000/note"
+  tap "undo"
+  clock data
+  expect state doc.source == "http://127.0.0.1:5174/note"
+  tap "save"
+  clock data
+  reload
+  clock data
+  expect state doc.projectName == "Morrow"
+  expect state doc.groups.1.views.length == 2
+  clock settle
+  tap "view-view-2"
+  clock data
+  expect state doc.route == "/note"
+  type "screen-route" "/note?state=empty"
+  type "screen-route" key "Enter"
+  clock data
+  expect state doc.views.2.source == "http://127.0.0.1:5174/note?state=empty"
+  tap "project-connection"
+  clock settle
+  reload
+  clock data
+  clock settle
+  expect text "project-name" == "Morrow"
+  expect text "project-url" == "http://127.0.0.1:5174"
+
+test "invalid connections and duplicate routes stay in the form"
+  size 1440x900
+  tap "project-connection"
+  clock settle
+  type "project-name" "Morrow"
+  type "project-url" "javascript:bad"
+  tap "save-project"
+  clock data
+  expect tree has "library-error"
+  expect state doc.projectUrl == ""
+  type "project-url" "http://127.0.0.1:5174"
+  tap "save-project"
+  clock data
+  clock settle
+  tap "add-screen"
+  clock settle
+  type "new-screen-name" "Library"
+  tap "create-screen"
+  clock data
+  clock settle
+  tap "add-screen"
+  clock settle
+  type "new-screen-name" "Again"
+  tap "create-screen"
+  clock data
+  expect text "library-error" == "That route is already in your screen library."
+  expect state doc.groups.length == 2
+  tap "close-library"
+  clock settle
+  tap "project-connection"
+  clock settle
+  tap "disconnect-project"
+  clock data
+  clock settle
+  expect state doc.projectUrl == ""
+  expect state doc.source == "http://127.0.0.1:5174/"
+  expect state doc.route == ""

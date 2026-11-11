@@ -4,6 +4,7 @@ import { projectUrl, screenRoute } from './project';
 test('server URLs and route paths are normalized without allowing another origin',()=>{
   expect(projectUrl(' http://127.0.0.1:5174/ ')).toBe('http://127.0.0.1:5174');
   expect(projectUrl('http://[::1]:5174')).toBe('http://[::1]:5174');
+  expect(projectUrl('HTTPS://EXAMPLE.COM/')).toBe('https://example.com');
   expect(screenRoute('/notes/7?mode=empty#details')).toBe('/notes/7?mode=empty#details');
   for(const url of ['javascript:alert(1)','http://a:99999','https://user:pass@a','https://a/path','']) expect(()=>projectUrl(url)).toThrow();
   for(const path of ['//other.com','/\\other.com','https://other.com','/bad path']) expect(()=>screenRoute(path)).toThrow();

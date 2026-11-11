@@ -17,11 +17,11 @@ Setup downloads Exact at revision `336a059fd1464bee7c61640afb7124ebf276d06d` int
 
 ## Arrange screens
 
-Click + beside Screens to add a blank screen. Select a screen in the sidebar or click its canvas title to edit its name and viewport dimensions. Drag the title to move the frame; drag the lower-right handle to resize it. Moving frames snap to nearby edges, centers, and an 80-pixel gap beside other frames. Pink guides show the alignment or spacing. Hold Option/Alt while dragging to ignore snapping. A completed drag is one undo step.
+Click + beside Screens to name a screen and choose its first viewport. With a project connected, choose a project route or a blank editable screen. The sidebar groups viewport variants under each screen; click the screen name to collapse or expand the group. Select a viewport in the sidebar or click its canvas title to edit its screen name and dimensions. Drag the title to move the frame; drag the lower-right handle to resize it. Moving frames snap to nearby edges, centers, and an 80-pixel gap beside other frames. Pink guides show the alignment or spacing. Hold Option/Alt while dragging to ignore snapping. A completed drag is one undo step.
 
 Use Add viewport in the inspector to create a linked phone, tablet, or desktop variant. Layer edits apply to every viewport of that screen. The preset buttons above it resize the selected viewport. Duplicate screen creates an independent copy of the content. Deleting the last viewport of a screen removes that screen; the final viewport in the workspace cannot be deleted. Undo restores deleted content.
 
-New frames appear to the right, and the canvas fits them into view. Click a sidebar entry to focus a viewport, or the zoom percentage to fit all screens.
+New screens appear below the existing frames. Viewport variants appear to the right, and the canvas fits new frames into view. Click a sidebar entry to focus a viewport, or the zoom percentage to fit all screens.
 
 ## Connect a running Exact app
 
@@ -31,7 +31,9 @@ Run the editor with `bun run dev` and open `http://127.0.0.1:5173/`. In your Exa
 EXACT_TOOL_PORT=5173 bun exact.mjs web --port 5174
 ```
 
-Select a screen and paste `http://127.0.0.1:5174/` into **Preview URL**. Include a route in the URL to show a specific app screen. Add phone, tablet, and desktop variants to compare the same app at independent viewport sizes. Exact's `exactViewport()` and responsive styles receive each frame's dimensions, regardless of canvas zoom.
+Click **Connect project** above Screens, give the project a name, and enter `http://127.0.0.1:5174`. Click + beside Screens to add a named route, such as Home at `/` or Settings at `/settings`. Routes are entered manually; the library does not discover them from source files. Add phone, tablet, and desktop variants to compare each screen at independent viewport sizes. Exact's `exactViewport()` and responsive styles receive each frame's dimensions, regardless of canvas zoom.
+
+Click the project name in the sidebar to change its server address. Every linked screen follows that change. Disconnect keeps the current preview URLs, and Undo restores the connection. Existing standalone Preview URLs still work; connecting a project adopts matching URLs into its route library. The inspector edits a linked screen's route or a standalone screen's Preview URL.
 
 The canvas lets you arrange and resize frames. Use Preview to interact with the active app. Edit the connected app's Contract files in its repository; its dev server updates the frames. Clearing Preview URL restores that screen's editable layers. Export and layer tools are disabled while a screen is connected.
 
@@ -43,7 +45,7 @@ To try the included Exact example, run this in a second terminal:
 bun run demo
 ```
 
-Paste `http://127.0.0.1:5174/` into Preview URL. The example is Morrow, a personal notebook with illustrated covers, search, collections, favorites, and an editor that saves notes locally. Cards use three columns on desktop, two on tablet, and one below 600 pixels. Light and dark themes follow the system setting. Each frame has its own running instance; browser storage remains shared by origin.
+Connect a project named Morrow at `http://127.0.0.1:5174`, then add Library at `/` and Compose at `/note`. The example is a personal notebook with illustrated covers, search, collections, favorites, and an editor that saves notes locally. Cards use three columns on desktop, two on tablet, and one below 600 pixels. Light and dark themes follow the system setting. Each frame has its own running instance; browser storage remains shared by origin.
 
 ## Edit a screen
 
@@ -51,7 +53,7 @@ Select a layer on the canvas or in the left panel. Drag it to move it, or drag i
 
 The bottom toolbar adds rectangles, text, and buttons. Use the pan tool or scroll the trackpad to move around. Pinch to zoom. Click the percentage to fit all screens.
 
-Save writes the current document to this app's local storage. Use the same development URL and port to reopen browser documents. Save is explicit; unsaved changes do not survive a reload.
+Save writes the current document, project connection, and screen library to this app's local storage. Use the same development URL and port to reopen browser documents. Save is explicit; unsaved changes do not survive a reload.
 
 The canvas and Preview use the same Exact components for editable layers. Preview buttons increment a small click counter to demonstrate interaction. Export opens the active viewport’s generated Contract source for copying. Export preserves Fill width rules instead of baking the active viewport width. The exported buttons have no action assigned; connect their behavior in your application.
 
@@ -67,7 +69,7 @@ bun run build
 bun tools/demo.mjs test web
 ```
 
-The model tests cover hit testing, history, property validation, file validation, and export escaping. The interaction tests cover edits, undo, creation, deletion, saving across a reload, live preview, canvas dragging, and resizing.
+The model tests cover hit testing, history, property validation, file migration, export escaping, and shared project routes. The interaction tests cover edits, undo, creation, deletion, saving across a reload, live preview, canvas dragging, resizing, project connections, and grouped screen variants.
 
 ## Current scope
 
@@ -84,6 +86,7 @@ Source files:
 - `studio/model.ts`: document model, editing commands, and Contract export.
 - `studio/render.ts`: canvas labels and selection handles.
 - `studio/workspace.ts`: screens, viewports, responsive geometry, and live app URLs.
+- `studio/project.ts`: project URL and screen route validation.
 - `examples/responsive`: a running Exact app for viewport comparisons.
 - `studio/app.tamber`: editor theme.
 
