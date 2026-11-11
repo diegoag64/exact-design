@@ -1,20 +1,20 @@
-import { Editor, initial, validate, exportContract, type Layer } from './model';
+import { Editor, initial, validate, exportContract, resolveLayer, type Layer } from './model';
 export type Screen = { id: string; name: string; layers: Layer[] };
 export type View = { id: string; screenId: string; name: string; x: number; y: number; width: number; height: number };
 export type Workspace = { version: 2; name: string; screens: Screen[]; views: View[] };
 export const presets: Record<string, [number, number]> = { Phone: [390, 844], Tablet: [768, 1024], Desktop: [1440, 900] };
-export const createWorkspace = (): Workspace => ({ version: 2, name: 'Untitled', screens: [{ id: 'screen-1', name: 'Home', layers: initial().layers }], views: [{ id: 'view-1', screenId: 'screen-1', name: 'Custom', x: 0, y: 0, width: 720, height: 520 }] });
+export const createWorkspace = (): Workspace => ({ version: 2, name: 'Untitled', screens: [{ id: 'screen-1', name: 'Home', layers: initial().layers.map(n => n.kind === 'button' ? n : {...n, widthMode: 'fill', right: 720 - n.x - n.width, fontSize: n.id === 'title' ? 28 : n.id === 'card-title' ? 18 : n.fontSize, height: n.id === 'card-title' ? 44 : n.id === 'card-copy' ? 48 : n.height}) }], views: [{ id: 'view-1', screenId: 'screen-1', name: 'Custom', x: 0, y: 0, width: 720, height: 520 }] });
 export function loadWorkspace(value: unknown): Workspace {
   if ((value as {version?: number})?.version === 1) {
     const old = validate(value), next = createWorkspace();
     next.name = old.name; next.screens[0].layers = old.layers; return next;
   }
-  const d = value as Workspace;
+  const d = structuredClone(value) as Workspace;
   if (!d || d.version !== 2 || typeof d.name !== 'string' || !Array.isArray(d.screens) || !Array.isArray(d.views) || !d.views.length || !d.screens.length || d.views.length > 200 || d.screens.length > 100) throw new Error('Invalid workspace');
   const ids = new Set<string>();
   for (const s of d.screens) {
     if (!s || typeof s.id !== 'string' || !s.id || ids.has(s.id) || typeof s.name !== 'string') throw new Error('Invalid screen');
-    ids.add(s.id); validate({version: 1, name: s.name, width:720, height:520, layers:s.layers});
+    ids.add(s.id); s.layers = validate({version: 1, name: s.name, width:720, height:520, layers:s.layers}).layers;
   }
   for (const v of d.views) {
     if (!v || typeof v.id !== 'string' || !v.id || ids.has(v.id) || typeof v.name !== 'string' || !d.screens.some(s => s.id === v.screenId)) throw new Error('Invalid viewport');
@@ -28,7 +28,8 @@ export class WorkspaceEditor {
   document = createWorkspace(); active = 'view-1'; selected = ''; past: Workspace[] = []; future: Workspace[] = [];
   get view() { return this.document.views.find(v => v.id === this.active) ?? this.document.views[0]; }
   get screen() { return this.document.screens.find(s => s.id === this.view.screenId)!; }
-  get target() { return this.selected === this.view.id ? this.view : this.screen.layers.find(n => n.id === this.selected); }
+  get target() { return this.selected === this.view.id ? this.view : this.layers.find(n => n.id === this.selected); }
+  get layers() { return this.screen.layers.map(n=>resolveLayer(n,this.view.width)); }
   change(work: (d: Workspace) => void) {
     const next = structuredClone(this.document); work(next);
     if (JSON.stringify(next) === JSON.stringify(this.document)) return;
@@ -63,7 +64,17 @@ export class WorkspaceEditor {
     const id=this.active; this.change(d=>{d.views=d.views.filter(v=>v.id!==id); d.screens=d.screens.filter(s=>d.views.some(v=>v.screenId===s.id));}); this.selected='';
   }
   property(key: string,value: string) {
-    if(this.selected!==this.view.id) {this.layerEdit(e=>e.property(key,value)); return;}
+    if(this.selected!==this.view.id) {
+      const id=this.selected, screenId=this.screen.id, width=this.view.width;
+      if(key==='widthMode' && ['fixed','fill'].includes(value)) {
+        this.change(d=>{ const n=d.screens.find(s=>s.id===screenId)!.layers.find(n=>n.id===id); if(!n)return;
+          const current=resolveLayer(n,width).width; n.width=current; n.right=width-n.x-current; n.widthMode=value;
+        });
+      } else if(key==='width' && this.target && this.screen.layers.find(n=>n.id===id)?.widthMode==='fill') {
+        if(value.trim() && Number.isFinite(Number(value))) this.change(d=>{const n=d.screens.find(s=>s.id===screenId)!.layers.find(n=>n.id===id)!; n.width=Math.max(1,Math.min(10000,Math.round(Number(value))));n.right=width-n.x-n.width;});
+      } else this.layerEdit(e=>e.property(key,value));
+      return;
+    }
     const id=this.active;
     this.change(d=>{ const v=d.views.find(v=>v.id===id)!;
       if(key==='name' && value.trim()) d.screens.find(s=>s.id===v.screenId)!.name=value.trim().slice(0,120);
@@ -75,7 +86,7 @@ export class WorkspaceEditor {
     if(!Number.isFinite(x+y)) return;
     const id=this.selected, active=this.active;
     this.change(d=>{ const v=d.views.find(v=>v.id===active)!; const n=id===active?v:d.screens.find(s=>s.id===v.screenId)!.layers.find(n=>n.id===id); if(!n)return;
-      if(resize) { n.width=Math.min(10000,Math.max(id===active?100:1,Math.round(n.width+x))); n.height=Math.min(10000,Math.max(id===active?100:1,Math.round(n.height+y))); if(id===active)v.name='Custom'; }
+      if(resize) { if(id!==active && 'widthMode' in n && n.widthMode==='fill') { const current=resolveLayer(n,v.width).width; n.right=v.width-n.x-Math.min(10000,Math.max(1,Math.round(current+x))); } n.width=Math.min(10000,Math.max(id===active?100:1,Math.round(n.width+x))); n.height=Math.min(10000,Math.max(id===active?100:1,Math.round(n.height+y))); if(id===active)v.name='Custom'; }
       else {n.x=Math.round(n.x+x);n.y=Math.round(n.y+y);}
     });
   }
@@ -86,7 +97,7 @@ export class WorkspaceEditor {
     for(const f of [...this.document.views].reverse()) {
       if(x<f.x || x>f.x+f.width || y<f.y-tolerance*3 || y>f.y+f.height) continue;
       this.active=f.id;
-      const layer=y>=f.y?[...this.screen.layers].reverse().find(n=>x-f.x>=n.x && y-f.y>=n.y && x-f.x<=n.x+n.width && y-f.y<=n.y+n.height):undefined;
+      const layer=y>=f.y?[...this.layers].reverse().find(n=>x-f.x>=n.x && y-f.y>=n.y && x-f.x<=n.x+n.width && y-f.y<=n.y+n.height):undefined;
       this.selected=layer?.id??f.id; return false;
     }
     this.selected='';return false;

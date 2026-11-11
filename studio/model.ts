@@ -1,6 +1,6 @@
-export type Layer = { id: string; kind: string; name: string; x: number; y: number; width: number; height: number; fill: string; text: string; fontSize: number; radius: number };
+export type Layer = { id: string; kind: string; name: string; x: number; y: number; width: number; height: number; fill: string; text: string; fontSize: number; radius: number; widthMode: string; right: number };
 export type Design = { version: 1; name: string; width: number; height: number; layers: Layer[] };
-const layer = (id: string, kind: string, name: string, x: number, y: number, width: number, height: number, fill: string, text = '', fontSize = 16, radius = 0): Layer => ({ id, kind, name, x, y, width, height, fill, text, fontSize, radius });
+const layer = (id: string, kind: string, name: string, x: number, y: number, width: number, height: number, fill: string, text = '', fontSize = 16, radius = 0): Layer => ({ id, kind, name, x, y, width, height, fill, text, fontSize, radius, widthMode: 'fixed', right: 0 });
 export const initial = (): Design => ({ version: 1, name: 'Untitled', width: 720, height: 520, layers: [
   layer('title', 'text', 'Heading', 56, 60, 608, 48, '#202124', 'A little room to think.', 32),
   layer('description', 'text', 'Description', 56, 120, 608, 28, '#787a80', 'Make space for your next idea.', 16),
@@ -10,12 +10,14 @@ export const initial = (): Design => ({ version: 1, name: 'Untitled', width: 720
   layer('button', 'button', 'Button', 56, 410, 152, 44, '#292a2d', 'Get started', 14, 8),
 ] });
 export function validate(value: unknown): Design {
-  const d = value as Design;
+  const d = structuredClone(value) as Design;
   if (!d || d.version !== 1 || typeof d.name !== 'string' || !Array.isArray(d.layers) || d.layers.length > 1000 || d.width !== 720 || d.height !== 520) throw new Error('Unsupported document');
   const ids = new Set<string>();
   for (const n of d.layers) {
     if (!n || typeof n.id !== 'string' || ids.has(n.id) || !['text', 'rectangle', 'button'].includes(n.kind)) throw new Error('Invalid layer');
     ids.add(n.id);
+    n.widthMode ??= 'fixed'; n.right ??= 0;
+    if (!['fixed', 'fill'].includes(n.widthMode) || !Number.isFinite(n.right)) throw new Error('Invalid width constraint');
     for (const k of ['x', 'y', 'width', 'height', 'fontSize', 'radius'] as const) if (!Number.isFinite(n[k])) throw new Error('Invalid geometry');
     if (n.width < 1 || n.height < 1 || n.fontSize < 1 || n.radius < 0 || !/^#[\da-f]{6}$/i.test(n.fill) || typeof n.text !== 'string' || typeof n.name !== 'string') throw new Error('Invalid properties');
   }
@@ -57,12 +59,16 @@ export class Editor {
 }
 export function exportContract(d: Design): string {
   const q = JSON.stringify;
-  const lines = ['component Screen', '  view', `    column position="relative" width=${d.width} height=${d.height} background-color="#ffffff"`];
+  const lines = ['component Screen', '  view', `    column position="relative" width="100%" height=${d.height} overflow="hidden" background-color="#ffffff"`];
   for (const n of d.layers) {
-    const geometry = `position="absolute" left=${n.x} top=${n.y} width=${n.width} height=${n.height}`;
-    if(n.kind === 'text') lines.push(`      text ${q(n.text)} ${geometry} color=${q(n.fill)} font-size=${n.fontSize}`);
-    else if(n.kind === 'button') lines.push(`      button ${geometry} background-color=${q(n.fill)} color="#ffffff" border-radius=${n.radius} aria-label=${q(n.text)}`, `        text ${q(n.text)} font-size=${n.fontSize}`);
+    const geometry = `position="absolute" left=${n.x} top=${n.y} width=${n.widthMode === 'fill' ? q(`max(1px, calc(100% - ${n.x + n.right}px))`) : n.width} height=${n.height}`;
+    if(n.kind === 'text') lines.push(`      text ${q(n.text)} ${geometry} color=${q(n.fill)} font-size=${n.fontSize} line-height=1.2 white-space="pre-wrap" overflow-wrap="anywhere" overflow="hidden"`);
+    else if(n.kind === 'button') lines.push(`      button ${geometry} background-color=${q(n.fill)} color="#ffffff" border-radius=${n.radius} border-width=0 padding=0 display="flex" align-items="center" justify-content="center" box-sizing="border-box" overflow="hidden" aria-label=${q(n.text)}`, `        text ${q(n.text)} font-size=${n.fontSize} line-height=1.2 white-space="pre-wrap" overflow-wrap="anywhere" overflow="hidden"`);
     else lines.push(`      column ${geometry} background-color=${q(n.fill)} border-radius=${n.radius}`);
   }
   return lines.join('\n') + '\n';
+}
+
+export function resolveLayer(n: Layer, viewportWidth: number): Layer {
+  return {...n, width: n.widthMode === 'fill' ? Math.max(1, viewportWidth - n.x - n.right) : n.width};
 }

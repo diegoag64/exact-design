@@ -10,6 +10,8 @@ shape Layer
   text: string
   fontSize: number
   radius: number
+  widthMode: string
+  right: number
 
 shape CanvasView
   layers: Layer[]
