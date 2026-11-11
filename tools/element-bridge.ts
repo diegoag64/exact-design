@@ -16,8 +16,13 @@ export class ElementBridge {
   }
   get origin(){return this.server.url.origin;}
   select(frame:string,id:string){
-    const command={seq:++this.seq,op:'select',id,plan:this.frames.get(frame)?.plan??''};
-    this.commands.set(frame,[command]);
+    this.send(frame,'select',id);
+  }
+  hover(frame:string,id:string){this.send(frame,'hover',id);}
+  send(frame:string,op:string,id:string){
+    const command={seq:++this.seq,op,id,plan:this.frames.get(frame)?.plan??''};
+    // Keep the latest selection and hover independently for reconnects and polling.
+    this.commands.set(frame,[...(this.commands.get(frame)??[]).filter(c=>c.op!==op),command]);
     for(const listener of this.listeners.get(frame)??[])try{listener.enqueue(this.event(command));}catch{this.listeners.get(frame)?.delete(listener);}
   }
   event(command:{seq:number}){return new TextEncoder().encode(`id: ${command.seq}\ndata: ${JSON.stringify(command)}\n\n`);}

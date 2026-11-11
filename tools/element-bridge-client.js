@@ -1,7 +1,21 @@
 // Runs only in the local development proxy, never in the app's source.
 const frame=new URL(location.href).searchParams.get('__ed_frame')||'preview';
-const nodes=new Map();let command=0,working=false,pushed=false;
+const nodes=new Map();let command=0,selectionCommand=0,working=false,pushed=false;
 const style=document.createElement('style');style.textContent='#exact-inspect{display:none!important}';document.head.append(style);
+const outline=document.createElement('div');outline.dataset.edHover='';outline.setAttribute('aria-hidden','true');
+outline.style.cssText='position:fixed;pointer-events:none;z-index:2147483647;box-sizing:border-box;border:1px solid #3b82f6;';
+let hovered='',hoverPlan='',hoverAnimation=0;
+function clearHover(){hovered='';cancelAnimationFrame(hoverAnimation);outline.remove();}
+function drawHover(){
+  const el=nodes.get(hovered);
+  if(!el?.isConnected||hoverPlan!==globalThis.exact?.plan||!document.getElementById('exact-inspect')){clearHover();return;}
+  const rect=el.getBoundingClientRect();
+  Object.assign(outline.style,{left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});
+  if(!outline.isConnected)document.body.append(outline);
+  hoverAnimation=requestAnimationFrame(drawHover);
+}
+function hover(id,plan){clearHover();if(!id||plan!==globalThis.exact?.plan)return;hovered=id;hoverPlan=plan;drawHover();}
+addEventListener('pagehide',clearHover);
 function snapshot(){
   nodes.clear();const rows=[],ids=new Map();
   for(const el of document.querySelectorAll('#exact-root [data-site]')){
@@ -25,7 +39,7 @@ async function select(id,sequence){
   const el=nodes.get(id);if(!el?.isConnected||!document.getElementById('exact-inspect'))return;
   el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
   await new Promise(requestAnimationFrame);
-  if(sequence!==command)return;
+  if(sequence!==selectionCommand)return;
   const rect=el.getBoundingClientRect(),x=Math.max(1,Math.min(innerWidth-1,rect.left+rect.width/2)),y=Math.max(1,Math.min(innerHeight-1,rect.top+rect.height/2));
   // The inspector's gate receives the press. Keep descendants out of hit testing
   // briefly so a container can be selected even when children cover its padding.
@@ -33,7 +47,7 @@ async function select(id,sequence){
   const mask=document.createElement('style');mask.textContent=`[data-ed-pick="${marker}"] *{pointer-events:none!important}`;document.head.append(mask);
   try{
     const inspector=await import('/__dev/inspect.js');
-    if(sequence!==command)return;
+    if(sequence!==selectionCommand)return;
     for(const type of ['pointerdown','pointerup'])inspector.gate(new PointerEvent(type,{bubbles:true,clientX:x,clientY:y,pointerId:991,button:0}));
   }
   finally{mask.remove();el.removeAttribute('data-ed-pick');}
@@ -41,10 +55,11 @@ async function select(id,sequence){
 async function deliver(task){
   if(!Number.isSafeInteger(task.seq)||task.seq<=command)return;
   command=task.seq;
-  if(task.op==='select'&&task.plan===globalThis.exact?.plan)await select(task.id,task.seq);
+  if(task.op==='select'){selectionCommand=task.seq;if(task.plan===globalThis.exact?.plan)await select(task.id,task.seq);}
+  if(task.op==='hover')hover(task.id,task.plan);
 }
 const events=new EventSource('/__exact_design/events?frame='+encodeURIComponent(frame));
-events.onopen=()=>{pushed=true;};events.onerror=()=>{pushed=false;};
+events.onopen=()=>{pushed=true;};events.onerror=()=>{pushed=false;clearHover();};
 events.onmessage=e=>{try{void deliver(JSON.parse(e.data)).catch(()=>{});}catch{}};
 async function tick(){
   if(working)return;working=true;

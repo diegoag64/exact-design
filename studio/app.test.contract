@@ -490,6 +490,14 @@ test "navigate rendered layers and keep selection through edits and undo"
   clock data
   expect text "breadcrumb-2" == "Save"
   expect text "design-property-0" == "#ffffff"
+  tap "element-1" hover
+  clock data
+  expect state hoveredElement == "root/0:main/0:section"
+  expect text "breadcrumb-2" == "Save"
+  expect text "design-property-0" == "#ffffff"
+  tap "undo-app-design" hover
+  clock data
+  expect state hoveredElement == ""
   type "design-property-0" "#123456"
   type "design-property-0" key "Enter"
   clock data

@@ -34,6 +34,7 @@ export class DesignSession {
   app='';
   bridge:ElementBridge|null=null;
   preferredFrame='';
+  hoveredFrame='';
   ended=false;
   picked:{frame:string;node:ElementNode}|null=null;
   pendingSelection:{frame:string;path:string;until:number}|null=null;
@@ -174,7 +175,14 @@ export class DesignSession {
     this.restoring=null;this.bridge!.select(frame.frame,id);
     return this.view();
   }
-  async close() {await this.call({method:'inspect',client:this.client,on:false});}
+  hover(id:string){
+    const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??[...this.bridge.frames.values()][0]);
+    const next=frame&&id&&frame.nodes.some(n=>n.id===id)?frame.frame:'';
+    if(this.hoveredFrame&&this.hoveredFrame!==next)this.bridge?.hover(this.hoveredFrame,'');
+    if(next)this.bridge!.hover(next,id);
+    this.hoveredFrame=next;
+  }
+  async close() {this.hover('');await this.call({method:'inspect',client:this.client,on:false});}
 }
 const sessions=new Map<string,{session:DesignSession;seen:number}>();
 const optionLabels:Record<string,string>={row:'Row',column:'Column','row-reverse':'Row reversed','column-reverse':'Column reversed',stretch:'Stretch','flex-start':'Start',center:'Center','flex-end':'End',baseline:'Baseline','space-between':'Space between','space-around':'Space around','space-evenly':'Space evenly',nowrap:'No wrap',wrap:'Wrap','wrap-reverse':'Wrap reversed'};
@@ -198,6 +206,7 @@ export async function designRequest(body:any) {
   const entry=sessions.get(body.session);
   if(!entry) throw new Error('The editing session ended. Connect again.');
   entry.seen=Date.now();const s=entry.session;
+  if(body.op==='hover'){s.hover(String(body.row??''));return {};}
   if(body.op==='close') {await s.close();sessions.delete(body.session);return {};}
   if(body.op==='poll') {
     const view=s.busy?s.view():await s.poll();

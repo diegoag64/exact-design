@@ -186,7 +186,14 @@ component Studio
   mutation changed as shape Reply queue refreshes doc then afterEdit
   mutation libraryChanged as shape Reply queue refreshes doc then afterLibrary
   mutation designChanged as shape DesignReply queue then afterDesign
+  mutation hoverChanged as shape DesignReply queue
   state designSession = ""
+  state hoveredElement = ""
+  action hoverElement(id: string, on: bool)
+    if editing and (on or hoveredElement == id)
+      let next = on ? id : ""
+      hoveredElement = next
+      send hoverChanged = design("hover", designSession, "", 0, next, "")
   state collapsedElements = [""]
   action toggleElement(id: string)
     collapsedElements = collapsedElements.includes(id) ? collapsedElements.filter(value => value != id) : collapsedElements.concat([id])
@@ -205,6 +212,7 @@ component Studio
     rightPanel = "open"
     send designChanged = design("open", "", doc.source, 0, doc.active, "")
   action finishEditing
+    hoveredElement = ""
     designWriting = true
     send designChanged = design("close", designSession, "", 0, "", "")
     designSession = ""
@@ -471,7 +479,7 @@ component Studio
                       column padding-left=8 padding-right=8 gap=2
                         for element, i in elementTree key=element.id
                           if element.ancestors.filter(id => collapsedElements.includes(id)).length == 0
-                            row align-items="center" padding-left=(min(element.depth, 8) * 10) background-color=(element.selected ? "surface.selected" : "transparent") border-radius=5
+                            row hover=hoverElement(element.id) align-items="center" padding-left=(min(element.depth, 8) * 10) background-color=(element.selected ? "surface.selected" : "transparent") border-radius=5
                               if element.hasChildren
                                 button press=toggleElement(element.id) class=Tool width=20 height=28 padding=3 aria-label=`Toggle ${element.label}` aria-expanded=(not collapsedElements.includes(element.id)) testId=`fold-element-${i}`
                                   image "symbol:icon.disclosure" width=10 height=10 rotate=(collapsedElements.includes(element.id) ? 0 : 90)
