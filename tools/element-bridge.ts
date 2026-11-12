@@ -5,6 +5,9 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {decodeSpacing} from '../studio/spacing';
 export type ElementNode={id:string;identity:string;path:string;parent:string;depth:number;label:string;kind?:string;tag:string;site:number;instance:unknown[]};
+/** Frames that reported recently. Frame ids are scoped to a studio page, so a reload leaves the old page's
+ *  frames in the table until they expire; live frames report every 400ms. A frame without a time counts as live. */
+export function liveFrames(frames:Map<string,ElementFrame>){const now=Date.now();return [...frames.values()].filter(f=>f.seen===undefined||now-f.seen<5000);}
 export type ElementFrame={frame:string;page?:string;build:string;plan:string;inspecting:boolean;nodes:ElementNode[];seen:number;contentHeight?:number;viewportHeight?:number;fullHeight?:boolean;width?:number;url?:string;routeUrl?:string};
 const script=readFileSync(new URL('./element-bridge-client.js',import.meta.url),'utf8');
 const bridges=new Map<string,ElementBridge>();
@@ -74,7 +77,7 @@ export class ElementBridge {
   private syncHover(){
     const active=this.activeHover,source=active&&this.frames.get(active.frame);
     if(active&&(!source||!source.inspecting||source.page!==active.page||source.plan!==active.plan||this.route(source)!==active.route||!source.nodes.some(n=>n.site===active.site&&JSON.stringify(n.instance)===active.instance)))this.activeHover=null;
-    for(const frame of this.frames.values()){
+    for(const frame of liveFrames(this.frames)){
       const current=this.activeHover;
       const matches=current&&frame.inspecting&&frame.plan===current.plan&&(frame.frame===current.frame||current.route&&this.route(frame)===current.route)?frame.nodes.filter(n=>n.site===current.site&&JSON.stringify(n.instance)===current.instance):[];
       // Never fall back to a DOM path or label: responsive branches and repeated
@@ -174,8 +177,14 @@ export class ElementBridge {
     if(url.pathname==='/__exact_design/tree' && req.method==='POST'){
       const body=await req.json();
       if(typeof body.frame!=='string'||body.frame.length>100||typeof body.build!=='string'||body.build.length>200||typeof body.plan!=='string'||body.plan.length>100||!Array.isArray(body.nodes)||body.nodes.length>600)return new Response(null,{status:400});
-      for(const [key,frame]of this.frames)if(Date.now()-frame.seen>30000)this.frames.delete(key);
-      if(!this.frames.has(body.frame)&&this.frames.size>=200)return new Response(null,{status:429});
+      for(const [key,frame]of this.frames)if(Date.now()-frame.seen>30000){this.frames.delete(key);this.commands.delete(key);}
+      // Frame ids are scoped to a studio page, so each reload registers new ones. Live frames report every 400ms;
+      // at capacity, make room by dropping the frame a closed page left behind longest ago.
+      if(!this.frames.has(body.frame)&&this.frames.size>=200){
+        const stalest=[...this.frames.values()].reduce((a,b)=>b.seen<a.seen?b:a);
+        if(Date.now()-stalest.seen<5000)return new Response(null,{status:429});
+        this.frames.delete(stalest.frame);this.commands.delete(stalest.frame);
+      }
       const nodes=body.nodes.filter((n:any)=>n&&typeof n.id==='string'&&n.id.length<2048&&typeof n.identity==='string'&&n.identity.length<2048&&typeof n.path==='string'&&n.path.length<4096&&typeof n.parent==='string'&&n.parent.length<2048&&typeof n.label==='string'&&n.label.length<=120&&typeof n.tag==='string'&&n.tag.length<40&&Number.isSafeInteger(n.depth)&&n.depth>=0&&n.depth<1000&&Number.isSafeInteger(n.site)&&Array.isArray(n.instance));
       const previous=this.frames.get(body.frame);
       const frame={...(previous?.page===body.page?{contentHeight:previous?.contentHeight,viewportHeight:previous?.viewportHeight,fullHeight:previous?.fullHeight,width:previous?.width,url:previous?.url}:{}),routeUrl:typeof body.routeUrl==='string'&&body.routeUrl.length<=4096?body.routeUrl:undefined,frame:body.frame,page:typeof body.page==='string'&&body.page.length<=100?body.page:'',build:body.build,plan:body.plan,inspecting:body.inspecting===true,nodes,seen:Date.now()};

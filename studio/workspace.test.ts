@@ -108,3 +108,27 @@ test('project setup connects, adds missing routes once, replaces the untouched s
   e.selected='title';e.property('text','Mine');e.setupProject('Ember','http://127.0.0.1:5174',routes,'Phone');
   expect(e.document.screens.map(s=>s.name)).toEqual(['Home','Today','Diary']);
 });
+
+test('hiding screens and viewports removes them from the canvas, hit testing and snapping, and undoes',()=>{
+  const e=new WorkspaceEditor(); e.addView('Phone'); e.addView('',true);
+  const [first,phone,other]=e.document.views;
+  expect(e.setHidden(phone.id,true)).toBe(true);
+  expect(e.shownFrames.map(v=>v.id)).toEqual([first.id,other.id]);
+  e.hit(phone.x+10,phone.y+10); expect(e.selected).not.toBe(phone.id);
+  expect(e.setHidden('screen-1',true)).toBe(true);
+  expect(e.shownFrames.map(v=>v.id)).toEqual([other.id]);
+  expect(loadWorkspace(e.document)).toEqual(e.document);
+  // Showing the screen keeps the viewport that was hidden on its own.
+  e.setHidden('screen-1',false); expect(e.shownFrames.map(v=>v.id)).toEqual([first.id,other.id]);
+  e.undo(); e.undo(); e.undo(); expect(e.shownFrames.length).toBe(3);
+});
+test('showing a viewport inside a hidden screen shows only that viewport',()=>{
+  const e=new WorkspaceEditor(); e.addView('Phone'); const [first,phone]=e.document.views;
+  e.setHidden('screen-1',true); e.setHidden(phone.id,false);
+  expect(e.shownFrames.map(v=>v.id)).toEqual([phone.id]);
+  expect(e.document.screens[0].hidden).toBeUndefined();
+  expect(e.document.views.find(v=>v.id===first.id)!.hidden).toBe(true);
+  // Showing a screen whose viewports are all hidden shows them all.
+  e.setHidden(phone.id,true); e.setHidden('screen-1',false); expect(e.shownFrames.length).toBe(2);
+});
+test('invalid visibility flags are rejected',()=>{const e=new WorkspaceEditor();(e.document.views[0] as any).hidden='yes';expect(()=>loadWorkspace(e.document)).toThrow();});

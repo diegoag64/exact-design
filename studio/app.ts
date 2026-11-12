@@ -22,6 +22,12 @@ export const DISCOVERY_API = 'http://127.0.0.1:5175';
 export const grants = `fs.read app:/data/design.json\nfs.write app:/data/design.json\nfs.read app:/data/design-drafts.json\nfs.write app:/data/design-drafts.json\nfs.read app:/data/design-history.json\nfs.write app:/data/design-history.json\nnet.fetch ${DISCOVERY_API}`;
 let discoveryCache: {owner:string;revision:number;routes:DiscoveredScreen[];error:string}|undefined;
 const previewBridges=new Map<string,string>();
+// Frame ids reach the helper scoped to this page, so two studio pages showing view-1 never share its readiness,
+// sizes or editing state. The scope comes from the page's start time; the studio only ever sees plain view ids.
+let pageScope='';
+const setScope=(since:number)=>{if(!pageScope&&since>0)pageScope='p'+Math.round(since*1000).toString(36);};
+const scoped=(id:string)=>pageScope?`${pageScope}~${id}`:id;
+const unscoped=(id:string)=>typeof id==='string'&&pageScope&&id.startsWith(pageScope+'~')?id.slice(pageScope.length+1):id;
 async function discoverProject(owner:string,revision:number) {
   if(discoveryCache?.owner===owner && discoveryCache.revision===revision) return discoveryCache;
   const response=await fetch(`${DISCOVERY_API}/discover`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:owner}),exactTimeout:6000});
@@ -36,39 +42,40 @@ function framePreview(source:string,id:string,height:number,auto:boolean,canvas:
   if(localPreview(source)&&!previewBridges.has(new URL(source).origin))return '';
   const url=new URL(source),bridge=previewBridges.get(url.origin);
   if(bridge&&bridge!==url.origin){
-    url.host=new URL(bridge).host;url.searchParams.set('__ed_frame',id);url.searchParams.set('__ed_events','project-v2');url.searchParams.set('__ed_canvas',canvas?'1':'0');
+    url.host=new URL(bridge).host;url.searchParams.set('__ed_frame',scoped(id));url.searchParams.set('__ed_events','project-v2');url.searchParams.set('__ed_canvas',canvas?'1':'0');
     url.searchParams.set('__ed_height',String(height));url.searchParams.set('__ed_full',auto?'1':'0');
   }
   return url.href;
 }
 const snapshot = () => {
-  const document = editor.document,frames=editor.frames;
+  const document = editor.document,frames=editor.frames,shown=editor.shownFrames,bounds=shown.length?shown:frames;
   const screens = new Map(document.screens.map(screen => [screen.id, {...screen, source:screenSource(screen,document.project)}]));
-  const targets = editor.selected === editor.active ? snapTargets(editor.frame, frames) : {x: [], y: []};
+  const targets = editor.selected === editor.active ? snapTargets(editor.frame, shown) : {x: [], y: []};
   return {
     frameX: editor.view.x, frameY: editor.view.y, snapX: targets.x, snapY: targets.y,
-    drawing: JSON.stringify({...document,views:frames, screens:[...screens.values()], active: editor.active}),
+    drawing: JSON.stringify({...document,views:shown, screens:[...screens.values()], active: editor.active}),
     projectName: document.project.name, projectUrl: document.project.url, route: editor.screen.route,
     groups: [...screens.values()].map(screen=>({id:screen.id,name:screen.name,route:screen.route,source:screen.source,
-      views:frames.filter(v=>v.screenId===screen.id).map(({id,name,x,y,width,height})=>({id,name,x,y,width,height})),
+      hidden:!frames.some(v=>v.screenId===screen.id&&editor.isShown(v.id)),
+      views:frames.filter(v=>v.screenId===screen.id).map(({id,name,x,y,width,height})=>({id,name,x,y,width,height,hidden:!editor.isShown(id)})),
       layers:editor.screen.id===screen.id && !screen.source ? editor.layers : []})),
     name: document.name,
-    previewRequests:JSON.stringify(document.views.flatMap(v=>{const screen=screens.get(v.screenId)!;return screen.source?[{id:v.id,url:screen.source,width:v.width,height:v.height,auto:localPreview(screen.source)&&v.heightMode!=='fixed'}]:[];})),
+    previewRequests:JSON.stringify(document.views.flatMap(v=>{const screen=screens.get(v.screenId)!;return screen.source&&editor.isShown(v.id)?[{id:scoped(v.id),url:screen.source,width:v.width,height:v.height,auto:localPreview(screen.source)&&v.heightMode!=='fixed'}]:[];})),
     layers: editor.layers,
     views: frames.map(view => {
       const screen = screens.get(view.screenId)!;
       const previewSource=framePreview(screen.source,view.id,document.views.find(v=>v.id===view.id)!.height,view.heightMode!=='fixed',true);
-      const {heightMode,...geometry}=view;
-      return {...geometry,canAutoHeight:localPreview(screen.source),autoHeight:localPreview(screen.source)&&view.heightMode!=='fixed', source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name};
+      const {heightMode,hidden:_,...geometry}=view;
+      return {...geometry,canAutoHeight:localPreview(screen.source),autoHeight:localPreview(screen.source)&&view.heightMode!=='fixed', source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name, hidden: !editor.isShown(view.id)};
     }),
     previewSource:framePreview(editor.source,'preview-'+editor.active,editor.view.height,editor.view.heightMode!=='fixed',false),
     active: editor.active, screenId: editor.screen.id, source: editor.source,
     frameSelected: editor.selected === editor.active,
     width: editor.view.width, height: editor.frame.height, screenName: editor.screen.name,
-    minX: Math.min(...frames.map(view => view.x)),
-    minY: Math.min(...frames.map(view => view.y)),
-    maxX: Math.max(...frames.map(view => view.x + view.width)),
-    maxY: Math.max(...frames.map(view => view.y + view.height)),
+    minX: Math.min(...bounds.map(view => view.x)),
+    minY: Math.min(...bounds.map(view => view.y)),
+    maxX: Math.max(...bounds.map(view => view.x + view.width)),
+    maxY: Math.max(...bounds.map(view => view.y + view.height)),
     selected: editor.selected, canUndo: editor.past.length > 0, canRedo: editor.future.length > 0,
     code: editor.code(), status: persistence.error || status, resizing, devices: catalog.devices, deviceSets: catalog.sets,
   };
@@ -83,29 +90,32 @@ async function logWorkspace(storage:any,before:string,kind:string,target:string,
 }
 const sources: Sources = {
   history: async ([project],_store,storage)=>{try{await history.load(storage.fs);return {entries:history.view(project),error:''};}catch(error){return {entries:[],error:error instanceof Error?error.message:'Could not load timeline.'};}},
-  scene: () => snapshot(),
+  scene: ([,,since]) => {setScope(since);return snapshot();},
   previews: ([requests]) => {
-    if(!requests||requests==='[]')return {ready:true,signature:'[]',requests};
-    let latest={ready:false,signature:'',requests};
+    if(!requests||requests==='[]')return {ready:true,signature:'[]',requests,loaded:0,total:0};
+    const total=JSON.parse(requests).length;
+    let latest={ready:false,signature:'',requests,loaded:0,total};
     return fetch(`${DISCOVERY_API}/previews`,{method:'POST',headers:{'content-type':'application/json'},body:requests,exactStream:event=>{
       if(event.type==='error'){
         for(const frame of JSON.parse(requests)){const origin=new URL(frame.url).origin;if(!previewBridges.has(origin))previewBridges.set(origin,origin);}
-        return latest={requests,ready:true,signature:'unavailable'};
+        return latest={requests,ready:true,signature:'unavailable',loaded:total,total};
       }
       if(event.type!=='message'||typeof event.data!=='string')return latest;
       const result=JSON.parse(event.data);
       for(const frame of result.frames){
         if(frame.previewSource&&frame.source){const origin=new URL(frame.source).origin;const proxy=new URL(frame.previewSource).origin;if(proxy!==origin)previewBridges.set(origin,proxy);}
-        if(frame.ready)editor.contentSizes.set(frame.id,{source:frame.source,width:frame.width,viewportHeight:frame.viewportHeight,height:frame.height});
+        if(frame.ready)editor.contentSizes.set(unscoped(frame.id),{source:frame.source,width:frame.width,viewportHeight:frame.viewportHeight,height:frame.height});
       }
-      return latest={requests,ready:!!result.frames.every((f:{ready:boolean})=>f.ready),signature:JSON.stringify(result.frames.map((f:{id:string;height:number;ready:boolean})=>[f.id,f.height,f.ready]))};
+      return latest={requests,loaded:result.frames.filter((f:{ready:boolean})=>f.ready).length,total:result.frames.length,ready:!!result.frames.every((f:{ready:boolean})=>f.ready),signature:JSON.stringify(result.frames.map((f:{id:string;height:number;ready:boolean})=>[f.id,f.height,f.ready]))};
     }});
   },
   previewSignal: ([session]) => {
     if(!session)return {revision:0,updateRevision:0,measurement:emptySpacing()};
     return fetch(`${DISCOVERY_API}/design/events?session=${encodeURIComponent(session)}`,{exactStream:event=>{
       if(event.type!=='message'||typeof event.data!=='string')return null;
-      return JSON.parse(event.data);
+      const signal=JSON.parse(event.data);
+      if(signal?.measurement)signal.measurement.frame=unscoped(signal.measurement.frame);
+      return signal;
     }});
   },
   design: async ([op,session,url,version,row,value,timestamp], _store, storage) => {
@@ -116,8 +126,9 @@ const sources: Sources = {
       const previous=drafts.get(origin);
       const draftState=op==='open'?previous:'';
       if(['edit','field','spacing','override','add-property','undo','revert','discard','apply'].includes(op))await history.load(storage.fs);
-      const response=await fetch(`${DISCOVERY_API}/design`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,session,url:origin,version,row,value,draftState})});
+      const response=await fetch(`${DISCOVERY_API}/design`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,session,url:origin,version,row:op==='open'?scoped(row):row,value,draftState})});
       let result=await response.json();
+      if(typeof result.spacingFrame==='string')result.spacingFrame=unscoped(result.spacingFrame);
       if(!result.ok&&designViews.has(session))result={...designViews.get(session),...result,historyChanged:false};
       if(op==='open'&&result.ok){designOrigins.set(result.session,origin);if(result.bridgeOrigin)previewBridges.set(origin,result.bridgeOrigin);}
       if(result.ok&&typeof result.draftState==='string'&&origin){
@@ -169,14 +180,15 @@ const sources: Sources = {
       resizing=false;status='';await persistence.save(storage.fs);await logWorkspace(storage,before,op,name,timestamp);return reply(op==='add'||op==='blank'||op==='add-all'||op==='setup');
     } catch(e) {if((e as {code?:string}).code==='bake')throw e;return reply(false,(e as Error).message);}
   },
-  document: async (_args, _store, storage) => {
+  document: async ([since], _store, storage) => {
+    setScope(since);
     await persistence.load(storage.fs);
     return snapshot();
   },
   edit: async ([op, key, value, x, y,timestamp], _store, storage) => {
     await persistence.load(storage.fs);
     await history.load(storage.fs);
-    const before=JSON.stringify(editor.document),target=editor.target?.name??editor.screen.name;
+    const before=JSON.stringify(editor.document),visibilityTarget=op==='hide'||op==='show'?editor.document.screens.find(s=>s.id===key)?.name??editor.document.views.find(v=>v.id===key)?.name:undefined,target=visibilityTarget??editor.target?.name??editor.screen.name;
     status = '';
     if(op === 'select') { editor.select(key); resizing = false; }
     if(op === 'hit') resizing = editor.hit(x,y,9 / Math.max(0.01, Number(value) || 1));
@@ -192,6 +204,7 @@ const sources: Sources = {
     if(op === 'undo') editor.undo();
     if(op === 'redo') editor.redo();
     if(op === 'delete') editor.remove();
+    if(op === 'hide' || op === 'show') editor.setHidden(key, op === 'hide');
     const saved=await persistence.save(storage.fs,op==='save');
     if(saved&&!merged)try{await logWorkspace(storage,before,op,target,timestamp);}catch{status='Could not save the timeline. Your workspace is saved.';}
     if(op==='save'&&saved&&!status)status='Saved';

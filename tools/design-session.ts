@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 import { projectUrl } from '../studio/project';
 import {relative,isAbsolute,resolve} from 'node:path';
 import {layoutProperties,layoutOptions,layoutValue,sourceLiteral,digest,ownFile,type LayoutSite} from './layout-source';
-import {ElementBridge,bridgeFor,type ElementNode} from './element-bridge';
+import {ElementBridge,bridgeFor,liveFrames,type ElementNode} from './element-bridge';
 import {spacingProperties,spacingRows} from '../studio/spacing';
 import {emptySpacing} from '../studio/spacing';
 import {PreviewChannel} from './preview-channel';
@@ -105,7 +105,7 @@ export class DesignSession {
     return this.view();
   }
   async poll() {
-    if(this.bridge)for(const frame of this.bridge.frames.values())if(frame.build&&this.inspectedPages.get(frame.frame)!==`${frame.build}:${frame.page??""}`){
+    if(this.bridge)for(const frame of liveFrames(this.bridge.frames))if(frame.build&&this.inspectedPages.get(frame.frame)!==`${frame.build}:${frame.page??""}`){
       try{await this.call({method:'inspect',client:this.client,build:frame.build,on:true});this.builds.add(frame.build);this.inspectedPages.set(frame.frame,`${frame.build}:${frame.page??""}`);}catch{/* The page can report its ID before registration completes. */}
     }
     const r=await this.call({client:this.client,after:this.cursor,...(this.epoch?{epoch:this.epoch}:{}),wait:false},'/__tamber/events');
@@ -154,7 +154,7 @@ export class DesignSession {
   selectionTarget(event:any){
     // A reload/shared state checkpoint can give several viewports the same
     // runtime build ID. It identifies a build, not a canvas frame.
-    const candidates=[...this.bridge?.frames.values()??[]].filter(f=>f.build===String(event.build));
+    const candidates=(this.bridge?liveFrames(this.bridge.frames):[]).filter(f=>f.build===String(event.build));
     const locked=this.pendingSelection?.frame??this.restoring?.frame;
     const preferred=locked??this.picked?.frame??this.preferredFrame;
     const matches=(frame:typeof candidates[number])=>frame.nodes.find(n=>n.site===event.site&&JSON.stringify(n.instance)===JSON.stringify(event.instance??[]));
@@ -243,7 +243,7 @@ export class DesignSession {
   syncDrafts(){this.bridge?.preview?.([...this.handoff,...this.drafts.snapshot()].map(p=>p.preview),this.drafts.revision);}
   view() {
     const s=this.selection, rows=this.currentRows();this.syncDrafts();
-    const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??[...this.bridge.frames.values()][0]);
+    const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??liveFrames(this.bridge.frames)[0]);
     const selected=this.picked?.node.id??'';
     const tree=frame?.nodes.map(n=>{
       const ancestors:string[]=[];let at=frame.nodes.find(p=>p.id===n.parent);
@@ -338,7 +338,7 @@ export class DesignSession {
     if(frame&&this.picked&&source?.file&&files?.[source.file])this.restoring={frame:frame.frame,path:this.picked.node.path,file:source.file,line:source.line,col:source.col,sha:files[source.file],before:this.files[source.file],plan:frame.plan,sent:'',since:Date.now(),allowSamePlan};
   }
   navigate(id:string){
-    const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??[...this.bridge.frames.values()][0]);
+    const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??liveFrames(this.bridge.frames)[0]);
     const node=frame?.nodes.find(n=>n.id===id);
     if(!frame||!node)throw new Error('This element is no longer on the screen.');
     this.pick(frame.frame,id);this.bridge!.select(frame.frame,id);
@@ -351,7 +351,7 @@ export class DesignSession {
     this.pendingSelection={frame:frame.frame,path:node.path,until:Date.now()+1000};this.restoring=null;
   }
   hover(id:string){
-    const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??[...this.bridge.frames.values()][0]);
+    const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??liveFrames(this.bridge.frames)[0]);
     const next=frame&&id&&frame.nodes.some(n=>n.id===id)?frame.frame:'';
     if(this.hoveredFrame&&this.hoveredFrame!==next)this.bridge?.linkedHover(this.hoveredFrame,'',this.client);
     if(next)this.bridge!.linkedHover(next,id,this.client);

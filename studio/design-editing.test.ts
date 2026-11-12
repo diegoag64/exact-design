@@ -70,6 +70,8 @@ test('design inspector edits text, linked spacing and corners as drafts, with pe
     // Reload while editing, with a pending draft and an active selection.
     await page.reload();
     await page.getByRole('button',{name:'Fit all screens',exact:true}).waitFor();
+    // Previews sit under the loading veil until every one has rendered.
+    await page.locator('[data-testid="canvas-loading"]').waitFor({state:'detached'});
     const editAgain=page.getByRole('button',{name:'Edit app design',exact:true});
     await editAgain.waitFor();await editAgain.click();
     await page.getByRole('button',{name:'Finish editing app',exact:true}).waitFor();

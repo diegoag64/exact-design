@@ -34,6 +34,7 @@ If a preview is blank, use `127.0.0.1` for the editor URL and restart the app wi
 - Click **+** beside Viewport to add a linked size or device set.
 - Click **Tidy up** beside Screens to arrange one row per screen.
 - Click the zoom percentage to fit all screens.
+- Hover a screen or viewport in the sidebar and click its eye to hide it. A hidden screen hides all of its viewports. Hidden rows stay dimmed with a crossed-out eye; click it to show them again. Showing a viewport inside a hidden screen shows only that viewport.
 
 Linked viewports share screen content. To create independent content, duplicate the screen instead.
 

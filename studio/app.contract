@@ -1,5 +1,5 @@
 use Icon from "./icons.contract"
-use Tool, SmallTool, Field, FieldShell, TreeRow, PanelSection, SectionHead, FloatingBar, Segmented, Segment, RowButton, PrimaryButton, SecondaryButton, Dialog, Menu, IconButton, SmallButton, ToolbarButton, SectionHeading, FieldLabel, InlineField, MenuItem, MenuDivider, Divider, Kbd, PropertyField, screensWidth, inspectorWidth from "./ui.contract"
+use Tool, SmallTool, Field, FieldShell, TreeRow, PanelSection, SectionHead, FloatingBar, Segmented, Segment, RowButton, PrimaryButton, SecondaryButton, Dialog, Menu, IconButton, SmallButton, ToolbarButton, SectionHeading, FieldLabel, InlineField, MenuItem, MenuDivider, Divider, Kbd, PropertyField, VisibilityButton, screensWidth, inspectorWidth from "./ui.contract"
 
 routes nav
   editor "/"
@@ -57,6 +57,7 @@ shape CanvasView
   y: number
   width: number
   height: number
+  hidden: bool
 
 shape LibraryView
   id: string
@@ -65,12 +66,14 @@ shape LibraryView
   y: number
   width: number
   height: number
+  hidden: bool
 
 shape ScreenGroup
   id: string
   name: string
   route: string
   source: string
+  hidden: bool
   views: LibraryView[]
   layers: Layer[]
 
@@ -292,6 +295,18 @@ shape PreviewSizes
   requests: string
   ready: bool
   signature: string
+  loaded: number
+  total: number
+
+keyframes veilIn
+  from opacity=0
+keyframes veilOut
+  to opacity=0 animation-timing-function="ease-in"
+keyframes framePulse
+  0% opacity=0.25 translate="0px 0px"
+  35% opacity=1 translate="0px -3px"
+  70% opacity=0.25 translate="0px 0px"
+  100% opacity=0.25 translate="0px 0px"
 
 shape Time
   epochAtZero: number
@@ -299,10 +314,10 @@ shape Time
 component Studio
   resource time = exactTime() as shape Time
   resource viewport = exactViewport() as shape Viewport
-  resource doc = document() as shape Document else empty(name="Untitled")
+  resource doc = document(time.epochAtZero) as shape Document else empty(name="Untitled")
   state discoveryRevision = 0
   resource previews = previews(doc.previewRequests) as shape PreviewSizes else empty()
-  resource renderedScene = scene(doc.drawing, previews.signature) as shape Document else empty()
+  resource renderedScene = scene(doc.drawing, previews.signature, time.epochAtZero) as shape Document else empty()
   derive scene = renderedScene.active != "" ? renderedScene : doc
   resource discovered = discover(doc.projectUrl, doc.groups.map(g => g.route), discoveryRevision) as shape Discovery else empty()
   resource history = history(doc.projectUrl) as shape History else empty()
@@ -370,6 +385,7 @@ component Studio
   derive appCanUndo = match designChanged { case some(r) => r.canUndo, case none => false }
   state designError = ""
   action startEditing
+    booting = false
     hand = false
     collapsedElements = [""]
     revealedLayerRevision = -1
@@ -553,6 +569,18 @@ component Studio
     if doc.deviceSets.filter(s => s.name == screenPreset).length > 0
       startTidy()
     send libraryChanged = library(screenKind, screenName, screenPath, screenPreset, time.epochAtZero + performanceNow())
+  state hoveredRow = ""
+  action hoverRow(id: string, on: bool)
+    if on or hoveredRow == id
+      hoveredRow = on ? id : ""
+  action setVisibility(id: string, hidden: bool)
+    send changed = edit((hidden ? "hide" : "show"), id, "", 0, 0, time.epochAtZero + performanceNow())
+  action openView(id: string, hidden: bool, x: number, y: number, w: number, h: number)
+    if hidden
+      addingViewport = false
+      send changed = edit("select", id, "", 0, 0, time.epochAtZero + performanceNow())
+    else
+      focusView(id, x, y, w, h)
   action toggleGroup(id: string)
     collapsed = collapsed.includes(id) ? collapsed.filter(value => value != id) : collapsed.concat([id])
   state fitWhenReady = false
@@ -591,6 +619,26 @@ component Studio
     resetView()
   task tidyRefit when tidyFit and tidySignature != "" and tidyFitted != tidySignature and not pending(changed) and not pending(doc) and not pending(renderedScene)
     after(1, refitAfterTidy)
+  // Page-load veil: covers the canvas from the first frame while live previews render, so frames appear together,
+  // fitted. Its indicator fades in after a short delay, so a fast load shows only a blank canvas. It leaves the moment
+  // every visible preview has reported, at once when there is none to wait for, and on a click or Edit app. A preview
+  // can fail to report (an app error, a stopped app server), so it also leaves after 4 seconds without progress, or 15 in all.
+  state booting = true
+  state bootSeen = -1
+  derive setupPending = setupUrl != "" and appliedSetup != setupKey and setupError == "" and not setupDismissed
+  derive still = viewport.prefersReducedMotion
+  action finishBoot
+    booting = false
+  task bootReady when booting and not pending(doc) and not setupPending and not setupRunning and previews.ready and previews.requests == doc.previewRequests and not pending(renderedScene)
+    after(1, finishBoot)
+  action trackBoot
+    bootSeen = previews.loaded
+  task bootProgress when booting and bootSeen != previews.loaded
+    after(1, trackBoot)
+  task bootStall when booting and bootSeen == previews.loaded and previews.total > 0
+    after(4000, finishBoot)
+  task bootTimeout when booting
+    after(15000, finishBoot)
   derive addableScreens = discovered.routes.filter(r => not r.added and not r.dynamic).length
   // A setup link (`/?connect=<app url>&name=<name>&viewports=<set or device>`) connects that project and adds
   // each of its screens once per browser; reloading the link leaves later edits alone.
@@ -852,6 +900,8 @@ component Studio
             for preset in ["Phone", "Tablet", "Desktop"] key=preset
               MenuItem(label=`Add ${preset.toLowerCase()} viewport`, icon=deviceIcon(preset), shortcut="", disabled=false, destructive=false, menu="studio-menu", testId=`menu-variant-${preset.toLowerCase()}`, press=addViewport(preset))
             MenuItem(label="Add every size", icon="monitor-smartphone", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-variant-every-size", press=addViewportSet("Every size"))
+            for v in scene.views.filter(v => v.id == doc.active) key=v.id
+              MenuItem(label=(v.hidden ? "Show viewport" : "Hide viewport"), icon=(v.hidden ? "eye" : "eye-off"), shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-visibility", press=setVisibility(v.id, not v.hidden))
           if doc.selected != ""
             MenuItem(label="Delete", icon="trash-2", shortcut="⌫", disabled=doc.frameSelected and doc.views.length == 1, destructive=true, menu="studio-menu", testId="menu-delete", press=command("delete", ""))
         MenuDivider()
@@ -898,20 +948,23 @@ component Studio
                         if scene.groups.length == 0
                           text "No screens yet. Add one to start." padding="8px" font="type.caption" color="ink.muted"
                         for group in scene.groups key=group.id
-                          row class=TreeRow height=28 flex-shrink=0 align-items="center" padding-left=4
+                          row class=TreeRow hover=hoverRow(group.id) height=28 flex-shrink=0 align-items="center" padding="0 2px 0 4px"
                             button press=toggleGroup(group.id) testId=`fold-group-${group.id}` class=SmallTool width=16 height=28 padding=0 color="ink.muted" aria-label=`Toggle ${group.name}` aria-expanded=(not collapsed.includes(group.id)) data-tip=(collapsed.includes(group.id) ? "Show viewports" : "Hide viewports")
                               Icon(name="chevron-right", size=12, angle=(collapsed.includes(group.id) ? 0 : 90))
-                            button press=focusScreen(group.id) testId=`group-${group.id}` aria-label=group.name data-tip="Show screen · Pan the canvas to this screen" display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 8px 0 4px" border-width=0 background-color="transparent" color="ink.primary"
+                            button press=focusScreen(group.id) testId=`group-${group.id}` aria-label=group.name data-tip=(group.hidden ? "Hidden screen · Show it to see it on the canvas" : "Go to screen · Pan the canvas to this screen") display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 4px" border-width=0 background-color="transparent" color=(group.hidden ? "ink.muted" : "ink.primary")
                               column color="ink.muted" flex-shrink=0
                                 Icon(name=(group.source == "" ? "frame" : "globe"), size=14, angle=0)
                               text group.name font="type.body" font-weight=500 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                            VisibilityButton(name="screen", hidden=group.hidden, revealed=(hoveredRow == group.id), testId=`visibility-${group.id}`, press=setVisibility(group.id, not group.hidden))
                           if not collapsed.includes(group.id)
                             for v in group.views key=v.id
-                              button contextmenu=command("select", v.id) contextPopover="studio-menu" class=TreeRow press=focusView(v.id, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" flex-shrink=0 align-items="center" gap=6 height=28 padding="0 8px 0 30px" border-width=0 background-color=(doc.active == v.id and doc.frameSelected ? "surface.selected" : "transparent") color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.primary")
-                                column color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.muted") flex-shrink=0
-                                  Icon(name=deviceIcon(v.name), size=14, angle=0)
-                                text v.name font="type.body" flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
-                                text `${v.width} × ${v.height}` font="type.caption" color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.muted") font-variant-numeric="tabular-nums"
+                              row class=TreeRow hover=hoverRow(v.id) contextmenu=command("select", v.id) contextPopover="studio-menu" height=28 flex-shrink=0 align-items="center" padding-right=2 background-color=(doc.active == v.id and doc.frameSelected ? "surface.selected" : "transparent")
+                                button press=openView(v.id, v.hidden, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 4px 0 30px" border-width=0 background-color="transparent" color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : (v.hidden ? "ink.muted" : "ink.primary"))
+                                  column color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.muted") flex-shrink=0
+                                    Icon(name=deviceIcon(v.name), size=14, angle=0)
+                                  text v.name font="type.body" flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                                  text `${v.width} × ${v.height}` font="type.caption" color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.muted") font-variant-numeric="tabular-nums"
+                                VisibilityButton(name="viewport", hidden=v.hidden, revealed=(hoveredRow == v.id), testId=`visibility-${v.id}`, press=setVisibility(v.id, not v.hidden))
                             for n in group.layers key=n.id
                               button contextmenu=command("select", n.id) contextPopover="studio-menu" class=TreeRow press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" flex-shrink=0 align-items="center" gap=6 height=28 padding="0 8px 0 44px" border-width=0 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.primary")
                                 column color=(doc.selected == n.id ? "ink.selected" : "ink.muted") flex-shrink=0
@@ -919,10 +972,22 @@ component Studio
                                 text n.name font="type.body" flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
 
               column id="canvas-stage" outline="none" tabindex=-1 contextmenu=canvasMenu contextPopover="studio-menu" testId="canvas-stage" wheel=wheel flex=1 min-width=0 min-height=0 position="relative" overflow="clip" background-color="surface.canvas"
-                for v in scene.views key=v.id
+                for v in scene.views.filter(v => not v.hidden) key=v.id
                   column position="absolute" left=0 top=0 translate=`${(hand ? cameraX + dx * zoom : cameraX) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragX : 0)) * zoom}px ${(hand ? cameraY + dy * zoom : cameraY) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragY : 0)) * zoom}px` width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragX : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragY : 0)) scale=zoom transform-origin="top left" pointer-events=(editing and not hand and v.source.startsWith(designOrigin + "/") ? "auto" : "none") inert=(not editing or hand or not v.source.startsWith(designOrigin + "/")) background-color="paper" border="none" box-shadow="none" testId=`frame-${v.id}`
                     ScreenView(source=v.previewSource, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
                 canvas pointer-events=(editing and not hand ? "none" : "auto") surface=design(scene.drawing, doc.selected, zoom, (hand ? cameraX + dx * zoom : cameraX), (hand ? cameraY + dy * zoom : cameraY), (hand ? 0 : dragX), (hand ? 0 : dragY), doc.resizing, snapping) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up cursor=(hand ? (dragging ? "grabbing" : "grab") : (dragging ? (doc.resizing ? "nwse-resize" : "move") : "default")) touch-action="none" testId="canvas" aria-label="Design canvas"
+                if booting
+                  column position="absolute" inset=0 z-index=1 display="flex" flex-direction="column" align-items="center" justify-content="center" background-color="surface.canvas" role="status" aria-label="Loading screens" pointerdown=finishBoot testId="canvas-loading" -exact-exit-animation=(still or previews.total == 0 ? "none" : "veilOut 280ms ease-in both")
+                    if previews.total > 0
+                      column align-items="center" gap=14 testId="canvas-loading-indicator" animation=(still ? "none" : "veilIn 240ms ease-out 300ms both")
+                        row align-items="flex-end" gap=5 height=30 aria-hidden=true
+                          for w, i in [12, 20, 32] key=i
+                            column width=w height=(i == 1 ? 26 : 22) box-sizing="border-box" border="1.5px solid accent" border-radius=(i == 2 ? 3 : 4) opacity=(still ? 0.6 : 0.25) animation=(still ? "none" : `framePulse 1.2s ease-in-out ${i * 160}ms infinite`)
+                        column align-items="center" gap=3
+                          text "Loading screens" font="type.heading" font-weight=600 color="ink.primary"
+                          text `${previews.loaded} of ${previews.total} previews ready` font="type.caption" color="ink.secondary" font-variant-numeric="tabular-nums" testId="canvas-loading-progress"
+                        column width=140 height=3 border-radius=2 background-color="line.subtle" overflow="hidden" aria-hidden=true
+                          column height=3 width=140 flex-shrink=0 border-radius=2 background-color="accent" translate=`${(max(0.04, previews.loaded / previews.total) - 1) * 140}px 0px` transition=(still ? "none" : "translate 320ms ease-out")
                 if editing and not hand and not designWriting and not panelOverlay
                   match designChanged
                     case some(result)
