@@ -1,6 +1,7 @@
 import {test,expect} from 'bun:test';
 import {mkdtemp,mkdir,readdir,cp,readFile,writeFile,rm} from 'node:fs/promises';
 import {resolve} from 'node:path';
+import {homedir} from 'node:os';
 import {startDiscoveryServer} from '../tools/discovery-server';
 import {stopElementBridges} from '../tools/element-bridge';
 import {suiteBrowser} from '../.exact-sdk/scripts/agent-launch.mjs';
@@ -21,7 +22,7 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
   const editorPort=freePort(),appPort=freePort(),children:any[]=[];
   const start=async(dir:string,name:string,port:number)=>{
     const launcher=resolve(temp,name+'.mjs');await writeFile(launcher,`import {run} from ${JSON.stringify(resolve(root,'.exact-sdk/scripts/app-cli.mjs'))};process.exit(await run({dir:${JSON.stringify(dir)},name:${JSON.stringify(name)},exact2:${JSON.stringify(resolve(root,'.exact-sdk'))},args:['web','--port','${port}']}));`);
-    children.push(Bun.spawn([process.execPath,launcher],{cwd:root,env:{...process.env,PATH:'/Users/diegoarias/.cargo/bin:'+process.env.PATH,EXACT_FEEDBACK:'0',EXACT_TOOL_PORT:String(editorPort)},stdout:Bun.file(resolve(temp,name+'.log')),stderr:Bun.file(resolve(temp,name+'-errors.log'))}));
+    children.push(Bun.spawn([process.execPath,launcher],{cwd:root,env:{...process.env,PATH:resolve(homedir(),'.cargo/bin')+':'+process.env.PATH,EXACT_FEEDBACK:'0',EXACT_TOOL_PORT:String(editorPort)},stdout:Bun.file(resolve(temp,name+'.log')),stderr:Bun.file(resolve(temp,name+'-errors.log'))}));
     const end=Date.now()+25000;for(;;){try{if((await fetch('http://127.0.0.1:'+port)).ok)return;}catch{}if(Date.now()>end)throw new Error(name+' did not start: '+await Bun.file(resolve(temp,name+'-errors.log')).text());await new Promise(r=>setTimeout(r,100));}
   };
   let suite:any,page:any;const errors:string[]=[];

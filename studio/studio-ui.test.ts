@@ -1,6 +1,7 @@
 import {test,expect} from 'bun:test';
 import {mkdtemp,mkdir,readdir,cp,readFile,writeFile,rm} from 'node:fs/promises';
 import {resolve} from 'node:path';
+import {homedir} from 'node:os';
 import {suiteBrowser} from '../.exact-sdk/scripts/agent-launch.mjs';
 
 test('studio icons, context menus and canvas gestures share the desktop interaction model',async()=>{
@@ -11,7 +12,7 @@ test('studio icons, context menus and canvas gestures share the desktop interact
   const manifest=JSON.parse(await readFile(resolve(temp,'app.json'),'utf8'));delete manifest.commands;delete manifest.server;await writeFile(resolve(temp,'app.json'),JSON.stringify(manifest));
   const probe=Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response()});const port=probe.port;probe.stop(true);
   await writeFile(resolve(temp,'launch.mjs'),`import {run} from ${JSON.stringify(resolve(root,'.exact-sdk/scripts/app-cli.mjs'))};process.exit(await run({dir:${JSON.stringify(temp)},name:'studio-ui',exact2:${JSON.stringify(resolve(root,'.exact-sdk'))},args:['web','--port','${port}']}));`);
-  const child=Bun.spawn([process.execPath,resolve(temp,'launch.mjs')],{cwd:root,env:{...process.env,PATH:'/Users/diegoarias/.cargo/bin:'+process.env.PATH,EXACT_FEEDBACK:'0'},stdout:Bun.file(resolve(temp,'server.log')),stderr:Bun.file(resolve(temp,'errors.log'))});
+  const child=Bun.spawn([process.execPath,resolve(temp,'launch.mjs')],{cwd:root,env:{...process.env,PATH:resolve(homedir(),'.cargo/bin')+':'+process.env.PATH,EXACT_FEEDBACK:'0'},stdout:Bun.file(resolve(temp,'server.log')),stderr:Bun.file(resolve(temp,'errors.log'))});
   let suite:any,page:any;const errors:string[]=[];
   try{
     const end=Date.now()+25000;for(;;){try{if((await fetch('http://127.0.0.1:'+port)).ok)break;}catch{}if(Date.now()>end)throw Error(await Bun.file(resolve(temp,'errors.log')).text());await new Promise(r=>setTimeout(r,100));}
