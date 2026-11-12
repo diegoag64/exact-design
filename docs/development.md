@@ -77,6 +77,7 @@ Pan moves in one direction and back. Zoom sweeps from the fitted overview to 100
 | `--variant name=ref` | `worktree=WORKTREE` | Studio version to measure: a Git ref, or `WORKTREE` for files on disk. Repeat to compare versions. |
 | `--trials N` | 5 | Trials per variant. Variants alternate in ABBA order to cancel drift. |
 | `--frames N` | 120 | Animation frames per scenario |
+| `--events-per-frame N` | 1 | Wheel events per frame. The total pan or zoom stays the same. |
 | `--dpr N` | 2 | Device scale factor |
 | `--headed` | off | Show the browser. The default runs `--headless=new`, which does not present to a display. |
 | `--out FILE` | `.exact/profile-canvas.json` | Report with every trial |

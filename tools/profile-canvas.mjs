@@ -4,7 +4,7 @@
 //
 //   bun tools/profile-canvas.mjs                              # the working tree, 5 trials
 //   bun tools/profile-canvas.mjs --variant base=main --variant head=WORKTREE
-//   options: --trials N  --frames N  --dpr N  --headed  --out FILE  --traces DIR  --categories LIST  --preview-css NAME=CSS  --keep
+//   options: --trials N  --frames N  --dpr N  --headed  --out FILE  --traces DIR  --categories LIST  --preview-css NAME=CSS  --events-per-frame N  --keep
 import {mkdir,mkdtemp,cp,readdir,readFile,writeFile,rm} from 'node:fs/promises';
 import {resolve,dirname} from 'node:path';
 import {homedir} from 'node:os';
@@ -17,7 +17,7 @@ const variants=argv.flatMap((a,i)=>a==='--variant'?[argv[i+1]]:[]).map(v=>{const
 if(!variants.length)variants.push({name:'worktree',ref:'WORKTREE'});
 // Experiment knob: CSS injected into every preview of one variant, such as removing an effect.
 const previewCss=Object.fromEntries(argv.flatMap((a,i)=>a==='--preview-css'?[argv[i+1]]:[]).map(v=>[v.slice(0,v.indexOf('=')),v.slice(v.indexOf('=')+1)]));
-const trials=Number(option('--trials',5)),frames=Number(option('--frames',120)),dpr=Number(option('--dpr',2)),headed=flag('--headed');
+const perFrame=Number(option('--events-per-frame',1)),trials=Number(option('--trials',5)),frames=Number(option('--frames',120)),dpr=Number(option('--dpr',2)),headed=flag('--headed');
 const out=resolve(option('--out',resolve(root,'.exact/profile-canvas.json'))),traces=option('--traces');
 const env={...process.env,PATH:`${resolve(homedir(),'.cargo/bin')}:${process.env.PATH}`,EXACT_FEEDBACK:'0'};
 const children=[],helpers=[],bridges=[];
@@ -66,17 +66,20 @@ async function startVariant(temp,variant){
   return {...variant,url:`${origin}/?connect=${encodeURIComponent(ember)}&name=Ember&viewports=Core`,commit:variant.ref==='WORKTREE'?'WORKTREE':(await sh(['git','rev-parse','--short',variant.ref])).trim()};
 }
 
-// One synthetic wheel event per animation frame. Pan and zoom move in one
-// direction, then return, so the camera ends where it started.
-const DRIVER=`window.__drive=async(mode,n)=>{
+// Synthetic wheel events each animation frame (one by default; a trackpad can
+// deliver more). Pan and zoom move in one direction, then return, so the
+// camera ends where it started. The total movement is the same for any count.
+const DRIVER=`window.__drive=async(mode,n,k)=>{
   const canvas=document.querySelector('[aria-label="Design canvas"]'),b=canvas.getBoundingClientRect();
   const camera=()=>Object.fromEntries(exact.state[0].filter(s=>['px','py','zoom'].includes(s.n.devName)).map(s=>[s.n.devName,s()]));
-  const start=camera(),step=Math.pow(1/start.zoom,1/(n/2)),times=[];
+  const start=camera(),step=Math.pow(1/start.zoom,1/(n/2)),each=Math.pow(step,1/k),times=[];
   for(let i=0;i<n;i++){
     times.push(await new Promise(requestAnimationFrame));
     const out=i>=n/2,init={bubbles:true,cancelable:true,clientX:b.left+b.width/2,clientY:b.top+b.height/2};
-    if(mode==='pan')canvas.dispatchEvent(new WheelEvent('wheel',{...init,deltaX:out?-6:6}));
-    if(mode==='zoom')canvas.dispatchEvent(new WheelEvent('wheel',{...init,ctrlKey:true,deltaY:out?(1-1/step)/0.005:-(step-1)/0.005}));
+    for(let j=0;j<k;j++){
+      if(mode==='pan')canvas.dispatchEvent(new WheelEvent('wheel',{...init,deltaX:(out?-6:6)/k}));
+      if(mode==='zoom')canvas.dispatchEvent(new WheelEvent('wheel',{...init,ctrlKey:true,deltaY:out?(1-1/each)/0.005:-(each-1)/0.005}));
+    }
   }
   times.push(await new Promise(requestAnimationFrame));
   const peak=start.zoom*Math.pow(step,n/2);
@@ -123,7 +126,7 @@ async function trial(variant,index){
     const cdp=await page.context().newCDPSession(page),scenarios={};
     for(const mode of ['idle','pan','zoom']){
       await cdp.send('Tracing.start',{categories:CATEGORIES,transferMode:'ReturnAsStream'});
-      const run=await page.evaluate(([m,n])=>window.__drive(m,n),[mode,frames]);
+      const run=await page.evaluate(([m,n,k])=>window.__drive(m,n,k),[mode,frames,perFrame]);
       const done=new Promise(r=>cdp.once('Tracing.tracingComplete',r));await cdp.send('Tracing.end');
       const {stream}=await done;let text='';for(;;){const r=await cdp.send('IO.read',{handle:stream});text+=r.base64Encoded?Buffer.from(r.data,'base64').toString():r.data;if(r.eof)break;}
       await cdp.send('IO.close',{handle:stream});
@@ -138,6 +141,7 @@ async function trial(variant,index){
   }finally{await suite.browser.close();}
 }
 
+await mkdir(resolve(root,'.exact'),{recursive:true});
 const temp=await mkdtemp(resolve(root,'.exact/profile-canvas-'));
 const cleanup=async()=>{for(const c of children)c.kill();for(const h of helpers)h.stop(true);for(const stop of bridges)stop();if(!flag('--keep'))await rm(temp,{recursive:true,force:true});};
 process.on('SIGINT',async()=>{await cleanup();process.exit(130);});
@@ -159,7 +163,7 @@ try{
     (summary[v.name]??={})[mode]={meanInterval:stats(means).median,spread:Math.max(...means)-Math.min(...means),p95Interval:stats(p95s).median,
       gpuBusyPct:100*stats(gpuBusy).median,droppedPct:100*stats(dropped).median,layerizeMs:stats(layerize).median};
   }
-  const report={date:new Date().toISOString(),options:{trials,frames,dpr,headed,viewport:'1280x800'},variants:started.map(({name,ref,commit})=>({name,ref,commit,previewCss:previewCss[name]})),summary,results};
+  const report={date:new Date().toISOString(),options:{trials,frames,perFrame,dpr,headed,viewport:'1280x800'},variants:started.map(({name,ref,commit})=>({name,ref,commit,previewCss:previewCss[name]})),summary,results};
   await mkdir(dirname(out),{recursive:true});await writeFile(out,JSON.stringify(report,null,2));
   console.table(Object.fromEntries(Object.entries(summary).flatMap(([v,modes])=>Object.entries(modes).map(([m,s])=>[`${v} ${m}`,Object.fromEntries(Object.entries(s).map(([k,x])=>[k,x===null?null:+x.toFixed(2)]))]))));
   console.log(`report: ${out}`);
