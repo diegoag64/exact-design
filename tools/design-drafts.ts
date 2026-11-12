@@ -6,9 +6,10 @@ export type DesignBinding={file:string;line:number;col:number;sha256:string;prop
 export type PreviewPatch={key:string;site:number;plan:string;property:string;value:string;scope:'site'|'style';targets?:{site:number;properties:string[]}[]};
 export type DesignPatch={key:string;binding:DesignBinding;original:string;value:string;preview:PreviewPatch;operation:any};
 const numeric=new Set(['font-size','font-weight','line-height','letter-spacing','border-radius','opacity']);
-const paint=new Set(['background-color','color',...numeric]);
+const paint=new Set(['background-color','color','font-family','text-content',...numeric]);
 export const bindingKey=(binding:DesignBinding)=>JSON.stringify([binding.file,binding.line,binding.col,binding.property]);
 export function designLiteral(property:string,value:string){
+  if(property==='text-content'){if(value.length>4096)throw new Error('Text must be at most 4096 characters.');return JSON.stringify(value);}
   if(layoutProperties.has(property))return layoutValue(property,value);
   if(!paint.has(property)||!value.trim()||value.length>256)throw new Error('This design value is not supported.');
   if(numeric.has(property)){
@@ -21,13 +22,14 @@ export function designLiteral(property:string,value:string){
 export function previewValue(property:string,value:string){
   const literal=designLiteral(property,value),author=literal.startsWith('"')?JSON.parse(literal):literal;
   const unitless=['font-weight','opacity','line-height'].includes(property);
-  return {author:String(author),css:!unitless&&/^-?\d+(?:\.\d+)?$/.test(String(author))?author+'px':String(author)};
+  return {author:String(author),css:property==='text-content'?String(author):!unitless&&/^-?\d+(?:\.\d+)?$/.test(String(author))?author+'px':String(author)};
 }
 
 /** Resolve compiled sites by source provenance, never by deduplicated CSS classes. */
 export function bindingTargets(map:any,app:string,binding:DesignBinding){
   const css=(row:string)=>row==='text_color'?'color':row.replace(/^border_radius_(top|bottom)_(left|right)$/, 'border-$1-$2-radius').replaceAll('_','-');
   return (map.nodes??[]).flatMap((node:any,site:number)=>{
+    if(binding.property==='text-content')return resolve(app,node.file??'')===resolve(app,binding.file)&&node.line===binding.line&&node.col===binding.col?[{site,properties:['text-content']}]:[];
     const properties=[...new Set<string>((node.bindings??[]).filter((row:any)=>!row.state&&row.at&&resolve(app,row.at.file)===resolve(app,binding.file)&&row.at.line===binding.line&&row.at.col===binding.col&&row.attr===binding.property).map((row:any)=>css(row.row)))];
     return properties.length?[{site,properties}]:[];
   });
@@ -65,7 +67,7 @@ export class DesignDraft {
     if(state.version!==1||!state.files||typeof state.files!=='object'||!Array.isArray(state.patches)||state.patches.length>64)throw new Error('The saved design draft is invalid.');
     for(const patch of state.patches){
       const b=patch?.binding;
-      if(!b||typeof b.file!=='string'||b.file.length>2048||!Number.isSafeInteger(b.line)||b.line<1||!Number.isSafeInteger(b.col)||b.col<1||typeof b.sha256!=='string'||b.sha256.length>100||typeof patch.original!=='string'||patch.original.length>256||typeof patch.value!=='string'||patch.value.length>256||patch.key!==bindingKey(b)||patch.preview?.key!==patch.key||!Number.isSafeInteger(patch.preview.site)||typeof patch.preview.plan!=='string'||patch.preview.plan.length>100)throw new Error('The saved design draft is invalid.');
+      if(!b||typeof b.file!=='string'||b.file.length>2048||!Number.isSafeInteger(b.line)||b.line<1||!Number.isSafeInteger(b.col)||b.col<1||typeof b.sha256!=='string'||b.sha256.length>100||typeof patch.original!=='string'||patch.original.length>4096||typeof patch.value!=='string'||patch.value.length>4096||patch.key!==bindingKey(b)||patch.preview?.key!==patch.key||!Number.isSafeInteger(patch.preview.site)||typeof patch.preview.plan!=='string'||patch.preview.plan.length>100)throw new Error('The saved design draft is invalid.');
       const value=previewValue(b.property,patch.value);
       const operation=patch.operation;
       if(operation!==null&&(!operation||operation.op!=='set-row'||operation.file!==b.file||operation.row!==b.property||!['string','number'].includes(typeof operation.value)))throw new Error('The saved design operation is invalid.');

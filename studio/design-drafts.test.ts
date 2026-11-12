@@ -79,3 +79,21 @@ test('preview targets follow source provenance and preserve shared-style overrid
   ]};
   expect(bindingTargets(map,'/app',binding)).toEqual([{site:0,properties:['padding-top','padding-left']},{site:1,properties:['padding-left']}]);
 });
+
+test('text drafts escape literal content and never rewrite a data expression',async()=>{
+  const app=await mkdtemp(join(tmpdir(),'exact-text-draft-'));
+  try{
+    const path=join(app,'app.contract');await writeFile(path,source);
+    const binding={file:'app.contract',line:4,col:7,sha256:digest(source),property:'text-content',shared:false},key=bindingKey(binding);
+    const value='Hello "world"\nA second line';
+    const draft:DesignPatch={key,binding,original:'Hello',value,preview:{key,site:1,plan:'plan',property:'text-content',value,scope:'site'},operation:null};
+    await applyDesignDraft(app,[draft],async()=>{});
+    expect(await readFile(path,'utf8')).toContain('text '+JSON.stringify(value)+' color=');
+    const dynamic=source.replace('text "Hello"','text doc.title');await writeFile(path,dynamic);
+    await expect(applyDesignDraft(app,[{...draft,binding:{...binding,sha256:digest(dynamic)}}],async()=>{})).rejects.toThrow('expression');
+    expect(await readFile(path,'utf8')).toBe(dynamic);
+    expect(previewValue('text-content','123').css).toBe('123');
+    expect(previewValue('text-content','').author).toBe('');
+    expect(bindingTargets({nodes:[{file:path,line:4,col:7},{file:path,line:5,col:7}]},app,binding)).toEqual([{site:0,properties:['text-content']}]);
+  }finally{await rm(app,{recursive:true,force:true});}
+});

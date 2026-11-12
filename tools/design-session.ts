@@ -1,3 +1,4 @@
+import {propertyName,propertyGroup,compoundFields,compoundValue} from './inspector-fields';
 import {readFile} from 'node:fs/promises';
 import { projectUrl } from '../studio/project';
 import {relative,isAbsolute,resolve} from 'node:path';
@@ -8,14 +9,14 @@ import {emptySpacing} from '../studio/spacing';
 import {PreviewChannel} from './preview-channel';
 import {DesignDraft,applyDesignDraft,bindingTargets,bindingKey,previewValue,type DesignBinding,type DesignPatch} from './design-drafts';
 
-const properties=new Set(['color','background-color','font-size','font-weight','line-height','letter-spacing','border-radius','opacity']);
+const properties=new Set(['color','background-color','font-size','font-weight','line-height','letter-spacing','border-radius','opacity','font-family','text-content']);
 type Row={name:string;editable?:any};
 export function editableRows(selection:any) {
   if(!selection || selection.readOnly) return [];
   const seen=new Set<string>();
   return (selection.rows??[]).filter((r:Row)=>{
     const e=r.editable,key=JSON.stringify([e?.file,e?.at,e?.style,e?.row]);
-    const layout=e?.rung==='layout' && layoutProperties.has(e.row);
+    const layout=e?.rung==='layout' && (layoutProperties.has(e.row)||properties.has(e.row));
     if((!layout && (!properties.has(String(e?.row??r.name).replaceAll('_','-')) || !['template','style'].includes(e?.rung))) || e.state || typeof e.text!=='string' || seen.has(key)) return false;
     seen.add(key);return true;
   });
@@ -150,7 +151,7 @@ export class DesignSession {
   async withLayout(event:any) {
     if(!this.app || event.readOnly) return event;
     const rows=await Promise.all((event.rows??[]).map(async(r:any)=>{
-      if(!r.layout || !r.at?.sha256 || r.state || r.source!=='authored' || !(r.origin==='own'||/^class:[\w-]+$/.test(r.origin??'')) || !layoutProperties.has(r.attr)) return r;
+      if(!r.at?.sha256 || r.state || r.source!=='authored' || !(r.origin==='own'||/^class:[\w-]+$/.test(r.origin??'')) || !(layoutProperties.has(r.attr)||properties.has(r.attr))) return r;
       const file=relative(this.app,resolve(this.app,r.at.file));
       if(this.files[file]!==r.at.sha256)return r;
       const site:LayoutSite={file,line:r.at.line,col:r.at.col,sha256:r.at.sha256,attr:r.attr,shared:r.origin!=='own'};
@@ -159,6 +160,17 @@ export class DesignSession {
         return literal?{...r,editable:{rung:'layout',row:r.attr,file,at:{line:site.line,col:site.col},sha256:site.sha256,text:literal.value,site}}:r;
       } catch {return r;}
     }));
+    const at=event.source;
+    if(at?.file&&this.picked?.node.kind==='text'){
+      const file=relative(this.app,resolve(this.app,at.file)),sha256=this.files[file];
+      if(sha256){
+        const site:LayoutSite={file,line:at.line,col:at.col,sha256,attr:'text-content',shared:false};
+        try{const literal=await sourceLiteral(this.app,site);
+          if(literal)rows.unshift({name:'text-content',source:'authored',editable:{rung:'layout',row:'text-content',file,at:{line:site.line,col:site.col},sha256,text:literal.value,site}});
+          else rows.unshift({name:'text-content',attr:'text-content',source:'dynamic',value:this.picked.node.label,editable:{rung:null,reason:'Text comes from app data or an expression. Edit its data source.'}});
+        }catch{/* No local literal: do not invent a writable binding. */}
+      }
+    }
     return {...event,rows};
   }
   binding(row:Row):DesignBinding {
@@ -190,9 +202,29 @@ export class DesignSession {
       spacingId,spacingPlan,spacingFrame:frame?.frame??'',
       spacingInputs:spacingRows(rows.map((r,i)=>({id:String(i),property:r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true}))),
       draftCount:this.drafts.count,draftState:this.drafts.serialize(),draftError:this.draftError||(this.drafts.conflict(this.files)?'The source changed. Discard this draft before editing the new source.':''),canApply:this.drafts.count>0&&!this.drafts.conflict(this.files)&&!this.draftError,
-      bridgeOrigin:this.bridge?.origin??'',tree,crumbs,selectedLabel:this.picked?.node.label??'',restoring:!!this.restoring,selecting:!!this.pendingSelection,
+      instances:frame&&this.picked?frame.nodes.filter(n=>n.site===this.picked!.node.site).length:1,bridgeOrigin:this.bridge?.origin??'',tree,crumbs,selectedLabel:this.picked?.node.label??'',restoring:!!this.restoring,selecting:!!this.pendingSelection,
       message:this.pendingSelection?'Selecting element…':this.restoring?'Updating selection…':s?.readOnly || (s && !rows.length?'No editable properties.':'Select an element in a screen.'),
-      rows:rows.map((r:Row,i:number)=>({id:String(i),name:labels[r.editable.row]??r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true,group:r.editable.rung==='layout'?(r.editable.row.startsWith('padding')||r.editable.row.startsWith('margin')||r.editable.row.includes('gap')?'Spacing':'Layout'):'Appearance',options:layoutOptions(r.editable.row).map(value=>({value,label:optionLabels[value]??value}))})),canUndo:this.drafts.past.length>0,applied:this.applied};
+      rows:this.inspectorRows(rows),canUndo:this.drafts.past.length>0,applied:this.applied};
+  }
+  inspectorRows(rows:Row[]){
+    const result=rows.map((r:Row,i:number)=>{
+      const e=r.editable,property=e.row,binding=this.binding(r),fields=compoundFields(property,e.text);
+      return {id:String(i),property,name:propertyName[property]??property.replaceAll('-',' '),value:e.text,shared:binding.shared,group:propertyGroup(property),binding:`${binding.file}:${binding.line}:${binding.col}`,reason:'',readonly:false,fields,linked:fields.length>0&&fields.every(f=>f.value===fields[0].value),options:layoutOptions(property).map(value=>({value,label:optionLabels[value]??value}))};
+    });
+    const seen=new Set(result.map(r=>r.property));
+    for(const r of this.selection?.rows??[]){
+      const property=r.attr??String(r.name).replaceAll('_','-');
+      if(seen.has(property)||!(layoutProperties.has(property)||properties.has(property))||r.source==='initial'||r.source==='inherited')continue;
+      seen.add(property);
+      result.push({id:'readonly-'+property,property,name:propertyName[property]??property.replaceAll('-',' '),value:String(r.token?.text??r.value??''),shared:false,group:propertyGroup(property),binding:r.at?`${r.at.file}:${r.at.line}:${r.at.col}`:'',reason:r.source==='dynamic'?(property==='text-content'?'Bound to app data · edit its source':'Responsive or data-driven expression'):r.origin==='tag'?'Defined by the element type':r.editable?.reason??'Controlled in source',readonly:true,fields:[],linked:false,options:[]});
+    }
+    return result;
+  }
+  async editField(version:number,address:string,value:string){
+    const [index,part]=address.split(':');
+    const row=this.currentRows()[Number(index)];
+    if(!row)throw new Error('Select the element again.');
+    return this.edit(version,Number(index),compoundValue(row.editable.row,row.editable.text,part,value));
   }
   async edit(version:number,index:number,value:string) {
     if(this.busy) throw new Error('A change is still being applied.');
@@ -210,7 +242,7 @@ export class DesignSession {
         if(this.sourceMap?.digest===frame.plan)targets=bindingTargets(this.sourceMap,this.app,binding);
         if(!targets?.length)throw new Error('This build has no matching preview source map. Reconnect after it rebuilds.');
       }else if(binding.shared)throw new Error('Shared style drafts require a local Exact source map.');
-      this.drafts.stage({key,binding,original:row.editable.text,value:next.author,preview:{key,site:this.picked?.node.site??0,plan:frame?.plan??'',property:binding.property,value:next.css,scope:binding.shared?'style':'site',targets},operation:row.editable.rung==='layout'?null:rowOperation(row,next.author)},this.files);
+      this.drafts.stage({key,binding,original:row.editable.text,value:next.author,preview:{key,site:this.picked?.node.site??0,plan:frame?.plan??'',property:binding.property,value:next.css,scope:binding.shared?'style':'site',targets},operation:this.app||row.editable.rung==='layout'?null:rowOperation(row,next.author)},this.files);
       this.draftError='';this.version++;this.applied=false;
       return this.view();
     } finally {this.busy=false;}
@@ -274,8 +306,6 @@ export function designEvents(id:string,request:Request){
   entry.seen=Date.now();return entry.session.preview.subscribe(request);
 }
 const optionLabels:Record<string,string>={row:'Row',column:'Column','row-reverse':'Row reversed','column-reverse':'Column reversed',stretch:'Stretch','flex-start':'Start',center:'Center','flex-end':'End',baseline:'Baseline','space-between':'Space between','space-around':'Space around','space-evenly':'Space evenly',nowrap:'No wrap',wrap:'Wrap','wrap-reverse':'Wrap reversed'};
-const labels:Record<string,string>={'background-color':'Fill',color:'Text color','font-size':'Font size','font-weight':'Weight','line-height':'Line height','letter-spacing':'Letter spacing','border-radius':'Corner radius',opacity:'Opacity'};
-Object.assign(labels,{'flex-direction':'Direction','align-items':'Align items','justify-content':'Distribute','flex-wrap':'Wrap',width:'Width',height:'Height','min-width':'Min width','max-width':'Max width','min-height':'Min height','max-height':'Max height',gap:'Gap','row-gap':'Row gap','column-gap':'Column gap',padding:'Padding','padding-top':'Padding top','padding-right':'Padding right','padding-bottom':'Padding bottom','padding-left':'Padding left',margin:'Margin','margin-top':'Margin top','margin-right':'Margin right','margin-bottom':'Margin bottom','margin-left':'Margin left'});
 export async function designRequest(body:any) {
   for(const [id,entry] of sessions) if(Date.now()-entry.seen>120000) {sessions.delete(id);void entry.session.close().catch(()=>{});}
   if(body.op==='open') {
@@ -303,6 +333,7 @@ export async function designRequest(body:any) {
     if(s.ended){await s.close();sessions.delete(body.session);return {...view,session:''};}
     return view;
   }
+  if(body.op==='field')return s.editField(Number(body.version),String(body.row),String(body.value));
   if(body.op==='edit') return s.edit(Number(body.version),Number(body.row),body.value);
   if(body.op==='apply')return s.apply();
   if(body.op==='discard')return s.discard();

@@ -8,7 +8,7 @@ const enums:Record<string,string[]>={
   'justify-content':['flex-start','center','flex-end','space-between','space-around','space-evenly'],
   'flex-wrap':['nowrap','wrap','wrap-reverse'],
 };
-const lengths=new Set(['width','height','min-width','max-width','min-height','max-height','gap','row-gap','column-gap','padding','padding-top','padding-right','padding-bottom','padding-left','margin','margin-top','margin-right','margin-bottom','margin-left']);
+const lengths=new Set(['width','height','min-width','max-width','min-height','max-height','gap','row-gap','column-gap','padding','padding-top','padding-right','padding-bottom','padding-left','margin','margin-top','margin-right','margin-bottom','margin-left','border-radius','border-top-left-radius','border-top-right-radius','border-bottom-right-radius','border-bottom-left-radius','font-size','letter-spacing']);
 export const layoutProperties=new Set([...lengths,...Object.keys(enums)]);
 export const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
 export type LayoutSite={file:string;line:number;col:number;sha256:string;attr:string;shared:boolean};
@@ -18,7 +18,7 @@ export function literalAt(source:string,site:LayoutSite) {
   const prefix=Buffer.from(line).subarray(0,site.col-1).toString('utf8');
   if(Buffer.byteLength(prefix)!==site.col-1) return null;
   const tail=line.slice(prefix.length),escaped=site.attr.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  const match=new RegExp('^'+escaped+'\\s*=\\s*("(?:[^"\\\\]|\\\\.)*"|-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[eE][+-]?\\d+)?)(?=\\s|$)').exec(tail);
+  const match=new RegExp('^'+(site.attr==='text-content'?'text\\s+':escaped+'\\s*=\\s*')+'("(?:[^"\\\\]|\\\\.)*"|-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[eE][+-]?\\d+)?)(?=\\s|$)').exec(tail);
   if(!match) return null;
   const raw=match[1];let value:string;
   try {value=raw.startsWith('"')?JSON.parse(raw):raw;} catch {return null;}
@@ -29,12 +29,12 @@ export function layoutValue(attr:string,text:string):string {
   const value=text.trim();
   if(enums[attr]) {if(!enums[attr].includes(value)) throw new Error('Choose one of the available layout options.');return JSON.stringify(value);}
   if(!lengths.has(attr)) throw new Error('This layout property is not supported.');
-  const parts=value.split(/\s+/),isShorthand=attr==='padding'||attr==='margin'||attr==='gap',limit=attr==='gap'?2:isShorthand?4:1;
+  const parts=value.split(/\s+/),isShorthand=attr==='padding'||attr==='margin'||attr==='gap'||attr==='border-radius',limit=attr==='gap'?2:isShorthand?4:1;
   if(!value || parts.length>limit) throw new Error(attr==='gap'?'Use one or two gap values.':isShorthand?'Use one to four spacing values.':'Enter one size.');
   for(const part of parts) {
     if(part==='auto' && (attr.includes('width')||attr.includes('height')||attr.startsWith('margin'))) continue;
     if(!/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|vh|vw)?$/.test(part)) throw new Error('Use a number, CSS length, or percentage.');
-    const n=parseFloat(part);if(Math.abs(n)>10000 || (n<0&&!attr.startsWith('margin'))) throw new Error('Use a non-negative value up to 10000.');
+    const n=parseFloat(part);if(Math.abs(n)>10000 || (n<0&&!attr.startsWith('margin')&&attr!=='letter-spacing')) throw new Error('Use a non-negative value up to 10000.');
   }
   if(parts.length===1 && /^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(value)) return String(Number(value));
   return JSON.stringify(parts.map(p=>parts.length>1 && /^-?[\d.]+$/.test(p)?p+'px':p).join(' '));
