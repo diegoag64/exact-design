@@ -47,6 +47,17 @@ test('design inspector edits text, linked spacing and corners as drafts, with pe
     await commit('Text content','A calmer place to think.');
     await frame.getByText('A calmer place to think.',{exact:true}).waitFor();
     expect(loads).toBe(beforeLoads);
+    // Background inspection must not pulse buttons or replace the field being edited.
+    await page.getByRole('textbox',{name:'Text content',exact:true}).focus();
+    await page.evaluate(()=>{
+      const button=document.querySelector('[data-testid="apply-design"]');
+      window.inspectorCheck={button,field:document.activeElement,disabled:0};
+      window.inspectorCheck.observer=new MutationObserver(records=>{window.inspectorCheck.disabled+=records.filter(r=>r.attributeName==='disabled').length;});
+      window.inspectorCheck.observer.observe(button,{attributes:true});
+    });
+    await page.waitForTimeout(2300);
+    expect(await page.evaluate(()=>{const c=window.inspectorCheck;c.observer.disconnect();return {disabled:c.disabled,sameButton:c.button===document.querySelector('[data-testid="apply-design"]'),sameField:c.field===document.activeElement,connected:c.field.isConnected};})).toEqual({disabled:0,sameButton:true,sameField:true,connected:true});
+
     await page.getByRole('button',{name:'Undo draft change',exact:true}).click();
     await frame.getByText('Room for your thoughts.',{exact:true}).waitFor();
     await commit('Text content','A calmer place to think.');
@@ -72,6 +83,12 @@ test('design inspector edits text, linked spacing and corners as drafts, with pe
     await page.getByRole('button',{name:'Close timeline',exact:true}).click();
     await page.locator('button[title="card-1"]').first().click();
     await page.getByRole('textbox',{name:'Corner radius all',exact:true}).waitFor({timeout:6000});
+    await commit('Padding all','12');
+    await frame.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="card-1"]')).padding==='12px',undefined,{polling:50});
+    await page.getByRole('button',{name:'Override Width',exact:true}).click();
+    await commit('Width','360');
+    await frame.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="card-1"]')).width==='360px',undefined,{polling:50});
+
     await page.getByRole('button',{name:'Unlink Corner radius',exact:true}).click();
     await commit('Corner radius Top left','28');
     await frame.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="card-1"]')).borderTopLeftRadius==='28px',undefined,{polling:50});
@@ -84,21 +101,37 @@ test('design inspector edits text, linked spacing and corners as drafts, with pe
       const inspector=await import('/__dev/inspect.js');
       for(const type of ['pointerdown','pointerup'])inspector.gate(new PointerEvent(type,{clientX:rect.left+rect.width/2,clientY:rect.top+10,button:0}));mask.remove();
     });
+    await wait(()=>document.querySelector('[data-testid="design-source"]')?.textContent==='app.contract:153');
     await page.getByRole('textbox',{name:'Padding all',exact:true}).waitFor();
     await page.getByRole('button',{name:'Unlink Padding',exact:true}).click();await commit('Padding Left','32');
     await frame.waitForFunction(()=>getComputedStyle(document.getElementById('test-content')).paddingLeft==='32px',undefined,{polling:50});
     expect(await frame.locator('#test-content').evaluate(e=>getComputedStyle(e).paddingRight)).toBe('20px');
     await page.getByRole('button',{name:'Link Padding',exact:true}).click();await commit('Padding all','24');
     await frame.waitForFunction(()=>getComputedStyle(document.getElementById('test-content')).padding==='24px',undefined,{polling:50});
+    await page.getByRole('button',{name:'Flow: Row',exact:true}).click();
+    await frame.waitForFunction(()=>getComputedStyle(document.getElementById('test-content')).flexDirection==='row',undefined,{polling:50});
+    await page.getByRole('button',{name:'Flow: Column',exact:true}).click();
+    await frame.waitForFunction(()=>getComputedStyle(document.getElementById('test-content')).flexDirection==='column',undefined,{polling:50});
+    await commit('Opacity','75%');
+    await frame.waitForFunction(()=>getComputedStyle(document.getElementById('test-content')).opacity==='0.75',undefined,{polling:50});
+    await page.getByRole('combobox',{name:'Add property',exact:true}).selectOption('flex-grow');
+    await commit('Grow','1');
+    await frame.waitForFunction(()=>getComputedStyle(document.getElementById('test-content')).flexGrow==='1',undefined,{polling:50});
+
     await page.screenshot({path:resolve(root,'.exact/design-spacing-inspector.png')});
     await page.getByRole('button',{name:'Apply to code',exact:true}).click();
     await page.getByRole('button',{name:'Apply to code',exact:true}).waitFor({state:'hidden'});
     const applied=await readFile(resolve(app,'app.contract'),'utf8');
+    expect(applied).toContain('flex-grow=1');expect(applied).toContain('opacity=0.75');
+    expect(applied).toContain('width=360');expect(applied).toMatch(/ padding=12(?:\s|$)/);
     expect(applied).toContain('A calmer place to think.');expect(applied).toContain('border-radius="28px 16px 16px 16px"');expect(applied).toContain('padding=24');
     await page.reload();await page.getByRole('button',{name:'Timeline',exact:true}).click();
     await page.getByRole('button',{name:/Change .*Apply to code/}).waitFor();
     await page.getByRole('button',{name:/Change .*Edit text-content/}).last().click();
     expect(await page.locator('[data-testid="timeline-detail"]').innerText()).toContain('A calmer place to think.');
+    const textIcon=await page.getByRole('button',{name:/Change .*Edit text-content/}).last().locator('svg path').getAttribute('d');
+    const spacingIcon=await page.getByRole('button',{name:/Change .*Edit padding/}).last().locator('svg path').getAttribute('d');
+    expect(textIcon).not.toBe(spacingIcon);expect(spacingIcon?.length).toBeGreaterThan(10);
     expect(errors).toEqual([]);
   }catch(error){console.log(await page.locator("body").innerText());console.log("PAGE ERRORS",errors);console.log("FRAMES",await Promise.all(page.frames().map(f=>f.evaluate(()=>({url:location.href,build:window.__exactDesignBuild,inspect:!!document.getElementById("exact-inspect")})))));throw error;}finally{
     if(page)await page.context().close();if(suite)await suite.browser.close();

@@ -94,17 +94,23 @@ Exact owns placement, viewport-edge fitting, action dismissal, and click-away di
 
 ## Design inspector
 
-Properties are grouped into Layout, Spacing, Text, Typography, and Appearance. Dimensions and typography metrics use paired fields. The source adapter in `tools/inspector-fields.ts` supplies property names, groups, and compound-field metadata; the view does not infer source semantics from displayed labels.
+Properties are grouped into collapsible Position, Layout, Spacing, Text, Typography, Appearance, Fill, Stroke, and Effects sections. Dimensions and typography metrics use paired fields. The source adapter in `tools/inspector-fields.ts` supplies property names, groups, and compound-field metadata; the view does not infer source semantics from displayed labels.
 
 Padding and margin follow Top, Right, Bottom, Left order. Corner radius follows Top left, Top right, Bottom right, Bottom left. Gap uses Row and Column. A selected chain control means one value updates every edge or axis. Unlinking exposes independent fields; editing one preserves the others. Linking unequal values uses the first value, as its tooltip explains. Each edit remains one draft operation and one undo step.
 
-Linking values is separate from sharing source. The layers icon identifies a shared style. A repeated template shows its instance count beneath the selected element. Source locations remain visible on the selection and available on property tooltips. Dynamic and responsive expressions stay visible with a read-only explanation. The editor never replaces an expression with its current computed value.
+Linking values is separate from sharing source. The layers icon identifies a shared style. A repeated template shows its instance count beneath the selected element. Source locations remain visible on the selection and available on property tooltips. Dynamic and responsive style expressions stay read-only until the user chooses **Override**. That action stages a static value and records the original expression in the timeline; inspection alone never freezes responsive behavior. Package-owned sources and data-bound text remain read-only.
+
+Common controls appear even when no attribute is written on the element. Editing an unset value adds a local source attribute. **Add property** exposes additional sizing, flex, grid, positioning, and visual settings from `tools/property-catalog.ts`; choosing one stages its default value. X and Y become editable after choosing a positioning mode such as Relative or Absolute. Opacity accepts percentages. Flow and alignment use labeled icon controls.
+
+Source adapters distinguish literal replacement, new inline attributes, and explicit expression replacement. `tools/source-properties.ts` locates complete values and safe insertion points without evaluating expressions. Additions at the same source location are grouped into a single formatted insertion. Every Apply checks file digests and validates the entire batch with the pinned compiler before writing. Unsupported or ambiguous source locations are not offered as writable controls.
+
+Background polling does not set write-busy state, fade draft actions, or refresh the timeline. Actual write responses clear write-busy state; successful journal changes refresh history. Transient request errors preserve the last inspector result while reporting the error.
 
 Literal text uses a multiline Content field. Preview text overrides preserve the runtime's underlying text and restore it on undo or discard. Source writes escape the literal, validate the batch, and check the file digest. Text bound to application data remains read-only here.
 
 ## Design timeline
 
-The Timeline toolbar button opens a horizontal sequence of edits. Selecting a point shows the action, element, author, time, source address, and before/after values. Opening history does not rewind the live design. Closing it restores the full canvas area.
+The Timeline toolbar button opens a horizontal sequence of edits. Each point uses an icon for its operation or edited property. Selecting it shows the action, element, author, time, source address, and before/after values. `studio/history-icons.ts` derives icons from event metadata, so older saved entries gain the same treatment. Opening history does not rewind the live design. Closing it restores the full canvas area.
 
 `studio/design-history.ts` persists an append-only journal in `app:/data/design-history.json`. Entries have an ID, parent ID, timestamp, project, actor (`user` or `ai`), operation kind, target, structured changes, and before/after state. The current manual editor records `user`; the actor field supports a later AI command adapter. There is no AI editing endpoint yet.
 
@@ -116,7 +122,7 @@ Workspace events retain document snapshots. Source events retain draft patches, 
 
 - `bun run test`: source editing, persistence, selection, geometry, and proxy tests.
 - `bun run test:ui`: Exact behavior tests, including camera coordinates and context actions.
-- `bun run test:preview`: isolated real-browser tests. The studio regression covers icon tint and centering in both themes, right-click targeting, keyboard focus, edge placement, Space and middle dragging, and typing. The real-app regressions cover menus and navigation across inspected iframe boundaries, literal text editing, independent padding and corners, linked values, checked source writes, and timeline persistence.
+- `bun run test:preview`: isolated real-browser tests. The studio regression covers icon tint and centering in both themes, right-click targeting, keyboard focus, edge placement, Space and middle dragging, and typing. The real-app regressions cover menus and navigation across inspected iframe boundaries, literal text editing, independent padding and corners, linked values, checked source writes, timeline persistence, property additions, explicit responsive overrides, and stable controls during background polling.
 - `bun run verify`: the required Exact layout and behavior audit.
 
 New controls use these primitives and add behavior tests where they introduce interaction or state. Changes to tokens apply to all consumers; feature-specific source editing belongs outside the component library.

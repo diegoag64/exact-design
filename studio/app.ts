@@ -13,6 +13,7 @@ const persistence = new WorkspacePersistence(editor);
 const drafts=new DraftStorage();
 const history=new DesignHistory();
 const designOrigins=new Map<string,string>();
+const designViews=new Map<string,any>();
 let status = ''; let resizing = false;
 export const DISCOVERY_API = 'http://127.0.0.1:5175';
 export const grants = `fs.read app:/data/design.json\nfs.write app:/data/design.json\nfs.read app:/data/design-drafts.json\nfs.write app:/data/design-drafts.json\nfs.read app:/data/design-history.json\nfs.write app:/data/design-history.json\nnet.fetch ${DISCOVERY_API}`;
@@ -105,28 +106,31 @@ const sources: Sources = {
     }});
   },
   design: async ([op,session,url,version,row,value,timestamp], _store, storage) => {
-    const empty={instances:1,draftCount:0,draftState:'',draftError:'',canApply:false,ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,selectionRevision:0,message:'',rows:[],canUndo:false,applied:false,spacingId:'',spacingPlan:'',spacingFrame:'',spacingInputs:[]};
+    const empty={operation:op,historyChanged:false,instances:1,draftCount:0,draftState:'',draftError:'',canApply:false,ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,selectionRevision:0,message:'',rows:[],availableProperties:[],canUndo:false,applied:false,spacingId:'',spacingPlan:'',spacingFrame:'',spacingInputs:[]};
     try {
       await drafts.load(storage.fs);
       const origin=url?new URL(url).origin:designOrigins.get(session)??'';
       const previous=drafts.get(origin);
       const draftState=op==='open'?previous:'';
-      if(['edit','field','spacing','undo','discard','apply'].includes(op))await history.load(storage.fs);
+      if(['edit','field','spacing','override','add-property','undo','discard','apply'].includes(op))await history.load(storage.fs);
       const response=await fetch(`${DISCOVERY_API}/design`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,session,url:origin,version,row,value,draftState})});
-      const result=await response.json();
+      let result=await response.json();
+      if(!result.ok&&designViews.has(session))result={...designViews.get(session),...result,historyChanged:false};
       if(op==='open'&&result.ok){designOrigins.set(result.session,origin);if(result.bridgeOrigin)previewBridges.set(origin,result.bridgeOrigin);}
       if(result.ok&&typeof result.draftState==='string'&&origin){
         const changes=draftChanges(previous,result.draftState,op==='apply');
-        if(['edit','field','spacing','undo','discard','apply'].includes(op)&&changes.length){
+        if(['edit','field','spacing','override','add-property','undo','discard','apply'].includes(op)&&changes.length){
           await history.append(storage.fs,{time:new Date(timestamp).toISOString(),kind:op==='apply'?'apply':op==='undo'?'undo':op==='discard'?'discard':'draft',project:origin,label:op==='apply'?'Apply to code':op==='undo'?'Undo draft':op==='discard'?'Discard draft':'Edit '+[...new Set(changes.map(c=>c.property))].join(', '),target:result.selectedLabel||result.source||'App design',changes,beforeState:previous,afterState:result.draftState});
+          result.historyChanged=true;
         }
         await drafts.save(storage.fs,origin,result.draftState);
       }
-      if(op==='close')designOrigins.delete(session);
-      return {...empty,...result,origin:op==='open'?origin:'',session:op==='close'?'':result.session??session};
+      if(result.ok&&op!=='close')designViews.set(result.session??session,result);
+      if(op==='close'){designOrigins.delete(session);designViews.delete(session);}
+      return {...empty,...result,operation:op,origin:op==='open'?origin:'',session:op==='close'?'':result.session??session};
     } catch(e) {
       if((e as {code?:string}).code==='bake') throw e;
-      return {...empty,error:e instanceof Error?e.message:'Could not reach the editing helper. Reconnect before making another change.'};
+      return {...empty,...designViews.get(session),operation:op,ok:false,historyChanged:false,error:e instanceof Error?e.message:'Could not reach the editing helper. Reconnect before making another change.'};
     }
   },
   discover: async ([owner,existing,revision]) => {

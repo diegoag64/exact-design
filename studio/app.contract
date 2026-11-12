@@ -13,6 +13,8 @@ shape SnapTarget
   end: number
   gap: bool
 
+fn propertyIcon(property: string, value: string): string = property == "flex-direction" ? (value.startsWith("row") ? "columns-2" : "rows-2") : property == "align-items" ? (value == "flex-start" ? "align-vertical-justify-start" : value == "center" ? "align-vertical-justify-center" : value == "flex-end" ? "align-vertical-justify-end" : value == "stretch" ? "move-vertical" : "align-vertical-justify-end") : value == "flex-start" ? "align-horizontal-justify-start" : value == "center" ? "align-horizontal-justify-center" : value == "flex-end" ? "align-horizontal-justify-end" : "between-horizontal-start"
+
 fn magnitude(n: number): number = max(n, -n)
 fn panEase(t: number): number = 1 - (1 - t) * (1 - t) * (1 - t)
 fn layerKind(kind: string): string = kind == "text" or kind == "span" ? "Text" : kind == "button" ? "Button" : kind == "row" ? "Row" : kind == "column" ? "Column" : kind == "scroll" ? "Scroll" : kind == "grid" ? "Grid" : kind == "image" or kind == "img" ? "Image" : kind == "screen" or kind == "main" ? "Screen" : kind == "input" ? "Input" : "Container"
@@ -127,6 +129,7 @@ shape HistoryChange
   after: string
 
 shape HistoryEntry
+  icon: string
   id: string
   number: number
   label: string
@@ -151,6 +154,8 @@ shape DesignRow
   property: string
   binding: string
   readonly: bool
+  canOverride: bool
+  added: bool
   reason: string
   fields: DesignField[]
   linked: bool
@@ -195,6 +200,8 @@ shape PreviewSignal
   measurement: SpacingMeasurement
 
 shape DesignReply
+  operation: string
+  historyChanged: bool
   instances: number
   draftCount: number
   draftState: string
@@ -210,6 +217,7 @@ shape DesignReply
   selectionRevision: number
   message: string
   rows: DesignRow[]
+  availableProperties: LayoutOption[]
   canUndo: bool
   applied: bool
   bridgeOrigin: string
@@ -263,7 +271,7 @@ component Studio
     historySelected = historySelected == id ? "" : id
   mutation changed as shape Reply queue refreshes doc, history then afterEdit
   mutation libraryChanged as shape Reply queue refreshes doc, history then afterLibrary
-  mutation designChanged as shape DesignReply queue refreshes history then afterDesign
+  mutation designChanged as shape DesignReply queue then afterDesign
   mutation hoverChanged as shape DesignReply queue
   resource previewSignal = previewSignal(designSession) as shape PreviewSignal else empty()
   derive spacingMeasured = editing ? some(previewSignal.measurement) : none
@@ -335,6 +343,16 @@ component Studio
     every(750, pollDesign)
   task selectionPoll when editing and selectingElement
     every(50, pollDesign)
+  action overrideProperty(id: string)
+    designWriting = true
+    send designChanged = design("override", designSession, "", designVersion, id, "", time.epochAtZero + performanceNow())
+  action addDesignProperty(property: string)
+    if property != ""
+      designWriting = true
+      send designChanged = design("add-property", designSession, "", designVersion, property, "", time.epochAtZero + performanceNow())
+  state collapsedDesignSections = ["Effects"]
+  action toggleDesignSection(section: string)
+    collapsedDesignSections = collapsedDesignSections.includes(section) ? collapsedDesignSections.filter(s => s != section) : collapsedDesignSections.concat([section])
   state independentFields = [""]
   action toggleFieldLink(id: string, binding: string, value: string, independent: bool)
     if independent
@@ -380,12 +398,15 @@ component Studio
   action selectElement(id: string)
     send designChanged = design("select", designSession, "", designVersion, id, "", time.epochAtZero + performanceNow())
   action afterDesign
-    designWriting = false
     match designChanged
       case some(r)
+        if ["open", "close", "edit", "field", "spacing", "override", "add-property", "undo", "apply", "discard"].includes(r.operation)
+          designWriting = false
         if r.error != ""
           designError = r.error
         if r.ok
+          if r.historyChanged
+            refresh history
           if leftOpen and r.selectionRevision != revealedLayerRevision
             revealSelectedLayer()
           if r.version != designVersion or r.session == ""
@@ -845,9 +866,9 @@ component Studio
                               column class=PanelSection
                                 row align-items="center" justify-content="space-between"
                                   text `${result.draftCount} unsaved ${result.draftCount == 1 ? "change" : "changes"}` font="type.caption" color="ink.secondary" testId="draft-count"
-                                  button press=discardDesign class=Tool height=26 padding=4 disabled=pending(designChanged) testId="discard-design"
+                                  button press=discardDesign class=Tool height=26 padding=4 disabled=designWriting testId="discard-design"
                                     text "Discard" font="type.caption"
-                                button press=applyDesign class=Tool background-color="surface.selected" width="100%" disabled=(not result.canApply or pending(designChanged)) testId="apply-design"
+                                button press=applyDesign class=Tool background-color="surface.selected" width="100%" disabled=(not result.canApply or designWriting) testId="apply-design"
                                   text "Apply to code" font="type.body"
                                 if result.draftError != ""
                                   text result.draftError role="alert" font="type.caption" color="ink.secondary" testId="draft-error"
@@ -877,48 +898,70 @@ component Studio
                             if result.rows.length == 0
                               text (result.restoring ? result.message : result.applied ? "Applied to source." : result.message) margin=16 font="type.body" color="ink.secondary" testId="design-message"
                             if result.canUndo
-                              button press=undoDesign disabled=pending(designChanged) class=Tool width="100%" justify-content="flex-start" testId="undo-app-design"
+                              button press=undoDesign disabled=designWriting class=Tool width="100%" justify-content="flex-start" testId="undo-app-design"
                                 text "Undo draft change" font="type.body"
                           case none
                             text "Select an element in a screen." font="type.body"
-                        for group in ["Layout", "Spacing", "Text", "Typography", "Appearance"] key=group
+                        for group in ["Position", "Layout", "Spacing", "Text", "Typography", "Appearance", "Fill", "Stroke", "Effects"] key=group
                           if designRows.filter(p => p.group == group).length > 0
                             column class=PanelSection
-                              SectionHeading(label=group)
-                              row flex-wrap="wrap" gap=12 align-items="flex-start"
-                                for property in designRows.filter(p => p.group == group) key=`${property.binding}-${property.id}`
-                                  column gap=6 min-width=0 width=((group == "Typography" and property.property != "font-family" and property.property != "color") or (group == "Layout" and (property.property.includes("width") or property.property.includes("height"))) ? "calc(50% - 6px)" : "100%")
-                                    row align-items="center" gap=6
-                                      text property.name font="type.caption" color="ink.secondary" flex=1 title=property.property
-                                      if property.shared
-                                        column color="ink.selected" title=`Shared style · ${property.binding} · updates every use` aria-label="Shared source style"
-                                          Icon(name="layers", size=14, angle=0)
-                                      if property.fields.length > 0 and not property.readonly
-                                        button press=toggleFieldLink(property.id, property.binding, firstField(property.fields), not property.linked or independentFields.includes(property.binding)) class=Tool width=24 height=24 padding=4 aria-label=`${property.linked and not independentFields.includes(property.binding) ? "Unlink" : "Link"} ${property.name}` aria-pressed=(property.linked and not independentFields.includes(property.binding)) title=(property.linked and not independentFields.includes(property.binding) ? "Linked · one value changes all" : "Independent values · link using the first value") color=(property.linked and not independentFields.includes(property.binding) ? "ink.selected" : "ink.muted") disabled=designWriting
-                                          Icon(name="link-2", size=14, angle=0)
-                                    if property.readonly
-                                      column gap=4
-                                        input value=property.value readonly=true class=Field aria-label=property.name title=property.reason color="ink.muted"
-                                        text property.reason font="type.caption" color="ink.muted"
-                                    else if property.fields.length > 0
-                                      if property.linked and not independentFields.includes(property.binding)
-                                        row align-items="center" class=InspectorValue
-                                          text (property.property == "gap" ? "Both" : "All") width=36 font="type.caption" color="ink.muted" text-align="center"
-                                          input value=firstField(property.fields) change=editDesignField(property.id, "all") class=Field background-color="transparent" flex=1 min-width=0 aria-label=`${property.name} all` disabled=designWriting
+                              button press=toggleDesignSection(group) class=Tool width="100%" height=24 padding=0 justify-content="space-between" aria-label=`${collapsedDesignSections.includes(group) ? "Expand" : "Collapse"} ${group}` aria-expanded=not collapsedDesignSections.includes(group)
+                                text group font="type.body" font-weight=600 color="ink.primary"
+                                Icon(name="chevron-right", size=12, angle=(collapsedDesignSections.includes(group) ? 0 : 90))
+                              if not collapsedDesignSections.includes(group)
+                                row flex-wrap="wrap" gap=12 align-items="flex-start"
+                                  for property in designRows.filter(p => p.group == group) key=`${property.binding}-${property.id}`
+                                    column gap=6 min-width=0 width=((group == "Typography" and property.property != "font-family" and property.property != "color") or (group == "Layout" and (property.property.includes("width") or property.property.includes("height"))) or (group == "Position" and property.property != "position") or (group == "Appearance" and property.fields.length == 0) or (group == "Stroke" and property.property != "border-color") ? "calc(50% - 6px)" : "100%")
+                                      row align-items="center" gap=6
+                                        text property.name font="type.caption" color="ink.secondary" flex=1 title=`${property.property} · ${property.added ? "Editing adds a local property" : property.binding}`
+                                        if property.shared
+                                          column color="ink.selected" title=`Shared style · ${property.binding} · updates every use` aria-label="Shared source style"
+                                            Icon(name="layers", size=14, angle=0)
+                                        if property.fields.length > 0 and not property.readonly
+                                          button press=toggleFieldLink(property.id, property.binding, firstField(property.fields), not property.linked or independentFields.includes(property.binding)) class=Tool width=24 height=24 padding=4 aria-label=`${property.linked and not independentFields.includes(property.binding) ? "Unlink" : "Link"} ${property.name}` aria-pressed=(property.linked and not independentFields.includes(property.binding)) title=(property.linked and not independentFields.includes(property.binding) ? "Linked · one value changes all" : "Independent values · link using the first value") color=(property.linked and not independentFields.includes(property.binding) ? "ink.selected" : "ink.muted") disabled=designWriting
+                                            Icon(name="link-2", size=14, angle=0)
+                                      if property.readonly
+                                        column gap=4
+                                          input value=property.value readonly=true class=Field aria-label=property.name title=property.reason color="ink.muted"
+                                          row align-items="center" gap=4
+                                            text property.reason font="type.caption" color="ink.muted" flex=1
+                                            if property.canOverride
+                                              button press=overrideProperty(property.id) class=Tool width="auto" height=24 padding="0 6px" aria-label=`Override ${property.name}` title="Replace the source expression with a static value when you edit this field" color="ink.selected"
+                                                text "Override" font="type.caption"
+                                      else if property.fields.length > 0
+                                        if property.linked and not independentFields.includes(property.binding)
+                                          row align-items="center" class=InspectorValue
+                                            text (property.property == "gap" ? "Both" : "All") width=36 font="type.caption" color="ink.muted" text-align="center"
+                                            input value=firstField(property.fields) change=editDesignField(property.id, "all") class=Field background-color="transparent" flex=1 min-width=0 aria-label=`${property.name} all` disabled=designWriting
+                                        else
+                                          row flex-wrap="wrap" gap=8
+                                            for field in property.fields key=field.id
+                                              column width="calc(50% - 4px)" gap=4
+                                                text field.label font="type.caption" color="ink.muted"
+                                                input value=field.value change=editDesignField(property.id, field.id) class=Field aria-label=`${property.name} ${field.label}` disabled=designWriting
+                                      else if property.property == "text-content"
+                                        textarea value=property.value change=editDesign(property.id) class=Field height=88 padding=8 resize="vertical" aria-label="Text content" disabled=designWriting
+                                      else if property.property == "flex-direction" or property.property == "align-items" or property.property == "justify-content"
+                                        row background-color="surface.field" border-radius="radius.control" padding=2 gap=2
+                                          for choice in property.options key=choice.value
+                                            button press=editDesign(property.id, choice.value) class=Tool width="auto" flex=1 height=28 padding=4 aria-label=`${property.name}: ${choice.label}` title=choice.label aria-pressed=(property.value == choice.value) background-color=(property.value == choice.value ? "surface.selected" : "transparent") color=(property.value == choice.value ? "ink.selected" : "ink.secondary") disabled=designWriting
+                                              Icon(name=propertyIcon(property.property, choice.value), size=16, angle=(choice.value.includes("reverse") ? 180 : 0))
+                                      else if property.options.length > 0
+                                        select value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
+                                          for choice in property.options key=choice.value
+                                            option choice.label value=choice.value
                                       else
-                                        row flex-wrap="wrap" gap=8
-                                          for field in property.fields key=field.id
-                                            column width="calc(50% - 4px)" gap=4
-                                              text field.label font="type.caption" color="ink.muted"
-                                              input value=field.value change=editDesignField(property.id, field.id) class=Field aria-label=`${property.name} ${field.label}` disabled=designWriting
-                                    else if property.property == "text-content"
-                                      textarea value=property.value change=editDesign(property.id) class=Field height=88 padding=8 resize="vertical" aria-label="Text content" disabled=designWriting
-                                    else if property.options.length > 0
-                                      select value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
-                                        for choice in property.options key=choice.value
-                                          option choice.label value=choice.value
-                                    else
-                                      input value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting title=property.binding
+                                        input value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting title=property.binding
+                        match designChanged
+                          case some(result)
+                            if result.source != "" and result.availableProperties.length > 0
+                              column class=PanelSection
+                                select value="" change=addDesignProperty class=Field aria-label="Add property" disabled=designWriting
+                                  option "Add property…" value=""
+                                  for property in result.availableProperties key=property.value
+                                    option property.label value=property.value
+                          case none
+                            column display="none"
                     if not editing
                       row class=PanelSection align-items="center"
                         text (doc.frameSelected ? "Screen" : "Layer") font-weight=600 flex=1
@@ -1027,7 +1070,7 @@ component Studio
                   row overflow-x="auto" height=56 flex-shrink=0 align-items="center" padding-left=12 padding-right=12 gap=4 aria-label="Design history"
                     for point in history.entries key=point.id
                       button press=inspectHistory(point.id) class=Tool width="auto" min-width=40 height=36 flex-shrink=0 padding="0 10px" gap=6 aria-label=`Change ${point.number}: ${point.label}` aria-pressed=(historySelected == point.id) title=`${point.label} · ${point.target} · ${point.timeLabel}` background-color=(historySelected == point.id ? "surface.selected" : "surface.field") color=(historySelected == point.id ? "ink.selected" : "ink.secondary")
-                        Icon(name=(point.kind == "apply" ? "check" : point.kind == "undo" ? "undo-2" : point.kind == "discard" ? "x" : "settings-2"), size=14, angle=0)
+                        Icon(name=point.icon, size=16, angle=0)
                         text `${point.number}` font="type.caption"
                       if point.number < history.entries.length
                         column width=12 height=1 background-color="line.strong" flex-shrink=0

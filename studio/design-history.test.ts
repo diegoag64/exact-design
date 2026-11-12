@@ -33,3 +33,16 @@ test('linked controls expand CSS edges and axes, preserving untouched values',()
   expect(compoundFields('padding','spacing.large')).toEqual([]);
   expect(()=>compoundValue('padding','8','7','24')).toThrow();
 });
+
+test('timeline icons identify the action and property, including older stored histories',async()=>{
+  const {historyIcon}=await import('./history-icons');
+  const event=(property:string,kind='draft')=>({kind,changes:[{target:'node',property,before:'0',after:'10'}]});
+  expect(historyIcon(event('text-content'))).toBe('type');
+  expect(historyIcon(event('padding'))).toBe('between-horizontal-start');
+  expect(historyIcon(event('border-radius'))).toBe('radius');
+  expect(historyIcon(event('color'))).toBe('paint-bucket');
+  expect(historyIcon(event('width'))).toBe('scan');
+  expect(historyIcon(event('x','workspace-move'))).toBe('move');
+  expect(historyIcon(event('width','workspace-duplicate'))).toBe('copy');
+  expect(historyIcon(event('width','apply'))).toBe('code-2');
+});

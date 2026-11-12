@@ -1,3 +1,4 @@
+import {historyIcon} from './history-icons';
 import type {FileSystem} from './app.contract.d.ts';
 export type HistoryChange={target:string;property:string;before:string;after:string};
 export type HistoryEntry={id:string;parent:string;time:string;actor:'user'|'ai';kind:string;project:string;label:string;target:string;changes:HistoryChange[];beforeState:string;afterState:string};
@@ -24,7 +25,7 @@ export class DesignHistory {
       this.entries=entries;
     });this.writes=write;return write;
   }
-  view(project:string){return this.entries.filter(e=>e.project===project).map((e,index)=>({id:e.id,number:index+1,label:e.label,target:e.target,actor:e.actor,kind:e.kind,time:e.time,timeLabel:new Date(e.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),changes:e.changes.map((c,i)=>({...c,id:String(i)}))}));}
+  view(project:string){return this.entries.filter(e=>e.project===project).map((e,index)=>({id:e.id,icon:historyIcon(e),number:index+1,label:e.label,target:e.target,actor:e.actor,kind:e.kind,time:e.time,timeLabel:new Date(e.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),changes:e.changes.map((c,i)=>({...c,id:String(i)}))}));}
 }
 export function draftChanges(beforeState:string,afterState:string,apply=false):HistoryChange[]{
   const parse=(text:string)=>{try{return JSON.parse(text).patches??[];}catch{return [];}};
