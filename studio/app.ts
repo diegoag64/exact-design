@@ -25,12 +25,12 @@ async function discoverProject(owner:string,revision:number) {
   const routes=parseRoutes({routes:body.routes.map((r:{name:string;route:string})=>({name:r.name,pattern:r.route}))});
   return discoveryCache={owner,revision,routes,error:body.error};
 }
-function framePreview(source:string,id:string,height:number,auto:boolean){
+function framePreview(source:string,id:string,height:number,auto:boolean,canvas:boolean){
   if(!source)return '';
   if(localPreview(source)&&!previewBridges.has(new URL(source).origin))return '';
   const url=new URL(source),bridge=previewBridges.get(url.origin);
   if(bridge&&bridge!==url.origin){
-    url.host=new URL(bridge).host;url.searchParams.set('__ed_frame',id);url.searchParams.set('__ed_events','project-v2');
+    url.host=new URL(bridge).host;url.searchParams.set('__ed_frame',id);url.searchParams.set('__ed_events','project-v2');url.searchParams.set('__ed_canvas',canvas?'1':'0');
     url.searchParams.set('__ed_height',String(height));url.searchParams.set('__ed_full',auto?'1':'0');
   }
   return url.href;
@@ -51,11 +51,11 @@ const snapshot = () => {
     layers: editor.layers,
     views: frames.map(view => {
       const screen = screens.get(view.screenId)!;
-      const previewSource=framePreview(screen.source,view.id,document.views.find(v=>v.id===view.id)!.height,view.heightMode!=='fixed');
+      const previewSource=framePreview(screen.source,view.id,document.views.find(v=>v.id===view.id)!.height,view.heightMode!=='fixed',true);
       const {heightMode,...geometry}=view;
       return {...geometry,canAutoHeight:localPreview(screen.source),autoHeight:localPreview(screen.source)&&view.heightMode!=='fixed', source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name};
     }),
-    previewSource:framePreview(editor.source,'preview-'+editor.active,editor.view.height,editor.view.heightMode!=='fixed'),
+    previewSource:framePreview(editor.source,'preview-'+editor.active,editor.view.height,editor.view.heightMode!=='fixed',false),
     active: editor.active, screenId: editor.screen.id, source: editor.source,
     frameSelected: editor.selected === editor.active,
     width: editor.view.width, height: editor.frame.height, screenName: editor.screen.name,

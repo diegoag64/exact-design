@@ -83,7 +83,7 @@ Icons use a 24-unit viewBox, a 1.75-unit stroke, and a 16px box; tree glyphs use
 | Click a screen in the sidebar | Smoothly pan to its top; keep zoom unchanged |
 | Select an offscreen app layer | Move the canvas camera just enough to reveal it |
 
-Text entry keeps its own keys. Source apps receive their normal input in Preview mode. Inspected iframe gestures are accepted only from a registered preview window with the expected origin. Camera updates remain in the Contract and persist through the existing workspace storage.
+Text entry keeps its own keys. Source apps receive their normal input in Preview mode. Canvas iframe gestures are accepted only from a registered window inside the canvas with the expected origin and `__ed_canvas=1`. Input ownership survives native inspection ending or restarting; full-screen Preview uses `__ed_canvas=0`. Camera updates remain in the Contract and persist through the existing workspace storage.
 
 ## Context menus
 

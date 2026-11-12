@@ -72,7 +72,35 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
     await page.getByRole('button',{name:'Hide inspector',exact:true}).click();
     await page.locator('button[title="Screen"]').first().click();
     await page.waitForFunction(y=>exact.state[0].find(s=>s.n.devName==='py')()!==y,after.camera.py,{polling:50});
-    const top=await snapshot();expect(top.scroll).toEqual([0,0]);expect(top.canvas).toEqual(top.stage);expect(errors).toEqual([]);
+    const top=await snapshot();expect(top.scroll).toEqual([0,0]);expect(top.canvas).toEqual(top.stage);
+    await page.getByRole('button',{name:'Fit all screens',exact:true}).click();
+    const appFrames=()=>page.locator('#canvas-stage iframe').elementHandles();
+    const panEveryScreen=async()=>{
+      for(const iframe of await appFrames()){
+        const bounds=await iframe.boundingBox(),before=await camera();
+        await page.mouse.move(bounds.x+20,bounds.y+20);await page.mouse.wheel(0,30);
+        await page.waitForFunction(y=>Math.abs(exact.state[0].find(s=>s.n.devName==='py')()-y+30)<0.5,before.py,{polling:50,timeout:3000});
+      }
+    };
+    await panEveryScreen();
+    // Exact can close its native inspector without ending the studio session.
+    // This used to turn a screen into a wheel/Space dead zone.
+    await frame.evaluate(()=>dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true})));
+    expect(await frame.evaluate(()=>!!document.getElementById('exact-inspect'))).toBe(false);
+    await panEveryScreen();
+    // Start Space-drag with focus inside the now uninspected app frame.
+    const box=await page.locator('#canvas-stage iframe').last().boundingBox();
+    await page.mouse.click(box.x+20,box.y+20);await page.keyboard.down('Space');
+    await page.waitForFunction(()=>document.querySelector('button[aria-label="Pan"]').getAttribute('aria-pressed')==='true',undefined,{polling:50,timeout:3000});
+    const beforeSpace=await camera();
+    await page.mouse.move(box.x+20,box.y+20);await page.mouse.down();await page.mouse.move(box.x+60,box.y+40,{steps:4});await page.mouse.up();await page.keyboard.up('Space');
+    await page.waitForFunction(x=>Math.abs(exact.state[0].find(s=>s.n.devName==='px')()-x-40)<0.5,beforeSpace.px,{polling:50,timeout:3000});
+    await page.waitForFunction(()=>document.querySelector('button[aria-label="Select"]').getAttribute('aria-pressed')==='true',undefined,{polling:50,timeout:3000});
+    // Screen placement mode uses the same canvas behavior.
+    await page.getByRole('button',{name:'Show inspector',exact:true}).click();
+    const finish=page.getByRole('button',{name:'Finish editing app',exact:true});if(await finish.count())await finish.click();
+    await page.getByRole('button',{name:'Fit all screens',exact:true}).click();await panEveryScreen();
+    expect(errors).toEqual([]);
   }finally{
     await page?.context().close();await suite?.browser.close();helper.stop(true);stopElementBridges();
     for(const child of children)child.kill('SIGTERM');await Promise.all(children.map(c=>c.exited));await rm(temp,{recursive:true,force:true});

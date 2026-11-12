@@ -15,7 +15,7 @@ export function previewScreens(body:any,request:Request){
   });
   const snapshot=()=>({frames:entries.map(({v,bridge})=>{
     const frame=bridge?.frames.get(v.id),src=new URL(v.url||'about:blank');
-    if(bridge){src.host=new URL(bridge.origin).host;src.searchParams.set('__ed_frame',v.id);src.searchParams.set('__ed_events','project-v2');src.searchParams.set('__ed_height',String(v.height));src.searchParams.set('__ed_full',v.auto?'1':'0');}
+    if(bridge){src.host=new URL(bridge.origin).host;src.searchParams.set('__ed_frame',v.id);src.searchParams.set('__ed_events','project-v2');src.searchParams.set('__ed_canvas','1');src.searchParams.set('__ed_height',String(v.height));src.searchParams.set('__ed_full',v.auto?'1':'0');}
     const measured=frame&&frame.contentHeight!==undefined&&frame.width===v.width&&frame.viewportHeight===v.height&&frame.fullHeight===v.auto&&previewPath(frame.url??'')===previewPath(v.url);
     return {id:v.id,source:v.url,previewSource:v.url?src.href:'',width:v.width,viewportHeight:v.height,auto:v.auto,height:measured&&v.auto?frame.contentHeight!:v.height,ready:!bridge||!!measured};
   })});

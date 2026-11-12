@@ -29,6 +29,7 @@ test('preview subscriptions ignore stale route and width measurements and releas
   try{
     let message=await read();expect(message.frames[0]).toMatchObject({height:844,ready:false});
     expect(message.frames[0].previewSource).toContain('__ed_full=1');
+    expect(message.frames[0].previewSource).toContain('__ed_canvas=1');
     const frame={frame:'phone',page:'page',build:'build',plan:'plan',inspecting:false,nodes:[],seen:Date.now()};bridge.frames.set('phone',frame);
     bridge.size(frame,{height:2200,width:390,viewportHeight:844,fullHeight:true,url:'/library?__ed_frame=phone&__ed_height=844&__ed_full=1'});
     message=await read();expect(message.frames[0]).toMatchObject({height:2200,ready:true});

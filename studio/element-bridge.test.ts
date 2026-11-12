@@ -205,10 +205,10 @@ test('canvas picks are pushed to the tree without waiting for the inspection pol
   }finally{bridge.server.stop(true);}
 });
 
-test('inspected frames relay canvas gestures while ordinary app input stays local',()=>{
+test('canvas frames relay gestures independently of inspection while Preview input stays local',()=>{
   const script=readFileSync(new URL('../tools/canvas-input-client.js',import.meta.url),'utf8');
   const handlers:Record<string,Function>={},packets:any[]=[],frameWindow={};let inspecting=true;
-  runInNewContext(script,{window:frameWindow,parent:{postMessage:(packet:any)=>packets.push(packet)},document:{getElementById:()=>inspecting?{}:null},addEventListener:(name:string,fn:Function)=>{handlers[name]=fn;}});
+  runInNewContext(script,{URL,location:{href:'http://localhost/?__ed_canvas=1'},window:frameWindow,parent:{postMessage:(packet:any)=>packets.push(packet)},document:{getElementById:()=>inspecting?{}:null},addEventListener:(name:string,fn:Function)=>{handlers[name]=fn;}});
   const event=(extra:any={})=>({code:'Space',target:{closest:()=>null},preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...extra});
   let wheel=event({clientX:12,clientY:34,deltaX:5,deltaY:20,deltaMode:0,ctrlKey:true});handlers.wheel(wheel);
   expect(wheel.prevented).toBe(true);expect(packets.at(-1)).toMatchObject({kind:'exact-design:canvas',op:'wheel',x:12,y:34,dx:5,dy:20,mode:0,ctrl:true});
@@ -217,8 +217,16 @@ test('inspected frames relay canvas gestures while ordinary app input stays loca
   handlers.keydown(event({code:'KeyH'}));handlers.keydown(event({code:'KeyV'}));
   expect(packets.slice(-2).map(p=>p.tool)).toEqual(['Pan','Select']);
   const before=packets.length,typing=event({target:{closest:()=>({})}});handlers.keydown(typing);expect(typing.prevented).toBeUndefined();
-  inspecting=false;wheel=event({deltaY:20});handlers.wheel(wheel);handlers.keydown(event());
-  expect(wheel.prevented).toBeUndefined();expect(packets.length).toBe(before);
+  expect(packets.length).toBe(before);
+  // Native inspection may stop or not be ready yet. Canvas navigation still owns input.
+  inspecting=false;wheel=event({deltaY:20});handlers.wheel(wheel);
+  expect(wheel.prevented).toBe(true);expect(packets.at(-1).op).toBe('wheel');
+  handlers.keyup(event());expect(packets.at(-1)).toMatchObject({op:'space',down:false});
+  // A normal Preview page keeps wheel, context menu and keyboard input local.
+  const preview:Record<string,Function>={};const count=packets.length;
+  runInNewContext(script,{URL,location:{href:'http://localhost/?__ed_canvas=0'},window:frameWindow,parent:{postMessage:(p:any)=>packets.push(p)},document:{getElementById:()=>({})},addEventListener:(name:string,fn:Function)=>{preview[name]=fn;}});
+  wheel=event({deltaY:20});preview.wheel(wheel);preview.keydown(event());preview.keyup(event());preview.contextmenu(event());
+  expect(wheel.prevented).toBeUndefined();expect(packets.length).toBe(count);
 });
 
 test('revealing a selected layer scrolls only ancestors inside its preview document',()=>{

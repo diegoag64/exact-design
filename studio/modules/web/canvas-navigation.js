@@ -7,8 +7,8 @@ export function selectionPan(view,box){
   // already revealed selection again because of that rounding.
   return {x:Math.abs(x)<0.5?0:x,y:Math.abs(y)<0.5?0:y};
 }
-// Iframe input cannot bubble to the editor. Only inspected preview frames may
-// relay navigation; ordinary Preview mode keeps the app's own wheel behavior.
+// Iframe input cannot bubble to the editor. Canvas frames relay navigation
+// independently of inspection; full-screen Preview keeps the app's own input.
 export function installCanvasNavigation(root){
   let held=false,restore=false,pointer=null,released=false,middle=null;
   const button=name=>root.querySelector(`button[aria-label="${name}"]`);
@@ -66,11 +66,14 @@ export function installCanvasNavigation(root){
   };
   const blur=()=>{stopMiddle();end(true);};
   const message=e=>{
-    const packet=e.data;if(packet?.kind!=='exact-design:canvas'||!editing())return;
+    const packet=e.data;if(packet?.kind!=='exact-design:canvas')return;
     const frame=[...root.querySelectorAll('iframe')].find(frame=>frame.contentWindow===e.source);
-    if(!frame)return;
+    if(!frame?.closest('#canvas-stage'))return;
     let url;try{url=new URL(frame.src);}catch{return;}
-    if(url.origin!==e.origin||url.searchParams.get('__ed_events')!=='project-v2')return;
+    if(url.origin!==e.origin||url.searchParams.get('__ed_events')!=='project-v2'||url.searchParams.get('__ed_canvas')!=='1')return;
+    // Releases must still clear a held tool if an overlay opened mid-gesture.
+    if(packet.op==='space'&&packet.down===false){end();return;}
+    if(!available())return;
     if(packet.op==='fit'&&typeof packet.selection==='boolean'){
       (packet.selection?root.querySelector('#menu-fit-selection'):button('Fit all screens'))?.click();return;
     }
@@ -80,6 +83,7 @@ export function installCanvasNavigation(root){
       root.querySelector('#canvas-stage')?.dispatchEvent(new PointerEvent('contextmenu',{bubbles:true,cancelable:true,button:2,clientX:rect.left+packet.x*rect.width/frame.clientWidth,clientY:rect.top+packet.y*rect.height/frame.clientHeight}));return;
     }
     if(packet.op==='reveal'){
+      if(!editing())return;
       if(!['x','y','width','height'].every(key=>Number.isFinite(packet[key]))||packet.width<=0||packet.height<=0)return;
       const target=canvas();if(!target||!frame.clientWidth||!frame.clientHeight)return;
       const rect=frame.getBoundingClientRect(),sx=rect.width/frame.clientWidth,sy=rect.height/frame.clientHeight;
