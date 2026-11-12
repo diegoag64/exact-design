@@ -1,6 +1,11 @@
 {
   "name": "exact-design",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/diegoag64/exact-design.git"
+  },
   "scripts": {
     "setup": "bun tools/setup.mjs",
     "demo": "bun tools/demo.mjs",

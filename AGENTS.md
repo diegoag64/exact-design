@@ -50,6 +50,8 @@ Use a lowercase type: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`
 
 Write the summary as an imperative phrase with no trailing period. Describe the resulting change. Keep the full title within 72 characters. For a breaking change, put `!` before the colon and explain the migration in the description.
 
-Use [.github/pull_request_template.md](.github/pull_request_template.md) for the description. Under Summary, state the problem and resulting behavior. Under Validation, list the checks run and their results, including anything not tested and why. Add a Risks or migration section only when needed. For visible UI changes, include before-and-after screenshots when available, or explain why they are missing.
+Use [.github/pull_request_template.md](.github/pull_request_template.md) for the description. Under Summary, state the problem and resulting behavior. Under Screenshots, add before-and-after images for visible changes, taken at the same window size, zoom, and theme, or explain why they are missing. Under Validation, list the checks run and their results, including anything not tested and why. Add a Risks or migration section only when needed. Complete the checklist.
+
+The repository has no hosted CI, so local check results in the description are the only verification record. Contributor guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md); keep it consistent with these instructions.
 
 Keep descriptions readable in under a minute. Link related issues and supporting evidence instead of pasting logs. Before requesting review, update the title and description to match the final scope.

@@ -32,7 +32,13 @@ Select a viewport, click **Edit app**, and change a property. Click **Review** t
 - [Studio design system](docs/studio-design-system.md): shared controls, tokens, icons, and interactions.
 - [Ember](examples/ember/README.md): the demo app.
 - [Changelog](CHANGELOG.md): notable changes.
+- [Contributing](CONTRIBUTING.md): report issues, run checks, and open pull requests.
+- [Security policy](SECURITY.md): report vulnerabilities privately.
 
 ## Status
 
 Browser previews run the web build, including at iPhone and iPad sizes. Native iOS and macOS previews are not qualified. Figma file import, structural source editing, and rollback of applied drafts are not implemented. Enlarged system text still needs accessibility work.
+
+## License
+
+Exact Design is released under the [MIT License](LICENSE). Vendored icons keep their own licenses: [Lucide](studio/assets/lucide/LICENSE) in the studio and [Phosphor](examples/ember/assets/icons/LICENSE) in Ember.

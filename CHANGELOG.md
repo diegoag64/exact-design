@@ -19,6 +19,8 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 ### Changed
 
 - Below 15% zoom, live canvas previews omit backdrop blur, which is only a few pixels wide at that size. Idle and pan with many visible previews no longer re-render each blur on every frame.
+- Prepared the repository for open source: MIT license, contributing guide, security policy, code of conduct, issue forms, and a pull request template with before-and-after screenshots and a checklist.
+- Browser regression tests find Rust through the home directory instead of a fixed user path.
 - Shortened the root README and separated usage and development documentation.
 - Added repository-wide agent instructions, PR title and description requirements, a PR template, and a changelog maintenance convention.
 

@@ -1,6 +1,7 @@
 import {test,expect} from 'bun:test';
 import {mkdtemp,mkdir,cp,readFile,writeFile,rm} from 'node:fs/promises';
 import {resolve} from 'node:path';
+import {homedir} from 'node:os';
 import {ElementBridge} from '../tools/element-bridge';
 import {suiteBrowser} from '../.exact-sdk/scripts/agent-launch.mjs';
 
@@ -17,7 +18,7 @@ test('real Exact previews share controls and data while routes, widths, and scro
     return new Response('<!doctype html><style>iframe:not([hidden]){width:390px;height:844px}</style><body>'+[390,768,1440].map((width,i)=>`<iframe name="view-${i}" style="width:${width}px" src="${bridge!.origin}/?__ed_frame=view-${i}&__ed_events=project-v2&__ed_full=0&__ed_height=844"></iframe>`).join('')+`<script type="module">import {element} from '/preview-host.js';element({hatch:'preview-engines',element:document.body});</script>`,{headers:{'content-type':'text/html'}});
   }});
   await writeFile(launcher,`import {run} from ${JSON.stringify(resolve(root,'.exact-sdk/scripts/app-cli.mjs'))};process.exit(await run({dir:${JSON.stringify(dir)},name:'shared-preview',exact2:${JSON.stringify(resolve(root,'.exact-sdk'))},args:['web','--port','${port}']}));`);
-  const child=Bun.spawn([process.execPath,launcher],{cwd:root,env:{...process.env,PATH:'/Users/diegoarias/.cargo/bin:'+process.env.PATH,EXACT_FEEDBACK:'0',EXACT_TOOL_PORT:String(host.port)},stdout:Bun.file(resolve(dir,'server.log')),stderr:Bun.file(resolve(dir,'server-errors.log'))});
+  const child=Bun.spawn([process.execPath,launcher],{cwd:root,env:{...process.env,PATH:resolve(homedir(),'.cargo/bin')+':'+process.env.PATH,EXACT_FEEDBACK:'0',EXACT_TOOL_PORT:String(host.port)},stdout:Bun.file(resolve(dir,'server.log')),stderr:Bun.file(resolve(dir,'server-errors.log'))});
   const errors:string[]=[];
   try{
     const end=Date.now()+20000;
