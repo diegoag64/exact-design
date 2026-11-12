@@ -356,7 +356,15 @@ export class DesignSession {
     if(next)this.bridge!.linkedHover(next,id,this.client);
     this.hoveredFrame=next;
   }
-  async close() {this.hover('');this.bridge?.clearLinkedHover?.();this.bridge?.feedback?.delete(this.receivePreview);this.preview.close();await this.call({method:'inspect',client:this.client,on:false});}
+  async close() {
+    this.hover('');this.bridge?.feedback?.delete(this.receivePreview);this.preview.close();
+    // A reloaded editor has a new client. Exact's unscoped inspect-off command
+    // stops every build, including previews already claimed by that new client.
+    const hello=await this.call({method:'hello'});
+    const owned=(hello.builds??[]).filter((build:any)=>build.inspector===this.client);
+    for(const build of owned)await this.call({method:'inspect',client:this.client,build:build.id,on:false});
+    if(owned.length)this.bridge?.clearLinkedHover?.();
+  }
 }
 const sessions=new Map<string,{session:DesignSession;seen:number}>();
 export function designEvents(id:string,request:Request){

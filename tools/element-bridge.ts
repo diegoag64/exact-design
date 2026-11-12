@@ -1,3 +1,4 @@
+import {scopePreviewIdentity} from './preview-identity';
 import {eventMessages} from './event-stream';
 import {sharedRuntime} from './shared-runtime';
 import {readFileSync} from 'node:fs';
@@ -195,7 +196,8 @@ export class ElementBridge {
       const out=new Headers(response.headers);for(const name of ['content-length','content-encoding','transfer-encoding','connection'])out.delete(name);
       const redirect=out.get('location');if(redirect?.startsWith(this.target))out.set('location',this.origin+redirect.slice(this.target.length));
       if(response.headers.get('content-type')?.includes('text/html') && req.method!=='HEAD'){
-        let html=await response.text();
+        let html=scopePreviewIdentity(await response.text(),url.searchParams.get('__ed_frame')??'');
+        out.delete('etag');out.set('cache-control','no-store');
         // Observe only the public build ID in Exact's registration. The captured
         // fetch otherwise receives exactly the original request and arguments.
         const inject=`<script src="/__exact_design/canvas-input-client.js"></script><script src="/__exact_design/event-stream-client.js"></script><script src="/__exact_design/shared-state-client.js"></script><script>{const original=window.fetch.bind(window);window.fetch=function(input,init){if(input==='/__dev/report'&&typeof init?.body==='string'){try{const report=JSON.parse(init.body);if(report.kind==='register'&&typeof report.id==='string')window.__exactDesignBuild=report.id;}catch{}}return original(input,init);};let press;addEventListener('pointerdown',e=>{press={x:e.clientX,y:e.clientY,id:e.pointerId};},true);addEventListener('pointerup',e=>{if(press?.id===e.pointerId&&Math.hypot(e.clientX-press.x,e.clientY-press.y)<=10)window.__exactDesignPick?.(e.clientX,e.clientY);press=null;},true);addEventListener('pointercancel',()=>{press=null;},true);}</script><script type="module" src="/__exact_design/client.js"></script>`;

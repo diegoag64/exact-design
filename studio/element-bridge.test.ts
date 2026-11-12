@@ -1,3 +1,4 @@
+import {scopePreviewIdentity} from '../tools/preview-identity';
 import {test,expect} from 'bun:test';
 import {selectionPan} from './modules/web/canvas-navigation.js';
 import {ElementBridge,bridgeFor,stopElementBridges} from '../tools/element-bridge';
@@ -289,4 +290,17 @@ test('hover links matching instances on the same route and clears on leave or re
     bridge.linkedHover('phone','phone-second');expect(hovered('tablet')).toBe('');
     expect(bridge.frames.get('tablet')?.url).toBe('/notes?filter=all');
   }finally{bridge.server.stop(true);}
+});
+
+test('each viewport scopes its stored build and inspector identity before Exact boots',()=>{
+  const html=`<script>const ch={nonce:null,registered:null},cp=false,bk=cp?'exact.dev.build:'+window.name:'exact.dev.build',bid=read(bk);const channel=new BroadcastChannel('exact.dev.build');sessionStorage.getItem('exact.dev.inspect');sessionStorage.getItem('exact.dev.inspect.left');m.install({fetch,report:rep,status});</script><script>app()</script>`;
+  const phone=scopePreviewIdentity(html,'phone'),tablet=scopePreviewIdentity(html,'tablet');
+  expect(phone).toContain(`bk=(cp?'exact.dev.build:'+window.name:'exact.dev.build')+":studio:phone",bid=`);
+  expect(phone).toContain('sessionStorage.getItem("exact.dev.inspect:studio:phone")');
+  expect(phone).toContain('sessionStorage.getItem("exact.dev.inspect:studio:phone.left")');
+  expect(phone).toContain('m.install({key:"exact.dev.inspect:studio:phone",fetch,report:rep,');
+  expect(phone).toContain("new BroadcastChannel('exact.dev.build')");
+  expect(tablet).toContain(':studio:tablet');expect(tablet).not.toContain(':studio:phone');
+  expect(scopePreviewIdentity(html,'')).toBe(html);
+  expect(scopePreviewIdentity('<script>app()</script>','phone')).toBe('<script>app()</script>');
 });

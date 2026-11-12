@@ -56,3 +56,19 @@ test('reconnected viewports sharing a build resolve selection against the intend
   s.pick('phone','card');events=[{event:'selection',build:'shared-build',site:45,instance,rows:[row]}];
   await s.poll();expect(s.picked?.frame).toBe('phone');
 });
+
+test('closing an old editor session leaves reconnected previews and hover active',async()=>{
+  const calls:any[]=[],builds=[{id:'reconnected',inspector:'new-client'},{id:'old-preview',inspector:'old-client'}];
+  const request=(async(_url:string,init:any)=>{
+    const body=JSON.parse(init.body);calls.push(body);
+    if(body.method==='hello')return Response.json({ok:{builds}});
+    return Response.json({ok:{builds:[body.build]}});
+  })as typeof fetch;
+  const old=new DesignSession('http://localhost:5174','test',request);old.client='old-client';
+  await old.close();
+  expect(calls.filter(c=>c.method==='inspect')).toEqual([{method:'inspect',client:'old-client',build:'old-preview',on:false}]);
+  // Once every preview belongs to the new client, expiry sends no off command.
+  calls.length=0;builds[1].inspector='new-client';let cleared=false;
+  old.bridge={frames:new Map(),feedback:new Set(),clearLinkedHover:()=>{cleared=true;}}as any;
+  await old.close();expect(calls.filter(c=>c.method==='inspect')).toEqual([]);expect(cleared).toBe(false);
+});

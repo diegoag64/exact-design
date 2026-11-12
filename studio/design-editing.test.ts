@@ -63,11 +63,38 @@ test('design inspector edits text, linked spacing and corners as drafts, with pe
     await commit('Text content','A calmer place to think.');
     await frame.getByText('A calmer place to think.',{exact:true}).waitFor();
     expect(await readFile(resolve(app,'app.contract'),'utf8')).toContain('Room for your thoughts.');
-    await page.getByRole('button',{name:'Finish editing app',exact:true}).click();
-    await page.reload();await page.getByRole('button',{name:'Edit app design',exact:true}).click();
+    const oldSession=await page.evaluate(()=>exact.state[0].find(s=>s.n.devName==='designSession')());
+    const {token}=await(await fetch('http://127.0.0.1:'+appPort+'/__tamber/token')).json();
+    const registered=async()=> (await(await fetch('http://127.0.0.1:'+appPort+'/__tamber',{method:'POST',headers:{'content-type':'application/json','x-exact-tamber-token':token},body:JSON.stringify({method:'hello'})})).json()).ok.builds;
+    const oldOwner=(await registered()).find(b=>b.inspector)?.inspector;
+    // Reload while editing, with a pending draft and an active selection.
+    await page.reload();
+    await page.getByRole('button',{name:'Fit all screens',exact:true}).waitFor();
+    const editAgain=page.getByRole('button',{name:'Edit app design',exact:true});
+    await editAgain.waitFor();await editAgain.click();
     await page.getByRole('button',{name:'Finish editing app',exact:true}).waitFor();
     frame=await(await page.locator('iframe[title="Live app preview"]').last().elementHandle()).contentFrame();
     await frame.getByText('A calmer place to think.',{exact:true}).waitFor();
+    await frame.waitForFunction(()=>document.getElementById('exact-inspect'),undefined,{polling:50});
+    const previews=await Promise.all((await page.locator('iframe[title="Live app preview"]').elementHandles()).map(async el=>await el.contentFrame()));
+    const builds=await Promise.all(previews.map(async preview=>await preview.evaluate(()=>window.__exactDesignBuild)));
+    expect(builds.every(Boolean)).toBe(true);expect(new Set(builds).size).toBe(builds.length);
+    const newSession=await page.evaluate(()=>exact.state[0].find(s=>s.n.devName==='designSession')());
+    expect(newSession).not.toBe(oldSession);
+    // Restored inspector chrome can appear before the new client claims it.
+    const readyBy=Date.now()+10000;
+    for(;;){
+      const active=(await registered()).filter(b=>builds.includes(b.id));
+      if(active.length===builds.length&&active.every(b=>b.inspector&&b.inspector!==oldOwner))break;
+      if(Date.now()>readyBy)throw new Error('Reloaded previews did not acquire the new inspector session.');
+      await page.waitForTimeout(100);
+    }
+    // The old session can expire after its replacement has claimed the frames.
+    const closed=await(await fetch(helperOrigin+'/design',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op:'close',session:oldSession})})).json();
+    expect(closed.ok).toBe(true);
+    await frame.getByText('A calmer place to think.',{exact:true}).click({force:true});
+    await page.getByRole('textbox',{name:'Text content',exact:true}).waitFor({timeout:6000});
+    expect(await page.getByRole('textbox',{name:'Text content',exact:true}).inputValue()).toBe('A calmer place to think.');
 
     await page.getByRole('button',{name:'Timeline',exact:true}).click();
     await page.getByRole('button',{name:/Change .*Edit text-content/}).last().click();
@@ -82,6 +109,7 @@ test('design inspector edits text, linked spacing and corners as drafts, with pe
 
     await page.getByRole('button',{name:'Close timeline',exact:true}).click();
     await page.locator('button[title="card-1"]').first().click();
+    await page.waitForFunction(()=>document.querySelector('[data-testid="design-source"]')?.textContent==='app.contract:150',undefined,{polling:50});
     await page.getByRole('textbox',{name:'Border radius all',exact:true}).waitFor({timeout:6000});
     await commit('Padding all','12');
     await frame.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="card-1"]')).padding==='12px',undefined,{polling:50});
@@ -93,6 +121,7 @@ test('design inspector edits text, linked spacing and corners as drafts, with pe
     await commit('Border radius Top left','28');
     await frame.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="card-1"]')).borderTopLeftRadius==='28px',undefined,{polling:50});
     expect(await frame.locator('[data-testid="card-1"]').evaluate(e=>getComputedStyle(e).borderTopRightRadius)).toBe('16px');
+    await page.locator('[data-testid="spacing-padding-top"]').waitFor({timeout:6000});
     // Select the card's content container through the same native inspector gate.
     await frame.locator('[data-testid="card-1"] [data-site]').evaluateAll(async els=>{
       const el=els.find(e=>getComputedStyle(e).paddingTop==='20px'&&getComputedStyle(e).gap==='10px');
