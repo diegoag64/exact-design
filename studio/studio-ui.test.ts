@@ -38,6 +38,19 @@ test('studio icons, context menus and canvas gestures share the desktop interact
     await page.getByRole('button',{name:'Reduce preview effects',exact:true}).hover();await page.waitForFunction(()=>document.getElementById('studio-tooltip').innerText.startsWith('Reduce preview effects'));
     await page.mouse.down();expect(await tooltip.evaluate(el=>el.matches(':popover-open'))).toBe(false);await page.mouse.up();
     await page.getByRole('button',{name:'Reduce preview effects',exact:true}).click();
+    // Focus restoration can enter another control while a popover is opening.
+    // Keep the tooltip warm and reproduce that synchronous re-entry explicitly.
+    await pan.hover();await page.waitForSelector('#studio-tooltip:popover-open');
+    await page.keyboard.press('Escape');
+    await page.evaluate(()=>{
+      const tip=document.getElementById('studio-tooltip');
+      const pan=document.querySelector('button[aria-label="Pan"]');
+      const reduce=document.querySelector('button[aria-label="Reduce preview effects"]');
+      tip.addEventListener('beforetoggle',()=>reduce.dispatchEvent(new PointerEvent('pointerover',{bubbles:true})),{once:true});
+      pan.dispatchEvent(new PointerEvent('pointerover',{bubbles:true}));
+    });
+    await page.waitForFunction(()=>document.getElementById('studio-tooltip').matches(':popover-open')&&document.querySelector('#studio-tooltip .name').textContent==='Reduce preview effects');
+    await page.keyboard.press('Escape');
     await page.mouse.move(800,700);
     const before=await camera();await page.keyboard.down('Space');await page.waitForFunction(()=>document.querySelector('button[aria-label="Pan"]').getAttribute('aria-pressed')==='true');
     await page.mouse.move(800,700);await page.mouse.down();await page.mouse.move(900,740,{steps:4});await page.keyboard.up('Space');

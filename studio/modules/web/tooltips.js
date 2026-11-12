@@ -48,8 +48,10 @@ export function installTooltips(root) {
     if (el === target) return;
     clearTimeout(timer);target = el;
     // Moving between controls keeps tooltips warm, like native menus and toolbars.
-    if (tip.matches(':popover-open') || performance.now() - hiddenAt < WARM_FOR) show();
-    else timer = setTimeout(show, SHOW_AFTER);
+    // Focus restoration can enter a control during a native popover operation.
+    // Even a warm tooltip must wait until that operation has returned.
+    const warm = tip.matches(':popover-open') || performance.now() - hiddenAt < WARM_FOR;
+    timer = setTimeout(show, warm ? 0 : SHOW_AFTER);
   };
   const over = e => {
     const el = e.target.closest?.('[data-tip]');

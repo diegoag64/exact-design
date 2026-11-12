@@ -28,7 +28,7 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
   let suite:any,page:any;const errors:string[]=[];
   try{
     await Promise.all([start(editor,'selection-editor',editorPort),start(app,'selection-app',appPort)]);
-    suite=await suiteBrowser();page=await suite.newPage({viewport:{width:1440,height:1000},colorScheme:'dark'});page.on('pageerror',(e:Error)=>errors.push(e.message));
+    suite=await suiteBrowser();page=await suite.newPage({viewport:{width:1440,height:1000},colorScheme:'dark'});page.on('pageerror',(e:Error)=>errors.push(e.stack || e.message));
     await page.goto('http://127.0.0.1:'+editorPort,{waitUntil:'load'});
     await page.getByRole('button',{name:'Project connection',exact:true}).click();
     await page.getByRole('textbox',{name:'Project name',exact:true}).fill('Ember');await page.getByRole('textbox',{name:'Project URL',exact:true}).fill('http://127.0.0.1:'+appPort);await page.getByRole('button',{name:'Connect',exact:true}).click();
@@ -139,8 +139,8 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
       }
     };
     await panEveryScreen();
-    // Exact can close its native inspector without ending the studio session.
-    // This used to turn a screen into a wheel/Space dead zone.
+    // Exact closes its native inspector before the studio polls the ended session.
+    // Navigation must keep working through that asynchronous transition.
     await frame.evaluate(()=>dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true})));
     expect(await frame.evaluate(()=>!!document.getElementById('exact-inspect'))).toBe(false);
     await panEveryScreen();
@@ -152,9 +152,11 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
     await page.mouse.move(box.x+20,box.y+20);await page.mouse.down();await page.mouse.move(box.x+60,box.y+40,{steps:4});await page.mouse.up();await page.keyboard.up('Space');
     await page.waitForFunction(x=>Math.abs(exact.state[0].find(s=>s.n.devName==='px')()-x-40)<0.5,beforeSpace.px,{polling:50,timeout:3000});
     await page.waitForFunction(()=>document.querySelector('button[aria-label="Select"]').getAttribute('aria-pressed')==='true',undefined,{polling:50,timeout:3000});
-    // Screen placement mode uses the same canvas behavior.
+    // Wait for the native close to reach the studio before checking placement mode.
+    // Clicking Finish editing here races the poll that removes that button.
+    await page.waitForFunction(()=>exact.state[0].find(s=>s.n.devName==='designSession')()==='',undefined,{polling:50,timeout:5000});
     await page.getByRole('button',{name:'Show inspector',exact:true}).click();
-    const finish=page.getByRole('button',{name:'Finish editing app',exact:true});if(await finish.count())await finish.click();
+    await page.getByRole('button',{name:'Edit app design',exact:true}).waitFor();
     await page.getByRole('button',{name:'Fit all screens',exact:true}).click();await panEveryScreen();
     expect(errors).toEqual([]);
   }finally{
