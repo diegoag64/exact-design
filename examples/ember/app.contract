@@ -433,23 +433,30 @@ component App
                       image "symbol:add"
               if e.name == "addFood"
                 column navigationKey=`${e.id}` navigationPresentation="modal" navigationScroll=`content-${e.id}` navigationDetent="large" position="absolute" inset=0 background-color="page"
-                  header
-                    button id="back" press=back aria-label="Cancel" testId="add-cancel"
-                      image "symbol:close"
-                    text `Add to ${mealTitle(meal)}` role="heading"
-                    input type="search" value=query input=search placeholder="Search 26 foods" aria-label="Search foods" testId="food-search"
+                  header appearance="none" display="flex" flex-direction="column" gap=16 padding="20px 20px 16px" border-bottom="1px solid line" background-color="page"
+                    SheetTitle(icon=mealIcon(meal), tint=mealTint(meal), title=`Add to ${mealTitle(meal)}`, detail=(query.trim() == "" ? `${foods.length} foods · tap + to log` : `${foods.length} ${foods.length == 1 ? "match" : "matches"} for “${query.trim()}”`))
+                      button id="back" press=back class=Round background-color="card-2" color="ink" aria-label="Close" testId="add-cancel"
+                        image "symbol:icon.close" font-size="0.875rem"
+                    row width="100%" max-width="40rem" box-sizing="border-box" margin-left="auto" margin-right="auto" align-items="center" gap=10 height=48 padding-left=16 padding-right=8 border-radius=16 background-color="card-2" border="1px solid line"
+                      image "symbol:icon.search" color="ink-2" font-size="1.0625rem" aria-hidden=true
+                      input value=query input=search placeholder="Search foods" aria-label="Search foods" autocomplete="off" enterkeyhint="search" outline="none" flex=1 min-width=0 height=46 padding=0 border="none" background-color="transparent" color="ink" font-size="1rem" testId="food-search"
+                      if query != ""
+                        button press=search("") class=Round width=30 height=30 background-color="ink-3" color="page" aria-label="Clear search" testId="clear-search"
+                          image "symbol:icon.close" font-size="0.75rem"
                   scroll id=`content-${e.id}` flex=1 min-height=0
                     AddFood(foods=foods, meal=meal, error=logError, busy=pending(logged), loading=pending(foods), query=query, chooseMeal=chooseMeal, add=add)
               if e.name == "logWorkout"
                 column navigationKey=`${e.id}` navigationPresentation="modal" navigationScroll=`content-${e.id}` navigationDetent="large" position="absolute" inset=0 background-color="page"
-                  header
-                    button id="back" press=back aria-label="Cancel" testId="log-cancel"
-                      image "symbol:close"
-                    text "Log workout" role="heading"
-                    button press=train buttonStyle="bordered-prominent" disabled=pending(trained) aria-label="Save workout" testId="save-workout"
-                      image "symbol:checkmark"
+                  header appearance="none" display="flex" flex-direction="column" padding="20px 20px 16px" border-bottom="1px solid line" background-color="page"
+                    SheetTitle(icon=workIcon(kind), tint=workTint(kind), title="Log workout", detail=`${workTitle(kind)} · ${minutes} min · about ${round(minutes * workRate(kind))} kcal`)
+                      button id="back" press=back class=Round background-color="card-2" color="ink" aria-label="Close" testId="log-cancel"
+                        image "symbol:icon.close" font-size="0.875rem"
                   scroll id=`content-${e.id}` flex=1 min-height=0
                     LogWorkout(kind=kind, minutes=minutes, error=trainError, chooseKind=chooseKind, nudge=nudgeMinutes)
+                  column width="100%" max-width="38.75rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="12px 20px 20px"
+                    button press=train class=Pill disabled=pending(trained) opacity=(pending(trained) ? 0.6 : 1) testId="save-workout"
+                      image "symbol:icon.check" aria-hidden=true
+                      text "Save workout"
               if e.name == "welcome"
                 column navigationKey=`${e.id}` navigationPresentation="fullscreen" navigationBar="none" position="absolute" inset=0 background-color="page" overflow="hidden"
                   Aurora(kind="bloom", still=still)
@@ -1117,6 +1124,23 @@ component Stems
           column width=12 height=12 flex-shrink=0 border-radius=6 box-sizing="border-box" border="3px solid iris" background-color=(i == weights.length - 1 ? "iris" : "card")
           column width=3 height=pct(x.kg - low + (top - low) * 0.25 + 0.2, (top - low) * 1.25 + 0.2) min-height=4 border-radius=2 background-image="linear-gradient(180deg, var(--iris) 0%, var(--iris-soft) 100%)"
 
+// A sheet's own title bar: the subject's icon, a title with a live detail, and a close button.
+component SheetTitle
+  props
+    icon: string
+    tint: string
+    title: string
+    detail: string
+  slot
+  view
+    row width="100%" max-width="40rem" box-sizing="border-box" margin-left="auto" margin-right="auto" align-items="center" gap=14
+      column class=Tile width=46 height=46 border-radius=15 background-color=`${tint}-soft` color=tint
+        image icon font-size="1.375rem" aria-hidden=true
+      column flex=1 min-width=0 gap=2
+        text title role="heading" aria-level=1 font-size="1.375rem" font-weight=800 letter-spacing="-0.4px"
+        text detail class=Caption white-space="nowrap" overflow="hidden" text-overflow="ellipsis" testId="sheet-detail"
+      children
+
 component AddFood
   props
     foods: Food[]
@@ -1129,12 +1153,15 @@ component AddFood
     add: action
   view
     column width="100%" max-width="42.5rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding=16 gap=14
-      row role="radiogroup" aria-label="Meal"
+      row role="radiogroup" aria-label="Meal" gap=4 padding=4 border-radius=18 background-color="card-2"
         for m in ["breakfast", "lunch", "dinner", "snacks"] key=m
-          button role="radio" aria-checked=(meal == m) press=chooseMeal(m) testId=`meal-pick-${m}`
-            text mealTitle(m)
+          button role="radio" aria-checked=(meal == m) press=chooseMeal(m) appearance="none" flex=1 min-width=0 display="flex" align-items="center" justify-content="center" gap=6 height=40 padding="0 6px" border-width=0 border-radius=14 background-color=(meal == m ? "card" : "transparent") box-shadow=(meal == m ? "0 1px 2px glass-shade, 0 6px 16px -8px glass-shade" : "none") color=(meal == m ? mealTint(m) : "ink-3") testId=`meal-pick-${m}`
+            if meal == m
+              image mealIcon(m) font-size="0.875rem" aria-hidden=true
+            text mealTitle(m) font-size="0.8125rem" font-weight=650 color=(meal == m ? "ink" : "ink-2") white-space="nowrap"
       if error != ""
         text error role="alert" color="ember-ink" font-size="0.875rem" testId="add-error"
+      text (query.trim() == "" ? "LIBRARY" : "RESULTS") class=Eyebrow padding-left=4 padding-top=4
       if foods.length == 0 and not loading
         EmptyState(symbol="symbol:search", title="No matches", message=`Nothing in the library matches “${query}”.`)
       else
@@ -1143,8 +1170,8 @@ component AddFood
             row align-items="center" gap=12 padding="12px 12px 12px 16px" border-top=(i == 0 ? "none" : "1px solid line")
               FoodTile(kind=f.kind)
               column flex=1 min-width=0 gap=3
-                text f.name font-size="0.9375rem" font-weight=600
-                text `${f.portion} · ${f.protein} g protein` font-size="0.75rem" color="ink-2"
+                text f.name font-size="0.9375rem" font-weight=600 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+                text `${f.portion} · ${f.protein} g protein` font-size="0.75rem" color="ink-2" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
               row align-items="baseline" gap=3
                 text `${f.kcal}` class=Num font-size="0.9375rem"
                 text "kcal" font-size="0.75rem" color="ink-2"
