@@ -57,7 +57,18 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
     while(await frameScale()<=0.17)await zoomBy(1.05);
     await probe('none');
     await page.getByRole('button',{name:'Fit all screens',exact:true}).click();await probe('blur(4px)');
-    for(const preview of previewFrames)await preview.evaluate(()=>document.getElementById('detail-probe')?.remove());
+    // Reduced preview effects drop blurs at every zoom and remove CSS animations.
+    const motion=(expected:string)=>Promise.all(previewFrames.map(preview=>preview.waitForFunction(expected=>{
+      let el=document.getElementById('motion-probe');
+      if(!el){el=document.createElement('div');el.id='motion-probe';el.style.animation='probe-spin 1s infinite';document.body.append(el);}
+      return getComputedStyle(el).animationName===expected;
+    },expected,{polling:50,timeout:3000})));
+    const reduce=page.getByRole('button',{name:'Reduce preview effects',exact:true});
+    await motion('probe-spin');expect(await reduce.getAttribute('aria-pressed')).toBe('false');
+    await reduce.click();expect(await reduce.getAttribute('aria-pressed')).toBe('true');
+    await probe('none');await motion('none');
+    await reduce.click();await probe('blur(4px)');await motion('probe-spin');
+    for(const preview of previewFrames)await preview.evaluate(()=>{document.getElementById('detail-probe')?.remove();document.getElementById('motion-probe')?.remove();});
     const assertHover=async(text:string)=>{
       for(const preview of previewFrames){
         await preview.waitForFunction(text=>{

@@ -82,4 +82,4 @@ Use these shortcuts when a text field is not focused:
 - **Command or Control+Z** undoes.
 - **Command or Control+Shift+Z** redoes.
 
-Scroll to pan and pinch to zoom. Use the panel buttons to hide or restore the sidebar and inspector. Below 15% zoom, canvas previews omit backdrop blur to keep navigation smooth. Zoom in, or use full-screen Preview, to see it.
+Scroll to pan and pinch to zoom. Use the panel buttons to hide or restore the sidebar and inspector. Below 15% zoom, canvas previews omit backdrop blur to keep navigation smooth. Zoom in, or use full-screen Preview, to see it. On a slower machine or on battery, turn on **Reduce preview effects** (the lightning button beside the zoom controls). Canvas previews then omit backdrop blur at every zoom and skip CSS animations, showing each element at rest. Full-screen Preview always shows the real effects, and the setting is remembered.

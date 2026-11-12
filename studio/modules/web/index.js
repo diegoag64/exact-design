@@ -19,13 +19,14 @@ class PreviewEngines {
     document.head.append(this.paintStyle);
     this.observer=new MutationObserver(()=>this.update());
     this.observer.observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['src']});
-    // Zoom is read from the frame scale Exact writes, not kept as separate state.
-    this.lowDetail=false;
+    // Zoom is read from the frame scale Exact writes, and the effects setting from
+    // the attribute Exact writes on this element, not kept as separate state.
+    this.lowDetail=false;this.sent={low:false,still:false};
     this.zoom=new MutationObserver(()=>this.zoomChanged());
-    this.zoom.observe(root,{subtree:true,attributes:true,attributeFilter:['style']});
+    this.zoom.observe(root,{subtree:true,attributes:true,attributeFilter:['style','data-preview-effects']});
     this.loaded=e=>{if(e.target.matches?.(`${FRAME} iframe`))this.detail(e.target);};
     root.addEventListener('load',this.loaded,true);
-    this.update();
+    this.update();this.zoomChanged();
   }
   update(){
     if(typeof SharedWorker!=='function')return;
@@ -44,13 +45,14 @@ class PreviewEngines {
   }
   zoomChanged(){
     const zoom=parseFloat(this.root.querySelector(FRAME)?.style.scale);
-    if(!Number.isFinite(zoom))return;
-    const low=this.lowDetail?zoom<FULL_DETAIL_ABOVE:zoom<LOW_DETAIL_BELOW;
-    if(low===this.lowDetail)return;
-    this.lowDetail=low;
+    if(Number.isFinite(zoom))this.lowDetail=this.lowDetail?zoom<FULL_DETAIL_ABOVE:zoom<LOW_DETAIL_BELOW;
+    // Reduced effects drop blurs at every zoom and also hold animations still.
+    const still=this.root.dataset.previewEffects==='reduced',low=still||this.lowDetail;
+    if(low===this.sent.low&&still===this.sent.still)return;
+    this.sent={low,still};
     for(const frame of this.root.querySelectorAll(`${FRAME} iframe`))this.detail(frame);
   }
-  detail(frame){frame.contentWindow?.postMessage({kind:DETAIL,low:this.lowDetail},'*');}
+  detail(frame){frame.contentWindow?.postMessage({kind:DETAIL,...this.sent},'*');}
   close(){this.stopNavigation();this.stopMenus();this.observer.disconnect();this.zoom.disconnect();this.root.removeEventListener('load',this.loaded,true);this.paintStyle.remove();for(const frame of this.frames.values())frame.remove();this.frames.clear();}
 }
 export function element(context){

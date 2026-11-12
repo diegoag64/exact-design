@@ -4,6 +4,10 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ## Unreleased
 
+### Added
+
+- **Reduce preview effects** beside the zoom controls. Canvas previews omit backdrop blur at every zoom and skip CSS animations, which keeps the GPU nearly idle while the canvas is still. Full-screen Preview is unchanged, and the setting is remembered.
+
 ### Fixed
 
 - Reduced canvas layout and label-measurement work during pan and zoom, and kept live previews on compositor layers as the camera moves. Overview navigation with many visible previews remains limited by browser rendering.

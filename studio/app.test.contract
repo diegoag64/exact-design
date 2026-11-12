@@ -273,6 +273,17 @@ test "canvas pan and zoom restore without saving"
   expect state py == 140
   expect text "zoom" == "95%"
 
+test "reduced preview effects toggle and persist"
+  size 1440x900
+  expect state reducedEffects == false
+  tap "reduce-effects"
+  expect state reducedEffects == true
+  reload
+  clock data
+  expect state reducedEffects == true
+  tap "reduce-effects"
+  expect state reducedEffects == false
+
 test "project screens share a server and group their viewports"
   size 1440x900
   tap "project-connection"
