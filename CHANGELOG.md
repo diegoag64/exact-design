@@ -4,6 +4,10 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ## Unreleased
 
+### Fixed
+
+- Reduced canvas layout and label-measurement work during pan and zoom, and kept live previews on compositor layers as the camera moves. Overview navigation with many visible previews remains limited by browser rendering.
+
 ### Changed
 
 - Shortened the root README and separated usage and development documentation.

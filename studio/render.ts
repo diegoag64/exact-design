@@ -3,10 +3,35 @@ import type { Workspace } from './workspace';
 import { snapTargets, type SnapTarget } from './snapping';
 import { resolveLayer } from './model';
 
+type Scene = Workspace & {active: string};
+const scenes = new WeakMap<Ctx2D, {drawing: string; workspace: Scene; screens: Map<string, Scene['screens'][number]>}>();
+const labelWidths = new WeakMap<Ctx2D, Map<string, number>>();
+
+function labelWidth(c: Ctx2D, text: string) {
+  let widths = labelWidths.get(c);
+  if (!widths) labelWidths.set(c, widths = new Map());
+  const key = `${c.font}\0${text}`;
+  let width = widths.get(key);
+  if (width === undefined) {
+    width = c.measureText(text).width;
+    if (widths.size >= 512) widths.clear();
+    widths.set(key, width);
+  }
+  return width;
+}
+
 // Exact components render screen content. Canvas only draws editor decorations.
 export function render(args: unknown[], c: Ctx2D, frame: Frame) {
   const [drawing, selected, zoom, panX, panY, dx, dy, resizing, snapping] = args as [string, string, number, number, number, number, number, boolean, boolean];
-  const workspace = JSON.parse(drawing || '{}') as Workspace & {active: string};
+  let scene = scenes.get(c);
+  if (!scene || scene.drawing !== drawing) {
+    const workspace = JSON.parse(drawing || '{}') as Scene;
+    scene = {drawing, workspace, screens: new Map((workspace.screens ?? []).map(screen => [screen.id, screen]))};
+    scenes.set(c, scene);
+  }
+  const {workspace, screens} = scene;
+  // A loaded face can change text widths, so cached label metrics start over.
+  if (frame.cause === 'font' || frame.causes?.includes('font')) labelWidths.delete(c);
   c.clearRect(0, 0, frame.width, frame.height);
   c.save(); c.translate(panX, panY); c.scale(zoom, zoom);
   for (const view of workspace.views ?? []) {
@@ -14,9 +39,16 @@ export function render(args: unknown[], c: Ctx2D, frame: Frame) {
     const frameSelected = active && selected === view.id;
     const vx = view.x + (frameSelected && !resizing ? dx : 0), vy = view.y + (frameSelected && !resizing ? dy : 0);
     const vw = Math.max(100,view.width + (frameSelected && resizing ? dx : 0)), vh = Math.max(100,view.height + (frameSelected && resizing ? dy : 0));
-    const screen = workspace.screens.find(s=>s.id===view.screenId)!;
+    // Retain the active frame's handles and snap guides even outside the view.
+    // The margin includes the label above the frame in screen pixels.
+    if (!active && (panX + (vx + vw) * zoom < -32 || panX + vx * zoom > frame.width + 32 || panY + (vy + vh) * zoom < -32 || panY + vy * zoom > frame.height + 32)) continue;
+    const screen = screens.get(view.screenId)!;
     c.save(); c.translate(vx,vy);
-    drawLabel(c, screen.name, view.name, vw, zoom, frameSelected);
+    // Labels stay at 11 CSS pixels. Measuring at that size also reuses metrics
+    // across zoom levels instead of measuring a different font on every tick.
+    c.save(); c.scale(1 / zoom, 1 / zoom);
+    drawLabel(c, screen.name, view.name, vw * zoom, frameSelected);
+    c.restore();
     if (frameSelected) drawSize(c, `${Math.round(vw)} × ${Math.round(vh)}`, vw, vh, zoom);
     const original = active && !screen.source ? screen.layers.find(n => n.id === selected) : undefined;
     let n = original && {...original};
@@ -45,17 +77,19 @@ export function render(args: unknown[], c: Ctx2D, frame: Frame) {
 }
 
 /** Frame title: screen name, then the viewport in a quieter tone, truncated rather than squeezed. */
-function drawLabel(c: Ctx2D, name: string, variant: string, width: number, zoom: number, selected: boolean) {
-  const size = 11 / zoom, y = -8 / zoom;
+function drawLabel(c: Ctx2D, name: string, variant: string, width: number, selected: boolean) {
+  const size = 11, y = -8;
   c.font = `500 ${size}px system-ui`; c.textBaseline = 'alphabetic'; c.textAlign = 'left';
   const fit = (text: string, room: number) => {
-    if (c.measureText(text).width <= room) return text;
-    let end = text.length; while (end > 1 && c.measureText(text.slice(0, end) + '…').width > room) end--;
+    if (labelWidth(c, text) <= room) return text;
+    let end = text.length; while (end > 1 && labelWidth(c, text.slice(0, end) + '…') > room) end--;
     return end > 1 ? text.slice(0, end) + '…' : '';
   };
-  const first = fit(name, width); c.fillStyle = selected ? '#0d99ff' : '#8c8c8c'; c.fillText(first, 0, y);
+  const first = fit(name, width);
+  if (!first) return;
+  c.fillStyle = selected ? '#0d99ff' : '#8c8c8c'; c.fillText(first, 0, y);
   if (first !== name) return;
-  const gap = 6 / zoom, offset = c.measureText(name).width + gap;
+  const gap = 6, offset = labelWidth(c, name) + gap;
   c.font = `${size}px system-ui`; const rest = fit(variant, width - offset);
   if (rest) { c.fillStyle = selected ? '#0d99ffb3' : '#8c8c8cb3'; c.fillText(rest, offset, y); }
 }

@@ -99,6 +99,8 @@ Icons use a 24-unit viewBox, a 1.75-unit stroke, and a 16px box; tree glyphs use
 
 Text entry keeps its own keys. Source apps receive their normal input in Preview mode. Canvas iframe gestures are accepted only from a registered window inside the canvas with the expected origin and `__ed_canvas=1`. Input ownership survives native inspection ending or restarting; full-screen Preview uses `__ed_canvas=0`. Camera updates remain in the Contract and persist through the existing workspace storage.
 
+Each canvas frame uses CSS translation and scale, with a browser compositing hint supplied by the preview hatch. Frames remain mounted during navigation so app state, source identities, and editing sessions survive camera changes.
+
 ## Context menus
 
 Canvas and tree rows share the `studio-menu` popover. Right-clicking a tree row first selects that row. Canvas hit testing uses the camera coordinates. App inspection offers parent selection, draft undo, finish editing, viewport navigation, and panel actions. Local screens additionally offer duplication, viewport variants, and deletion. Unsupported source restructuring commands are omitted.
