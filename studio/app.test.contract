@@ -951,6 +951,23 @@ test "a setup link connects a project and adds its screens once"
   expect state doc.groups.length == 2
   expect state doc.views.length == 6
 
+test "a setup link with a show list adds every screen and leaves only the listed ones visible"
+  size 1440x900
+  at "/?connect=http://127.0.0.1:5176&name=Discovered%20app&viewports=Core&show=/settings"
+  request POST "http://127.0.0.1:5176/mode" {"mode":"normal"}
+  reload
+  clock data
+  clock +600 real
+  clock data
+  expect tree missing "setup-error"
+  expect state doc.groups.length == 2
+  expect state doc.views.length == 6
+  expect state doc.groups.0.hidden == true
+  expect state doc.groups.1.hidden == false
+  tap "undo"
+  clock data
+  expect state doc.groups.length == 1
+
 test "a setup link to an unreachable app explains the failure"
   size 1440x900
   at "/?connect=http://127.0.0.1:9&name=Nowhere"

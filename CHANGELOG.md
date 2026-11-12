@@ -6,6 +6,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Added
 
+- Setup links accept `show`, a list of screen names or routes that start visible. The link still adds every screen, but the others start hidden and don't load their previews. The Ember link printed by `bun run demo` shows Today, Welcome and Onboarding Goal.
 - An MIT license and open-source project files: a contributing guide, a security policy, a code of conduct, issue forms, and a pull request template with before-and-after screenshots.
 - Tooltips for every icon button. They appear quickly on hover or keyboard focus, show the keyboard shortcut, and explain what the button does.
 - Hide screens and individual viewports with the eye button that appears when you hover a row in the Screens panel, or from a viewport's context menu. Hidden frames leave the canvas, stop loading their previews, and are skipped by hit testing, snapping, and **Fit all screens**. Visibility is saved with the workspace and can be undone.
