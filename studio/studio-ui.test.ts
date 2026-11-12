@@ -34,6 +34,31 @@ test('studio icons, context menus and canvas gestures share the desktop interact
     const after=await camera();expect(after.px-before.px).toBe(100);expect(after.py-before.py).toBe(40);
     await page.mouse.move(800,700);await page.mouse.down({button:'middle'});await page.mouse.move(830,750,{steps:4});await page.mouse.up({button:'middle'});
     const middle=await camera();expect(middle.px-after.px).toBe(30);expect(middle.py-after.py).toBe(50);expect(middle.zoom).toBe(before.zoom);
+    // Camera transforms must move the frame without changing its layout box.
+    const frameBox=page.locator('[data-testid^="frame-"]').first();
+    const originalBox=await frameBox.boundingBox();
+    await page.locator('[aria-label="Design canvas"]').dispatchEvent('wheel',{deltaX:24,deltaY:16});
+    const movedBox=await frameBox.boundingBox();
+    expect(movedBox.x-originalBox.x).toBeCloseTo(-24,1);
+    expect(movedBox.y-originalBox.y).toBeCloseTo(-16,1);
+    expect(movedBox.width).toBe(originalBox.width);
+    expect(movedBox.height).toBe(originalBox.height);
+    const layout=await frameBox.evaluate(el=>({left:getComputedStyle(el).left,top:getComputedStyle(el).top,translate:getComputedStyle(el).translate,willChange:getComputedStyle(el).willChange}));
+    expect(layout.left).toBe('0px');expect(layout.top).toBe('0px');expect(layout.translate).not.toBe('none');
+    expect(layout.willChange).toContain('translate');expect(layout.willChange).toContain('scale');
+    await page.locator('[aria-label="Design canvas"]').dispatchEvent('wheel',{deltaX:-24,deltaY:-16});
+    // Zooming scales the frame about its top-left corner without scaling its translation.
+    const canvasBox=await page.locator('[aria-label="Design canvas"]').boundingBox(),stageBox=await page.locator('#canvas-stage').boundingBox();
+    const pivot={clientX:canvasBox.x+canvasBox.width/2,clientY:canvasBox.y+canvasBox.height/2};
+    const unzoomed=await camera(),unzoomedBox=await frameBox.boundingBox();
+    await page.locator('[aria-label="Design canvas"]').dispatchEvent('wheel',{...pivot,ctrlKey:true,deltaY:-20});
+    const zoomed=await camera(),zoomedBox=await frameBox.boundingBox();
+    expect(zoomed.zoom/unzoomed.zoom).toBeCloseTo(1.1,5);
+    expect(zoomedBox.width/unzoomedBox.width).toBeCloseTo(1.1,3);
+    expect((zoomedBox.x-stageBox.x-zoomed.px)/zoomed.zoom).toBeCloseTo((unzoomedBox.x-stageBox.x-unzoomed.px)/unzoomed.zoom,1);
+    expect((zoomedBox.y-stageBox.y-zoomed.py)/zoomed.zoom).toBeCloseTo((unzoomedBox.y-stageBox.y-unzoomed.py)/unzoomed.zoom,1);
+    await page.locator('[aria-label="Design canvas"]').dispatchEvent('wheel',{...pivot,ctrlKey:true,deltaY:200*(1-1/1.1)});
+    expect((await camera()).zoom).toBeCloseTo(unzoomed.zoom,5);
     const heading=page.getByRole('button',{name:'Heading',exact:true});await heading.click({button:'right'});
     const menu=page.getByRole('menu',{name:'Canvas actions'});await menu.waitFor();
     await page.waitForFunction(()=>document.activeElement?.getAttribute('role')==='menuitem');

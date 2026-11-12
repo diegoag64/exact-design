@@ -7,6 +7,12 @@ class PreviewEngines {
   frames=new Map();
   constructor(root){
     this.root=root;this.stopNavigation=installCanvasNavigation(root);this.stopMenus=installMenus(root);
+    // Exact owns the transforms. This browser-only hint keeps each live preview
+    // composited while its camera scale changes, without flattening the world.
+    this.paintStyle=document.createElement('style');
+    // The style lives in the document head, outside the Contract-managed tree.
+    this.paintStyle.textContent='#canvas-stage > [data-testid^="frame-"]{will-change:translate,scale}';
+    document.head.append(this.paintStyle);
     this.observer=new MutationObserver(()=>this.update());
     this.observer.observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['src']});
     this.update();
@@ -26,7 +32,7 @@ class PreviewEngines {
       document.documentElement.append(frame);this.frames.set(origin,frame);
     }
   }
-  close(){this.stopNavigation();this.stopMenus();this.observer.disconnect();for(const frame of this.frames.values())frame.remove();this.frames.clear();}
+  close(){this.stopNavigation();this.stopMenus();this.observer.disconnect();this.paintStyle.remove();for(const frame of this.frames.values())frame.remove();this.frames.clear();}
 }
 export function element(context){
   if(context.hatch==='preview-engines'&&!hosts.has(context.element))hosts.set(context.element,new PreviewEngines(context.element));
