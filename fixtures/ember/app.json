@@ -1,8 +1,8 @@
 {
-  "name": "Morrow",
+  "name": "Ember",
   "app": {
     "id": "dev.exactdesign.responsive",
-    "name": "Morrow"
+    "name": "Ember"
   },
   "host": {
     "web": {}

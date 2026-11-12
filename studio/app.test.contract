@@ -288,12 +288,12 @@ test "project screens share a server and group their viewports"
   size 1440x900
   tap "project-connection"
   clock settle
-  type "project-name" "Morrow"
+  type "project-name" "Ember"
   type "project-url" "http://127.0.0.1:5174/"
   tap "save-project"
   clock data
   clock settle
-  expect state doc.projectName == "Morrow"
+  expect state doc.projectName == "Ember"
   tap "add-screen"
   clock settle
   type "new-screen-name" "Compose"
@@ -326,7 +326,7 @@ test "project screens share a server and group their viewports"
   expect state doc.source == "http://127.0.0.1:5174/note"
   reload
   clock data
-  expect state doc.projectName == "Morrow"
+  expect state doc.projectName == "Ember"
   expect state doc.groups.1.views.length == 2
   clock settle
   tap "view-view-2"
@@ -341,14 +341,14 @@ test "project screens share a server and group their viewports"
   reload
   clock data
   clock settle
-  expect text "project-name" == "Morrow"
+  expect text "project-name" == "Ember"
   expect text "project-url" == "http://127.0.0.1:5174"
 
 test "project setup and viewport settings restore automatically without Save"
   size 1440x900
   tap "project-connection"
   clock settle
-  type "project-name" "Morrow"
+  type "project-name" "Ember"
   type "project-url" "http://127.0.0.1:5176"
   tap "save-project"
   clock data
@@ -369,7 +369,7 @@ test "project setup and viewport settings restore automatically without Save"
   tap "zoom-in"
   reload
   clock data
-  expect state doc.projectName == "Morrow"
+  expect state doc.projectName == "Ember"
   expect state doc.projectUrl == "http://127.0.0.1:5176"
   expect state doc.groups.length == 2
   expect state doc.groups.1.views.length == 2
@@ -389,7 +389,7 @@ test "invalid connections and duplicate routes stay in the form"
   size 1440x900
   tap "project-connection"
   clock settle
-  type "project-name" "Morrow"
+  type "project-name" "Ember"
   type "project-url" "javascript:bad"
   tap "save-project"
   clock data

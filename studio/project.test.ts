@@ -10,20 +10,20 @@ test('server URLs and route paths are normalized without allowing another origin
   for(const path of ['//other.com','/\\other.com','https://other.com','/bad path']) expect(()=>screenRoute(path)).toThrow();
 });
 test('project routes follow a changed server and persist across reopen',()=>{
-  const e=new WorkspaceEditor();e.connectProject('Morrow','http://localhost:5174');e.addScreen('Note','/note','Phone',true);e.addView('Tablet');
+  const e=new WorkspaceEditor();e.connectProject('Ember','http://localhost:5174');e.addScreen('Note','/note','Phone',true);e.addView('Tablet');
   expect(e.source).toBe('http://localhost:5174/note');expect(e.document.screens.length).toBe(2);
-  e.connectProject('Morrow','http://localhost:6000');expect(e.source).toBe('http://localhost:6000/note');
+  e.connectProject('Ember','http://localhost:6000');expect(e.source).toBe('http://localhost:6000/note');
   e.undo();expect(e.source).toBe('http://localhost:5174/note');
   expect(loadWorkspace(e.document)).toEqual(e.document);
 });
 test('connecting adopts matching old URLs and disconnecting preserves their previews',()=>{
-  const e=new WorkspaceEditor();e.select(e.active);e.property('source','http://localhost:5174/note');e.connectProject('Morrow','http://localhost:5174');
+  const e=new WorkspaceEditor();e.select(e.active);e.property('source','http://localhost:5174/note');e.connectProject('Ember','http://localhost:5174');
   expect(e.screen.route).toBe('/note');expect(e.screen.source).toBe('');
   e.disconnectProject();expect(e.source).toBe('http://localhost:5174/note');expect(e.screen.route).toBe('');
   e.undo();expect(e.screen.route).toBe('/note');
 });
 test('blank and legacy screens coexist and duplicate routes do not change history',()=>{
-  const e=new WorkspaceEditor();e.connectProject('Morrow','http://localhost:5174');e.addScreen('Home','/','Phone',true);
+  const e=new WorkspaceEditor();e.connectProject('Ember','http://localhost:5174');e.addScreen('Home','/','Phone',true);
   const before=structuredClone(e.document),history=e.past.length;
   expect(()=>e.addScreen('Again','/','Tablet',true)).toThrow();expect(e.document).toEqual(before);expect(e.past.length).toBe(history);
   expect(()=>e.addScreen('Detail','/notes/:id','Phone',true)).toThrow('real path');expect(e.document).toEqual(before);
