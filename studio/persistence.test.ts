@@ -16,7 +16,7 @@ function disk(initialText?:string){
 test('workspace storage restores project, screens, geometry, and active selection in a new editor',async()=>{
   const d=disk(),editor=new WorkspaceEditor(),store=new WorkspacePersistence(editor);
   await Promise.all([store.load(d.fs),store.load(d.fs)]);expect(d.reads()).toBe(1);expect(d.writes()).toBe(0);
-  editor.connectProject('Morrow','http://127.0.0.1:5174');
+  editor.connectProject('Ember','http://127.0.0.1:5174');
   editor.addScreen('Library','/','Phone',true);editor.addView('Desktop');editor.move(75,120);
   editor.property('width','1280');
   await store.save(d.fs);
@@ -50,11 +50,11 @@ test('writes keep snapshots in order and a fresh editor restores the final edit'
 
 test('failed writes keep the previous workspace and retry the latest edit',async()=>{
   const d=disk(),editor=new WorkspaceEditor(),store=new WorkspacePersistence(editor);await store.load(d.fs);await store.save(d.fs);
-  const previous=d.text(),write=d.fs.atomicWriteFile.bind(d.fs);editor.connectProject('Morrow','http://localhost:5174');
+  const previous=d.text(),write=d.fs.atomicWriteFile.bind(d.fs);editor.connectProject('Ember','http://localhost:5174');
   d.fs.atomicWriteFile=async()=>{throw {code:'ENOSPC'};};
   expect(await store.save(d.fs)).toBe(false);expect(store.error).toContain('Press Save');expect(d.text()).toBe(previous);
   d.fs.atomicWriteFile=write;expect(await store.save(d.fs,true)).toBe(true);expect(store.error).toBe('');
-  expect(JSON.parse(d.text()!).workspace.project.name).toBe('Morrow');
+  expect(JSON.parse(d.text()!).workspace.project.name).toBe('Ember');
 });
 
 test('unreadable saves are preserved until an explicit save replaces them',async()=>{

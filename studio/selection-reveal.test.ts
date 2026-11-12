@@ -14,7 +14,7 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
   await mkdir(editor);await mkdir(app);await cp(resolve(root,'tools'),resolve(temp,'tools'),{recursive:true});
   for(const entry of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(entry.isFile()&&!entry.name.includes('.test.')&&!entry.name.endsWith('.d.ts')&&/\.(ts|contract|json|tamber)$/.test(entry.name))await cp(resolve(root,'studio',entry.name),resolve(editor,entry.name));
   for(const name of ['assets','modules'])await cp(resolve(root,'studio',name),resolve(editor,name),{recursive:true});
-  for(const name of ['app.contract','app.ts','app.tamber','app.json','assets'])await cp(resolve(root,'fixtures/morrow',name),resolve(app,name),{recursive:true});
+  for(const name of ['app.contract','app.ts','app.tamber','app.json','assets'])await cp(resolve(root,'fixtures/ember',name),resolve(app,name),{recursive:true});
   const helper=startDiscoveryServer(0),helperOrigin=helper.url.origin;
   await writeFile(resolve(editor,'app.ts'),(await readFile(resolve(editor,'app.ts'),'utf8')).replace("'http://127.0.0.1:5175'",JSON.stringify(helperOrigin)));
   const manifest=JSON.parse(await readFile(resolve(editor,'app.json'),'utf8'));delete manifest.commands;delete manifest.server;await writeFile(resolve(editor,'app.json'),JSON.stringify(manifest));
@@ -31,7 +31,7 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
     suite=await suiteBrowser();page=await suite.newPage({viewport:{width:1440,height:1000},colorScheme:'dark'});page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.goto('http://127.0.0.1:'+editorPort,{waitUntil:'load'});
     await page.getByRole('button',{name:'Project connection',exact:true}).click();
-    await page.getByRole('textbox',{name:'Project name',exact:true}).fill('Morrow');await page.getByRole('textbox',{name:'Project URL',exact:true}).fill('http://127.0.0.1:'+appPort);await page.getByRole('button',{name:'Connect',exact:true}).click();
+    await page.getByRole('textbox',{name:'Project name',exact:true}).fill('Ember');await page.getByRole('textbox',{name:'Project URL',exact:true}).fill('http://127.0.0.1:'+appPort);await page.getByRole('button',{name:'Connect',exact:true}).click();
     await page.getByRole('button',{name:'Add screen',exact:true}).click();await page.getByRole('textbox',{name:'Screen name',exact:true}).fill('Library');await page.getByRole('textbox',{name:'Route',exact:true}).fill('/');await page.getByRole('button',{name:'Add screen',exact:true}).last().click();
     await page.getByRole('button',{name:'Add viewport',exact:true}).click();await page.getByRole('button',{name:'Add Tablet viewport',exact:true}).click();
     await page.getByRole('button',{name:'Edit app design',exact:true}).click();await page.getByRole('button',{name:'Finish editing app',exact:true}).waitFor();

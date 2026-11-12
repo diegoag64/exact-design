@@ -42,7 +42,7 @@ The root launchers set `EXACT_FEEDBACK=0`. Generated SDK instructions describe a
 | `tools/event-stream.ts`, `tools/shared-runtime.ts` | Shared connections and the pinned runtime adapter |
 | `studio/design-history.ts`, `studio/draft-review.ts` | Persistent timeline and draft review model |
 | `examples/ember/` | Interactive demo app |
-| `fixtures/morrow/` | Notebook app used by browser regressions |
+| `fixtures/ember/` | Notebook app used by browser regressions |
 
 The [studio design system](studio-design-system.md) describes UI ownership and interaction rules in detail.
 

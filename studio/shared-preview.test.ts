@@ -8,7 +8,7 @@ import {suiteBrowser} from '../.exact-sdk/scripts/agent-launch.mjs';
 test('real Exact previews share controls and data while routes, widths, and scroll stay local',async()=>{
   const root=resolve(import.meta.dir,'..');await mkdir(resolve(root,'.exact'),{recursive:true});
   const dir=await mkdtemp(resolve(root,'.exact/shared-preview-'));
-  for(const name of ['app.contract','app.test.contract','app.ts','app.tamber','app.json','assets'])await cp(resolve(root,'fixtures/morrow',name),resolve(dir,name),{recursive:true});
+  for(const name of ['app.contract','app.test.contract','app.ts','app.tamber','app.json','assets'])await cp(resolve(root,'fixtures/ember',name),resolve(dir,name),{recursive:true});
   const launcher=resolve(dir,'run.mjs');
   const probe=Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response()});const port=probe.port;probe.stop(true);
   let bridge:ElementBridge|undefined,suite:any,page:any;

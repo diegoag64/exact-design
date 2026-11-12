@@ -113,7 +113,7 @@ component App
               row width="100%" max-width=1160 box-sizing="border-box" margin-left="auto" margin-right="auto" padding-left=(viewport.width < 600 ? 20 : 36) padding-right=(viewport.width < 600 ? 20 : 36) align-items="center" gap=10
                 column width=30 height=30 background-color="brand" border-radius=9 align-items="center" justify-content="center"
                   image "symbol:book" color="on-brand" font-size=16 aria-hidden=true
-                text "Morrow" font-family="Georgia, serif" font-size=25 letter-spacing="-0.6px"
+                text "Ember" font-family="Georgia, serif" font-size=25 letter-spacing="-0.6px"
                 row flex=1
                 button press=create display="flex" align-items="center" gap=8 height=36 padding-left=14 padding-right=14 border-width=0 border-radius=10 background-color="brand" color="on-brand" aria-label="New note" testId="create"
                   image "symbol:add" aria-hidden=true
