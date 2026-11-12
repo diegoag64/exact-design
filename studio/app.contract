@@ -1,5 +1,5 @@
 use Icon from "./icons.contract"
-use Tool, Field, TreeRow, PanelSection, Menu, IconButton, SectionHeading, MenuItem, MenuDivider, PropertyField, screensWidth, inspectorWidth from "./ui.contract"
+use Tool, Field, TreeRow, PanelSection, Menu, IconButton, SectionHeading, MenuItem, MenuDivider, PropertyField, screensWidth, inspectorWidth, InspectorValue from "./ui.contract"
 
 routes nav
   editor "/"
@@ -119,6 +119,28 @@ shape Discovery
   routes: DiscoveredScreen[]
   error: string
 
+shape HistoryChange
+  id: string
+  target: string
+  property: string
+  before: string
+  after: string
+
+shape HistoryEntry
+  id: string
+  number: number
+  label: string
+  target: string
+  actor: string
+  kind: string
+  time: string
+  timeLabel: string
+  changes: HistoryChange[]
+
+shape History
+  entries: HistoryEntry[]
+  error: string
+
 shape DesignRow
   id: string
   name: string
@@ -126,6 +148,19 @@ shape DesignRow
   shared: bool
   group: string
   options: LayoutOption[]
+  property: string
+  binding: string
+  readonly: bool
+  reason: string
+  fields: DesignField[]
+  linked: bool
+
+fn firstField(fields: DesignField[]): string = match first(fields) { case some(field) => field.value, case none => "" }
+
+shape DesignField
+  id: string
+  label: string
+  value: string
 
 shape LayoutOption
   value: string
@@ -160,6 +195,7 @@ shape PreviewSignal
   measurement: SpacingMeasurement
 
 shape DesignReply
+  instances: number
   draftCount: number
   draftState: string
   draftError: string
@@ -206,7 +242,11 @@ shape PreviewSizes
   ready: bool
   signature: string
 
+shape Time
+  epochAtZero: number
+
 component Studio
+  resource time = exactTime() as shape Time
   resource viewport = exactViewport() as shape Viewport
   resource doc = document() as shape Document else empty(name="Untitled")
   state discoveryRevision = 0
@@ -214,9 +254,16 @@ component Studio
   resource renderedScene = scene(doc.drawing, previews.signature) as shape Document else empty()
   derive scene = renderedScene.active != "" ? renderedScene : doc
   resource discovered = discover(doc.projectUrl, doc.groups.map(g => g.route), discoveryRevision) as shape Discovery else empty()
-  mutation changed as shape Reply queue refreshes doc then afterEdit
-  mutation libraryChanged as shape Reply queue refreshes doc then afterLibrary
-  mutation designChanged as shape DesignReply queue then afterDesign
+  resource history = history(doc.projectUrl) as shape History else empty()
+  state timelineOpen = false persist
+  state historySelected = ""
+  action toggleTimeline
+    timelineOpen = not timelineOpen
+  action inspectHistory(id: string)
+    historySelected = historySelected == id ? "" : id
+  mutation changed as shape Reply queue refreshes doc, history then afterEdit
+  mutation libraryChanged as shape Reply queue refreshes doc, history then afterLibrary
+  mutation designChanged as shape DesignReply queue refreshes history then afterDesign
   mutation hoverChanged as shape DesignReply queue
   resource previewSignal = previewSignal(designSession) as shape PreviewSignal else empty()
   derive spacingMeasured = editing ? some(previewSignal.measurement) : none
@@ -234,7 +281,7 @@ component Studio
     if editing and (on or hoveredElement == id)
       let next = on ? id : ""
       hoveredElement = next
-      send hoverChanged = design("hover", designSession, "", 0, next, "")
+      send hoverChanged = design("hover", designSession, "", 0, next, "", time.epochAtZero + performanceNow())
   state collapsedElements = [""]
   state revealedLayerRevision = -1
   action revealSelectedLayer
@@ -269,12 +316,12 @@ component Studio
     previewUpdateSeen = -1
     designWriting = true
     rightPanel = "open"
-    send designChanged = design("open", "", doc.source, 0, doc.active, "")
+    send designChanged = design("open", "", doc.source, 0, doc.active, "", time.epochAtZero + performanceNow())
   action finishEditing
     spacingProperty = ""
     hoveredElement = ""
     designWriting = true
-    send designChanged = design("close", designSession, "", 0, "", "")
+    send designChanged = design("close", designSession, "", 0, "", "", time.epochAtZero + performanceNow())
     designSession = ""
   action toggleEditing
     if editing
@@ -283,14 +330,25 @@ component Studio
       startEditing()
   action pollDesign
     if not pending(designChanged)
-      send designChanged = design("poll", designSession, "", 0, "", "")
+      send designChanged = design("poll", designSession, "", 0, "", "", time.epochAtZero + performanceNow())
   task designPoll when editing and not selectingElement
     every(750, pollDesign)
   task selectionPoll when editing and selectingElement
     every(50, pollDesign)
+  state independentFields = [""]
+  action toggleFieldLink(id: string, binding: string, value: string, independent: bool)
+    if independent
+      independentFields = independentFields.filter(b => b != binding)
+      designWriting = true
+      send designChanged = design("field", designSession, "", designVersion, `${id}:all`, value, time.epochAtZero + performanceNow())
+    else
+      independentFields = independentFields.concat([binding])
+  action editDesignField(row: string, part: string, value: string)
+    designWriting = true
+    send designChanged = design("field", designSession, "", designVersion, `${row}:${part}`, value, time.epochAtZero + performanceNow())
   action editDesign(row: string, value: string)
     designWriting = true
-    send designChanged = design("edit", designSession, "", designVersion, row, value)
+    send designChanged = design("edit", designSession, "", designVersion, row, value, time.epochAtZero + performanceNow())
   action editSpacing(value: string)
     spacingValue = value
   action openSpacing(property: string, value: string)
@@ -306,21 +364,21 @@ component Studio
     if key == "Enter"
       preventDefault()
       designWriting = true
-      send designChanged = design("spacing", designSession, "", designVersion, spacingProperty, spacingValue)
+      send designChanged = design("spacing", designSession, "", designVersion, spacingProperty, spacingValue, time.epochAtZero + performanceNow())
       spacingProperty = ""
   action undoDesign
     designWriting = true
-    send designChanged = design("undo", designSession, "", 0, "", "")
+    send designChanged = design("undo", designSession, "", 0, "", "", time.epochAtZero + performanceNow())
   action applyDesign
     designWriting = true
-    send designChanged = design("apply", designSession, "", 0, "", "")
+    send designChanged = design("apply", designSession, "", 0, "", "", time.epochAtZero + performanceNow())
   action discardDesign
     designWriting = true
-    send designChanged = design("discard", designSession, "", 0, "", "")
+    send designChanged = design("discard", designSession, "", 0, "", "", time.epochAtZero + performanceNow())
   action selectParent
-    send designChanged = design("parent", designSession, "", 0, "", "")
+    send designChanged = design("parent", designSession, "", 0, "", "", time.epochAtZero + performanceNow())
   action selectElement(id: string)
-    send designChanged = design("select", designSession, "", designVersion, id, "")
+    send designChanged = design("select", designSession, "", designVersion, id, "", time.epochAtZero + performanceNow())
   action afterDesign
     designWriting = false
     match designChanged
@@ -395,11 +453,11 @@ component Studio
     screenPath = route
     libraryChanged = none
   action saveProject
-    send libraryChanged = library("connect", projectNameValue, projectUrlValue, "")
+    send libraryChanged = library("connect", projectNameValue, projectUrlValue, "", time.epochAtZero + performanceNow())
   action disconnectProject
-    send libraryChanged = library("disconnect", "", "", "")
+    send libraryChanged = library("disconnect", "", "", "", time.epochAtZero + performanceNow())
   action saveScreen
-    send libraryChanged = library(screenKind, screenName, screenPath, screenPreset)
+    send libraryChanged = library(screenKind, screenName, screenPath, screenPreset, time.epochAtZero + performanceNow())
   action toggleGroup(id: string)
     collapsed = collapsed.includes(id) ? collapsed.filter(value => value != id) : collapsed.concat([id])
   state fitWhenReady = false
@@ -487,9 +545,9 @@ component Studio
       undoDesign()
     else
       if not editing or op == "save"
-        send changed = edit(op, key, "", 0, 0)
+        send changed = edit(op, key, "", 0, 0, time.epochAtZero + performanceNow())
   action prop(key: string, value: string)
-    send changed = edit("property", key, value, 0, 0)
+    send changed = edit("property", key, value, 0, 0, time.epochAtZero + performanceNow())
   action down(e: PointerEvent)
     cancelPan()
     fitWhenReady = false
@@ -501,7 +559,7 @@ component Studio
       dx = 0
       dy = 0
       if not hand
-        send changed = edit("hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom)
+        send changed = edit("hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom, time.epochAtZero + performanceNow())
   action move(e: PointerEvent)
     if dragging
       freeDrag = e.altKey
@@ -513,7 +571,7 @@ component Studio
         px = px + e.offsetX - sx
         py = py + e.offsetY - sy
       else
-        send changed = edit("move", (e.altKey ? "free" : "snap"), `${zoom}`, (e.offsetX - sx) / zoom, (e.offsetY - sy) / zoom)
+        send changed = edit("move", (e.altKey ? "free" : "snap"), `${zoom}`, (e.offsetX - sx) / zoom, (e.offsetY - sy) / zoom, time.epochAtZero + performanceNow())
       dragging = false
       dx = 0
       dy = 0
@@ -539,7 +597,7 @@ component Studio
   action fitBounds(x: number, y: number, right: number, bottom: number)
     cancelPan()
     let available = viewport.width - ((leftOpen and viewport.width >= 1000 ? screensWidth() : 0) + (rightOpen and viewport.width >= 700 ? inspectorWidth() : 0)) - 96
-    let z = min(1, max(0.01, min(available / max(1, right - x), (viewport.height - 220) / max(1, bottom - y))))
+    let z = min(1, max(0.01, min(available / max(1, right - x), (viewport.height - 220 - (timelineOpen ? (historySelected == "" ? 96 : 240) : 0)) / max(1, bottom - y))))
     zoom = z
     px = 48 - x * z
     py = 64 - y * z
@@ -558,7 +616,7 @@ component Studio
           resetView()
   action canvasMenu(e: PointerEvent)
     if not editing
-      send changed = edit("hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom)
+      send changed = edit("hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom, time.epochAtZero + performanceNow())
   action resetView
     fitBounds(scene.minX, scene.minY, scene.maxX, scene.maxY)
   action afterEdit
@@ -573,7 +631,7 @@ component Studio
   action focusView(id: string, x: number, y: number, w: number, h: number)
     fitWhenReady = false
     addingViewport = false
-    send changed = edit("select", id, "", 0, 0)
+    send changed = edit("select", id, "", 0, 0, time.epochAtZero + performanceNow())
     let fromX = cameraX
     let fromY = cameraY
     panFromX = fromX
@@ -661,6 +719,7 @@ component Studio
               row flex=1
               if doc.status != ""
                 text doc.status color="ink.secondary" testId="save-status"
+              IconButton(icon="rows-2", label="Timeline", hint="Design timeline", shortcut="", selected=timelineOpen, disabled=false, testId="toggle-timeline", press=toggleTimeline)
               IconButton(icon="download", label="Save", hint="Save", shortcut="Meta+s Control+s", selected=false, disabled=false, testId="save", press=command("save", ""))
               button press=command("undo", "") aria-keyshortcuts="Meta+z Control+z" class=Tool display=(viewport.width >= 700 ? "flex" : "none") disabled=(editing ? not appCanUndo : not doc.canUndo) aria-label="Undo" title="Undo" testId="undo"
                 Icon(name="undo-2", size=16, angle=0)
@@ -807,6 +866,10 @@ component Studio
                                     text layerKind(selected.kind) font="type.caption" color="ink.secondary" testId="selected-element-kind"
                                   if result.source != ""
                                     text result.source font="type.caption" color="ink.muted" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" min-width=0 title=result.source testId="design-source"
+                                if result.instances > 1
+                                  row gap=6 align-items="center" color="ink.secondary" title="These elements share one source template. Editing it updates every instance."
+                                    Icon(name="layers", size=14, angle=0)
+                                    text `Shared template · ${result.instances} instances` font="type.caption"
                             if result.source != ""
                               if result.crumbs.length == 0
                                 button press=selectParent class=Tool width="100%" justify-content="flex-start" testId="design-parent"
@@ -818,21 +881,44 @@ component Studio
                                 text "Undo draft change" font="type.body"
                           case none
                             text "Select an element in a screen." font="type.body"
-                        if designRows.filter(p => p.shared).length > 0
-                          text "Shared style · updates every use" margin=16 font="type.caption" color="ink.secondary"
-                        for group in ["Layout", "Spacing", "Appearance"] key=group
+                        for group in ["Layout", "Spacing", "Text", "Typography", "Appearance"] key=group
                           if designRows.filter(p => p.group == group).length > 0
                             column class=PanelSection
                               SectionHeading(label=group)
-                              for property in designRows.filter(p => p.group == group) key=`${designVersion}-${property.id}`
-                                column gap=6
-                                  text property.name font="type.caption" color="ink.secondary"
-                                  if property.options.length > 0
-                                    select value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
-                                      for choice in property.options key=choice.value
-                                        option choice.label value=choice.value
-                                  else
-                                    input value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
+                              row flex-wrap="wrap" gap=12 align-items="flex-start"
+                                for property in designRows.filter(p => p.group == group) key=`${property.binding}-${property.id}`
+                                  column gap=6 min-width=0 width=((group == "Typography" and property.property != "font-family" and property.property != "color") or (group == "Layout" and (property.property.includes("width") or property.property.includes("height"))) ? "calc(50% - 6px)" : "100%")
+                                    row align-items="center" gap=6
+                                      text property.name font="type.caption" color="ink.secondary" flex=1 title=property.property
+                                      if property.shared
+                                        column color="ink.selected" title=`Shared style · ${property.binding} · updates every use` aria-label="Shared source style"
+                                          Icon(name="layers", size=14, angle=0)
+                                      if property.fields.length > 0 and not property.readonly
+                                        button press=toggleFieldLink(property.id, property.binding, firstField(property.fields), not property.linked or independentFields.includes(property.binding)) class=Tool width=24 height=24 padding=4 aria-label=`${property.linked and not independentFields.includes(property.binding) ? "Unlink" : "Link"} ${property.name}` aria-pressed=(property.linked and not independentFields.includes(property.binding)) title=(property.linked and not independentFields.includes(property.binding) ? "Linked · one value changes all" : "Independent values · link using the first value") color=(property.linked and not independentFields.includes(property.binding) ? "ink.selected" : "ink.muted") disabled=designWriting
+                                          Icon(name="link-2", size=14, angle=0)
+                                    if property.readonly
+                                      column gap=4
+                                        input value=property.value readonly=true class=Field aria-label=property.name title=property.reason color="ink.muted"
+                                        text property.reason font="type.caption" color="ink.muted"
+                                    else if property.fields.length > 0
+                                      if property.linked and not independentFields.includes(property.binding)
+                                        row align-items="center" class=InspectorValue
+                                          text (property.property == "gap" ? "Both" : "All") width=36 font="type.caption" color="ink.muted" text-align="center"
+                                          input value=firstField(property.fields) change=editDesignField(property.id, "all") class=Field background-color="transparent" flex=1 min-width=0 aria-label=`${property.name} all` disabled=designWriting
+                                      else
+                                        row flex-wrap="wrap" gap=8
+                                          for field in property.fields key=field.id
+                                            column width="calc(50% - 4px)" gap=4
+                                              text field.label font="type.caption" color="ink.muted"
+                                              input value=field.value change=editDesignField(property.id, field.id) class=Field aria-label=`${property.name} ${field.label}` disabled=designWriting
+                                    else if property.property == "text-content"
+                                      textarea value=property.value change=editDesign(property.id) class=Field height=88 padding=8 resize="vertical" aria-label="Text content" disabled=designWriting
+                                    else if property.options.length > 0
+                                      select value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
+                                        for choice in property.options key=choice.value
+                                          option choice.label value=choice.value
+                                    else
+                                      input value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting title=property.binding
                     if not editing
                       row class=PanelSection align-items="center"
                         text (doc.frameSelected ? "Screen" : "Layer") font-weight=600 flex=1
@@ -926,6 +1012,38 @@ component Studio
                     button press=toggleCode class=Tool aria-label="Close export" testId="close-export"
                       Icon(name="x", size=16, angle=0)
                   textarea value=doc.code readonly=true flex=1 width="100%" min-height=0 font-family="monospace" font="type.body" border-width=0 background-color="surface.field" padding=12 box-sizing="border-box" aria-label="Contract source" testId="code"
+            if timelineOpen
+              column height=(historySelected == "" ? 96 : 240) flex-shrink=0 background-color="surface.panel" border-top="1px solid line.subtle" testId="design-timeline"
+                row height=32 flex-shrink=0 align-items="center" padding-left=16 padding-right=8 gap=8
+                  text "Timeline" font="type.body" font-weight=600
+                  text `${history.entries.length} ${history.entries.length == 1 ? "change" : "changes"}` font="type.caption" color="ink.muted"
+                  row flex=1
+                  IconButton(icon="x", label="Close timeline", hint="Close timeline", shortcut="", selected=false, disabled=false, testId="close-timeline", press=toggleTimeline)
+                if history.error != ""
+                  text history.error role="alert" padding=8 color="ink.danger"
+                else if history.entries.length == 0
+                  text "Your design changes will appear here." padding="8px 16px" color="ink.muted" font="type.caption"
+                else
+                  row overflow-x="auto" height=56 flex-shrink=0 align-items="center" padding-left=12 padding-right=12 gap=4 aria-label="Design history"
+                    for point in history.entries key=point.id
+                      button press=inspectHistory(point.id) class=Tool width="auto" min-width=40 height=36 flex-shrink=0 padding="0 10px" gap=6 aria-label=`Change ${point.number}: ${point.label}` aria-pressed=(historySelected == point.id) title=`${point.label} · ${point.target} · ${point.timeLabel}` background-color=(historySelected == point.id ? "surface.selected" : "surface.field") color=(historySelected == point.id ? "ink.selected" : "ink.secondary")
+                        Icon(name=(point.kind == "apply" ? "check" : point.kind == "undo" ? "undo-2" : point.kind == "discard" ? "x" : "settings-2"), size=14, angle=0)
+                        text `${point.number}` font="type.caption"
+                      if point.number < history.entries.length
+                        column width=12 height=1 background-color="line.strong" flex-shrink=0
+                  for point in history.entries.filter(p => p.id == historySelected) key=point.id
+                    column flex=1 min-height=0 overflow-y="auto" padding="8px 16px" gap=8 border-top="1px solid line.subtle" testId="timeline-detail"
+                      row gap=8 align-items="center" flex-wrap="wrap"
+                        text point.label font-weight=600
+                        text point.target color="ink.secondary"
+                        text `${point.actor == "ai" ? "AI" : "You"} · ${point.timeLabel}` title=point.time color="ink.muted" font="type.caption"
+                      for change in point.changes key=change.id
+                        row gap=12 align-items="flex-start" flex-wrap="wrap"
+                          text change.property width=120 font="type.caption" color="ink.secondary" title=change.target
+                          text change.before max-width=320 overflow-x="auto" white-space="pre-wrap" font="type.caption" color="ink.muted"
+                          text "→" color="ink.muted"
+                          text change.after max-width=320 overflow-x="auto" white-space="pre-wrap" font="type.caption"
+                          text change.target max-width=280 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" title=change.target font="type.caption" color="ink.muted"
             if preview
               column position="absolute" inset=0 background-color="surface.canvas" align-items="center" justify-content="center" gap=20
                 row width="90%" max-width=720 align-items="center"

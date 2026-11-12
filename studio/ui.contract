@@ -136,3 +136,9 @@ component MenuItem
 component MenuDivider
   view
     hr margin="5px 4px" border-width=0 height=1 background-color="line.subtle"
+
+// Shared compound-value shell: identifier and input align as one control.
+style InspectorValue
+  background-color="surface.field"
+  border-radius="radius.control"
+  min-width=0

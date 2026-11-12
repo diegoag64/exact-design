@@ -49,6 +49,7 @@ Import components and styles from `./ui.contract`; import `Icon` from `./icons.c
 | `Tool` | Custom button compositions using the standard hit area and interaction states |
 | `Field` | Native text inputs and selects; Exact owns their focus behavior |
 | `TreeRow` | Layer row hover and keyboard focus treatment |
+| `InspectorValue` | Single compound-value field with an inline All/Both identifier |
 | `PanelSection` | Padding, vertical rhythm, and divider for inspector groups |
 | `Menu` | Popover surface, width, border, radius, and elevation |
 
@@ -91,11 +92,31 @@ Canvas and tree rows share the `studio-menu` popover. Right-clicking a tree row 
 
 Exact owns placement, viewport-edge fitting, action dismissal, and click-away dismissal. The browser menu adapter focuses the first enabled item and supports Up/Down, Home/End, type-ahead, Enter, and Escape. Closing returns focus without scrolling the canvas. Menus preserve native editing behavior inside text fields.
 
+## Design inspector
+
+Properties are grouped into Layout, Spacing, Text, Typography, and Appearance. Dimensions and typography metrics use paired fields. The source adapter in `tools/inspector-fields.ts` supplies property names, groups, and compound-field metadata; the view does not infer source semantics from displayed labels.
+
+Padding and margin follow Top, Right, Bottom, Left order. Corner radius follows Top left, Top right, Bottom right, Bottom left. Gap uses Row and Column. A selected chain control means one value updates every edge or axis. Unlinking exposes independent fields; editing one preserves the others. Linking unequal values uses the first value, as its tooltip explains. Each edit remains one draft operation and one undo step.
+
+Linking values is separate from sharing source. The layers icon identifies a shared style. A repeated template shows its instance count beneath the selected element. Source locations remain visible on the selection and available on property tooltips. Dynamic and responsive expressions stay visible with a read-only explanation. The editor never replaces an expression with its current computed value.
+
+Literal text uses a multiline Content field. Preview text overrides preserve the runtime's underlying text and restore it on undo or discard. Source writes escape the literal, validate the batch, and check the file digest. Text bound to application data remains read-only here.
+
+## Design timeline
+
+The Timeline toolbar button opens a horizontal sequence of edits. Selecting a point shows the action, element, author, time, source address, and before/after values. Opening history does not rewind the live design. Closing it restores the full canvas area.
+
+`studio/design-history.ts` persists an append-only journal in `app:/data/design-history.json`. Entries have an ID, parent ID, timestamp, project, actor (`user` or `ai`), operation kind, target, structured changes, and before/after state. The current manual editor records `user`; the actor field supports a later AI command adapter. There is no AI editing endpoint yet.
+
+Source events include draft edits, undo, discard, and Apply to code. Workspace events include screen-library changes, geometry, local layer properties, creation, deletion, undo, and redo. Pointer movement is committed as one geometry edit. Selection, hovering, camera movement, and no-op writes create no entries. History is scoped by the connected project origin, like saved drafts, and survives editor and helper restarts in the same browser storage.
+
+Workspace events retain document snapshots. Source events retain draft patches, original values, source addresses, and file hashes. These are comparison evidence, not full source-repository or application-state snapshots. Point comparison, branching, replay, and rollback of applied code are not implemented. Undoing or discarding a draft adds an event rather than removing its earlier history.
+
 ## Verification
 
 - `bun run test`: source editing, persistence, selection, geometry, and proxy tests.
 - `bun run test:ui`: Exact behavior tests, including camera coordinates and context actions.
-- `bun run test:preview`: isolated real-browser tests. The studio regression covers icon tint and centering in both themes, right-click targeting, keyboard focus, edge placement, Space and middle dragging, and typing. The real-app regression covers menus and navigation across inspected iframe boundaries.
+- `bun run test:preview`: isolated real-browser tests. The studio regression covers icon tint and centering in both themes, right-click targeting, keyboard focus, edge placement, Space and middle dragging, and typing. The real-app regressions cover menus and navigation across inspected iframe boundaries, literal text editing, independent padding and corners, linked values, checked source writes, and timeline persistence.
 - `bun run verify`: the required Exact layout and behavior audit.
 
 New controls use these primitives and add behavior tests where they introduce interaction or state. Changes to tokens apply to all consumers; feature-specific source editing belongs outside the component library.

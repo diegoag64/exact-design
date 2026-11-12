@@ -1,3 +1,4 @@
+import {DesignHistory,draftChanges,workspaceChanges} from './design-history';
 import type { Answer, Sources, Ctx2D, Frame } from './app.contract.d.ts';
 import { WorkspaceEditor, validSource } from './workspace';
 import { WorkspacePersistence } from './persistence';
@@ -10,10 +11,11 @@ import { render } from './render';
 const editor = new WorkspaceEditor();
 const persistence = new WorkspacePersistence(editor);
 const drafts=new DraftStorage();
+const history=new DesignHistory();
 const designOrigins=new Map<string,string>();
 let status = ''; let resizing = false;
 export const DISCOVERY_API = 'http://127.0.0.1:5175';
-export const grants = `fs.read app:/data/design.json\nfs.write app:/data/design.json\nfs.read app:/data/design-drafts.json\nfs.write app:/data/design-drafts.json\nnet.fetch ${DISCOVERY_API}`;
+export const grants = `fs.read app:/data/design.json\nfs.write app:/data/design.json\nfs.read app:/data/design-drafts.json\nfs.write app:/data/design-drafts.json\nfs.read app:/data/design-history.json\nfs.write app:/data/design-history.json\nnet.fetch ${DISCOVERY_API}`;
 let discoveryCache: {owner:string;revision:number;routes:DiscoveredScreen[];error:string}|undefined;
 const previewBridges=new Map<string,string>();
 async function discoverProject(owner:string,revision:number) {
@@ -71,7 +73,12 @@ const reply = (fit=false,error='') => {
   const d=snapshot();
   return {ok:error==='',error,fit,minX:d.minX,minY:d.minY,maxX:d.maxX,maxY:d.maxY};
 };
+async function logWorkspace(storage:any,before:string,kind:string,target:string,timestamp:number){
+  const after=JSON.stringify(editor.document),changes=workspaceChanges(JSON.parse(before),editor.document);
+  if(changes.length)await history.append(storage.fs,{time:new Date(timestamp).toISOString(),kind:'workspace-'+kind,project:editor.document.project.url,label:kind==='property'?'Edit '+changes.map(c=>c.property).join(', '):kind==='move'?'Move / resize':kind.charAt(0).toUpperCase()+kind.slice(1),target,changes,beforeState:before,afterState:after});
+}
 const sources: Sources = {
+  history: async ([project],_store,storage)=>{try{await history.load(storage.fs);return {entries:history.view(project),error:''};}catch(error){return {entries:[],error:error instanceof Error?error.message:'Could not load timeline.'};}},
   scene: () => snapshot(),
   previews: ([requests]) => {
     if(!requests||requests==='[]')return {ready:true,signature:'[]',requests};
@@ -97,16 +104,24 @@ const sources: Sources = {
       return JSON.parse(event.data);
     }});
   },
-  design: async ([op,session,url,version,row,value], _store, storage) => {
-    const empty={draftCount:0,draftState:'',draftError:'',canApply:false,ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,selectionRevision:0,message:'',rows:[],canUndo:false,applied:false,spacingId:'',spacingPlan:'',spacingFrame:'',spacingInputs:[]};
+  design: async ([op,session,url,version,row,value,timestamp], _store, storage) => {
+    const empty={instances:1,draftCount:0,draftState:'',draftError:'',canApply:false,ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,selectionRevision:0,message:'',rows:[],canUndo:false,applied:false,spacingId:'',spacingPlan:'',spacingFrame:'',spacingInputs:[]};
     try {
       await drafts.load(storage.fs);
       const origin=url?new URL(url).origin:designOrigins.get(session)??'';
-      const draftState=op==='open'?drafts.get(origin):'';
+      const previous=drafts.get(origin);
+      const draftState=op==='open'?previous:'';
+      if(['edit','field','spacing','undo','discard','apply'].includes(op))await history.load(storage.fs);
       const response=await fetch(`${DISCOVERY_API}/design`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,session,url:origin,version,row,value,draftState})});
       const result=await response.json();
       if(op==='open'&&result.ok){designOrigins.set(result.session,origin);if(result.bridgeOrigin)previewBridges.set(origin,result.bridgeOrigin);}
-      if(result.ok&&typeof result.draftState==='string'&&origin)await drafts.save(storage.fs,origin,result.draftState);
+      if(result.ok&&typeof result.draftState==='string'&&origin){
+        const changes=draftChanges(previous,result.draftState,op==='apply');
+        if(['edit','field','spacing','undo','discard','apply'].includes(op)&&changes.length){
+          await history.append(storage.fs,{time:new Date(timestamp).toISOString(),kind:op==='apply'?'apply':op==='undo'?'undo':op==='discard'?'discard':'draft',project:origin,label:op==='apply'?'Apply to code':op==='undo'?'Undo draft':op==='discard'?'Discard draft':'Edit '+[...new Set(changes.map(c=>c.property))].join(', '),target:result.selectedLabel||result.source||'App design',changes,beforeState:previous,afterState:result.draftState});
+        }
+        await drafts.save(storage.fs,origin,result.draftState);
+      }
       if(op==='close')designOrigins.delete(session);
       return {...empty,...result,origin:op==='open'?origin:'',session:op==='close'?'':result.session??session};
     } catch(e) {
@@ -124,22 +139,26 @@ const sources: Sources = {
       return {owner,routes:[],error:'Discovery is unavailable. Run bun run dev, or enter a route below.'};
     }
   },
-  library: async ([op,name,value,preset], _store, storage) => {
+  library: async ([op,name,value,preset,timestamp], _store, storage) => {
     await persistence.load(storage.fs);
+    await history.load(storage.fs);
+    const before=JSON.stringify(editor.document);
     try {
       if(op==='connect') editor.connectProject(name,value);
       else if(op==='disconnect') editor.disconnectProject();
       else if(op==='add' || op==='blank') editor.addScreen(name,value,preset,op==='add');
       else return reply(false,'Unknown library action.');
-      resizing=false;status='';await persistence.save(storage.fs);return reply(op==='add'||op==='blank');
+      resizing=false;status='';await persistence.save(storage.fs);await logWorkspace(storage,before,op,name,timestamp);return reply(op==='add'||op==='blank');
     } catch(e) {if((e as {code?:string}).code==='bake')throw e;return reply(false,(e as Error).message);}
   },
   document: async (_args, _store, storage) => {
     await persistence.load(storage.fs);
     return snapshot();
   },
-  edit: async ([op, key, value, x, y], _store, storage) => {
+  edit: async ([op, key, value, x, y,timestamp], _store, storage) => {
     await persistence.load(storage.fs);
+    await history.load(storage.fs);
+    const before=JSON.stringify(editor.document),target=editor.target?.name??editor.screen.name;
     status = '';
     if(op === 'select') { editor.select(key); resizing = false; }
     if(op === 'hit') resizing = editor.hit(x,y,9 / Math.max(0.01, Number(value) || 1));
@@ -153,7 +172,8 @@ const sources: Sources = {
     if(op === 'redo') editor.redo();
     if(op === 'delete') editor.remove();
     const saved=await persistence.save(storage.fs,op==='save');
-    if(op==='save'&&saved)status='Saved';
+    if(saved)try{await logWorkspace(storage,before,op,target,timestamp);}catch{status='Could not save the timeline. Your workspace is saved.';}
+    if(op==='save'&&saved&&!status)status='Saved';
     return reply(['screen','duplicate','variant'].includes(op)||(op==='property'&&['source','route'].includes(key)));
   },
 };

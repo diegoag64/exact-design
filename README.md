@@ -79,13 +79,17 @@ The inspector offers existing visual attributes that Exact marks editable in Con
 
 The inspector separates **Layout**, **Spacing**, and **Appearance**. Layout includes existing size constraints, direction, alignment, distribution, and wrapping. Spacing includes existing padding, margin, and gap attributes. Numbers use pixels. CSS lengths and percentages are also accepted. Padding and margin accept one to four values, such as `8 16` or `8px 16px`.
 
+The inspector groups layout, spacing, text, typography, and appearance. Padding, margin, flex gap, and corner radius expose linked or independent values with named edges, axes, and corners. The chain control links values; the layers indicator identifies shared source. Repeated templates show how many elements an edit affects.
+
 Use **Undo draft change** to undo an edit or **Discard** to return the previews to their source values. Drafts save locally per project and restore when you reenter Edit app, including after an editor reload. **Done editing** leaves the draft intact. Workspace Save remains separate from design drafts.
 
 Click **Apply to code** to write the pending draft. The local source adapter checks each file's digest and attribute address, validates the complete batch in a staged project with the pinned Exact compiler, then replaces the changed files. An invalid or conflicting batch leaves the source unchanged. External source changes block Apply until you discard the stale draft. Applying Contract changes may trigger Exact's normal rebuild and state checkpoint restore. The editor keeps the preview frame mounted and restores selection after the new plan arrives. Source edits remain on disk after leaving the editor. Draft undo does not undo an applied batch. Use source control to revert committed source changes.
 
-The design model, preview renderer, and code writer have separate interfaces. `tools/design-drafts.ts` owns source bindings, property patches, draft history, and checked batch translation. `tools/design-preview-client.js` renders those patches through temporary CSS. The compiler's source map identifies the affected sites, including repeated components and shared-style uses. Matching CSS class names alone would be unsafe because Exact deduplicates identical styles. `tools/preview-channel.ts` pushes selection and spacing feedback to the editor independently of source inspection. A canvas click can reveal its layer before its editable source rows finish loading.
+Open **Timeline** in the toolbar to inspect saved design changes. Each point records its target, time, author, source identifier, and before/after values. Draft edits, Apply, undo, discard, screen changes, and local layer edits are retained across reloads. Selecting a point inspects it without changing the canvas. Historical comparison and rollback are future work; source history stores patches and file hashes, not complete application snapshots.
 
-Editing supports local Exact dev servers with the `tamber/1` editing API. Its local write token stays in the helper's memory. Release builds and remote servers cannot be edited. Layout controls require an existing literal attribute in the app's own Contract source or a shared style. Responsive expressions, token-based layout values, inherited values, package sources, text content, and attributes without a source address remain in the source editor. This version changes existing attributes; adding new layout rules or restructuring elements is not implemented. Typography controls appear only if Exact offers that property as an editable source row.
+The design model, preview renderer, and code writer have separate interfaces. `tools/design-drafts.ts` owns source bindings, property patches, draft history, and checked batch translation. `tools/design-preview-client.js` renders those patches through temporary CSS and literal text overrides. The compiler's source map identifies the affected sites, including repeated components and shared-style uses. Matching CSS class names alone would be unsafe because Exact deduplicates identical styles. `tools/preview-channel.ts` pushes selection and spacing feedback to the editor independently of source inspection. A canvas click can reveal its layer before its editable source rows finish loading.
+
+Editing supports local Exact dev servers with the `tamber/1` editing API. Its local write token stays in the helper's memory. Release builds and remote servers cannot be edited. Layout controls require an existing literal attribute in the app's own Contract source or a shared style. Responsive expressions, data-bound text, token-based layout values, inherited values, package sources, and attributes without a source address remain controlled by source. Responsive and data-driven properties appear read-only with an explanation. Literal text is editable in the Content field. This version changes existing attributes; adding new layout rules or restructuring elements is not implemented. Typography controls include authored font family, size, weight, line height, letter spacing, and text color.
 
 ## Edit a screen
 
@@ -139,7 +143,9 @@ Source files:
 - `tools/design-session.ts`: local inspection, design drafts, and explicit Apply.
 - `tools/design-drafts.ts`: design patches, draft history, source-map targets, and batch code translation.
 - `studio/draft-storage.ts`: per-project draft persistence.
-- `tools/design-preview-client.js`: temporary preview CSS.
+- `studio/design-history.ts`: persistent edit journal and comparison metadata.
+- `tools/inspector-fields.ts`: inspector groups and linked spacing/corner fields.
+- `tools/design-preview-client.js`: temporary preview CSS and text overrides.
 - `tools/preview-channel.ts`: immediate selection and spacing feedback.
 - `tools/layout-source.ts`: source addresses and staged compiler validation.
 - `tools/element-bridge.ts`, `tools/element-bridge-client.js`: local live-preview inspection and rendered element navigation.
