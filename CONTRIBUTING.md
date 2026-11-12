@@ -55,6 +55,8 @@ The [pull request template](.github/pull_request_template.md) has four parts:
 
 - **Summary**: the problem and the resulting behavior. Link the related issue.
 - **Screenshots**: before and after images for any visible change. Take both at the same window size, zoom, and theme. Use a short recording for interactions such as drag, hover, or animation. If the change has no visible effect, write "Not applicable" and say why.
+
+  Add images and recordings as GitHub attachments: drag or paste them into the description or a comment. Don't commit them to the repository or link to files on your branch.
 - **Validation**: the commands you ran and their results, and anything you couldn't test.
 - **Checklist**: the conventions below.
 
@@ -62,6 +64,7 @@ The [pull request template](.github/pull_request_template.md) has four parts:
 
 - Add notable user-visible changes to [CHANGELOG.md](CHANGELOG.md) under **Unreleased**, grouped under Added, Changed, or Fixed.
 - Update the documentation that your change affects. Keep the root README focused on startup and documentation links.
+- Don't commit screenshots, recordings, or other proof images. Attach them to the pull request instead.
 - Don't edit generated files: `exact.mjs`, the `exact:begin` instruction blocks, and `studio/icons.contract`. After changing the vendored icons, run `bun run icons`.
 - Keep the Exact SDK revision in `tools/setup.mjs` unchanged unless the pull request is an SDK upgrade.
 
