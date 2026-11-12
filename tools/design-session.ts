@@ -101,8 +101,8 @@ export class DesignSession {
     return this.view();
   }
   async poll() {
-    if(this.bridge)for(const frame of this.bridge.frames.values())if(frame.build&&this.inspectedPages.get(frame.build)!==(frame.page||frame.build)){
-      try{await this.call({method:'inspect',client:this.client,build:frame.build,on:true});this.builds.add(frame.build);this.inspectedPages.set(frame.build,frame.page||frame.build);}catch{/* The page can report its ID before registration completes. */}
+    if(this.bridge)for(const frame of this.bridge.frames.values())if(frame.build&&this.inspectedPages.get(frame.frame)!==`${frame.build}:${frame.page??""}`){
+      try{await this.call({method:'inspect',client:this.client,build:frame.build,on:true});this.builds.add(frame.build);this.inspectedPages.set(frame.frame,`${frame.build}:${frame.page??""}`);}catch{/* The page can report its ID before registration completes. */}
     }
     const r=await this.call({client:this.client,after:this.cursor,...(this.epoch?{epoch:this.epoch}:{}),wait:false},'/__tamber/events');
     if(this.epoch && this.epoch!==r.epoch) throw new Error('The app server restarted. Finish editing and reconnect.');
@@ -112,11 +112,11 @@ export class DesignSession {
     if(this.pendingSelection&&Date.now()>this.pendingSelection.until)this.pendingSelection=null;
     const selections=[...this.deferredSelections,...(r.events??[]).map((event:any)=>({event,until:Date.now()+1500,plan:''}))];
     this.deferredSelections=[];
+
     for(const report of selections) {
       const event=report.event;
       if(event.event==='selection' && this.builds.has(String(event.build))) {
-        const frame=this.bridge&&[...this.bridge.frames.values()].find(f=>f.build===String(event.build));
-        const node=frame?.nodes.find(n=>n.site===event.site&&JSON.stringify(n.instance)===JSON.stringify(event.instance??[]));
+        const {frame,node}=this.selectionTarget(event);
         // Exact learns instance paths when its inspector table first loads. Its
         // selection report can arrive before the preview's next hierarchy snapshot.
         if(this.bridge&&(!frame||!node)){
@@ -134,8 +134,7 @@ export class DesignSession {
       if(event.event==='selected' && event.selected===null && this.builds.has(String(event.build))) {this.selection=null;this.version++;this.ended=true;}
     }
     if(this.selection&&this.bridge){
-      const frame=[...this.bridge.frames.values()].find(f=>f.build===String(this.selection.build));
-      const node=frame?.nodes.find(n=>n.site===this.selection.site&&JSON.stringify(n.instance)===JSON.stringify(this.selection.instance??[]));
+      const {frame,node}=this.selectionTarget(this.selection);
       if(frame&&node)this.picked={frame:frame.frame,node};
     }
     if(this.restoring&&this.bridge){
@@ -147,6 +146,17 @@ export class DesignSession {
       }
     }
     return this.view();
+  }
+  selectionTarget(event:any){
+    // A reload/shared state checkpoint can give several viewports the same
+    // runtime build ID. It identifies a build, not a canvas frame.
+    const candidates=[...this.bridge?.frames.values()??[]].filter(f=>f.build===String(event.build));
+    const locked=this.pendingSelection?.frame??this.restoring?.frame;
+    const preferred=locked??this.picked?.frame??this.preferredFrame;
+    const matches=(frame:typeof candidates[number])=>frame.nodes.find(n=>n.site===event.site&&JSON.stringify(n.instance)===JSON.stringify(event.instance??[]));
+    const hinted=candidates.find(f=>f.frame===preferred);
+    const frame=locked?hinted:hinted&&matches(hinted)?hinted:candidates.find(f=>matches(f))??hinted??candidates[0];
+    return {frame,node:frame&&matches(frame)};
   }
   async withLayout(event:any) {
     if(!this.app || event.readOnly) return event;

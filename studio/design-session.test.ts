@@ -29,3 +29,30 @@ test('draft edits and undo never write; Apply checks the source version',async()
   expect(s.view().draftCount).toBe(1);expect(s.view().canApply).toBe(false);
   expect(s.discard().draftCount).toBe(0);
 });
+
+test('reconnected viewports sharing a build resolve selection against the intended frame',async()=>{
+  let events:any[]=[],inspections=0;
+  const request=(async(url:string,init:any)=>{
+    const body=JSON.parse(init.body);
+    if(url.endsWith('/events')){const reply={files:{},events,seq:1,epoch:'run'};events=[];return Response.json(reply);}
+    if(body.method==='hello')return Response.json({ok:{protocol:'tamber/1.18',files:{}}});
+    if(body.method==='inspect')inspections++;
+    return Response.json({ok:{builds:['shared-build']}});
+  })as typeof fetch;
+  const instance=[{region:0,key:'card-1'}],node={id:'card',path:'root/card',parent:'',site:45,instance,depth:0,label:'Card',kind:'column',tag:'div'};
+  const frames=new Map([
+    ['phone',{frame:'phone',page:'phone-page',build:'shared-build',plan:'plan',inspecting:true,nodes:[{...node,instance:[]}]}],
+    ['tablet',{frame:'tablet',page:'tablet-page',build:'shared-build',plan:'plan',inspecting:true,nodes:[node]}],
+  ]);
+  const s=new DesignSession('http://localhost:5174','test',request);
+  s.bridge={frames,feedback:new Set(),select:()=>{},preview:()=>{},measure:()=>{}}as any;
+  await s.start();s.navigate('card'); // defaults to the first frame until a frame is chosen
+  s.pick('tablet','card');events=[{event:'selection',build:'shared-build',site:45,instance,rows:[row]}];
+  const selected=await s.poll();expect(selected.rows.length).toBe(1);expect(s.picked?.frame).toBe('tablet');expect(selected.selecting).toBe(false);
+  const count=inspections;await s.poll();expect(inspections).toBe(count);
+  // Once both trees know identical instance paths, selection must still stay put.
+  frames.get('phone')!.nodes[0].instance=instance;
+  await s.poll();expect(s.picked?.frame).toBe('tablet');
+  s.pick('phone','card');events=[{event:'selection',build:'shared-build',site:45,instance,rows:[row]}];
+  await s.poll();expect(s.picked?.frame).toBe('phone');
+});
