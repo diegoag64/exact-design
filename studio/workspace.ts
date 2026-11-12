@@ -2,8 +2,8 @@ import { projectUrl, screenRoute, screenSource, type Project } from './project';
 import { hasRouteParameters } from './discovery';
 import { snapMove, FRAME_GAP } from './snapping';
 import { Editor, initial, validate, exportContract, resolveLayer, type Layer } from './model';
-export type Screen = { id: string; name: string; source: string; route: string; layers: Layer[] };
-export type View = { id: string; screenId: string; name: string; x: number; y: number; width: number; height: number; heightMode?: 'content'|'fixed' };
+export type Screen = { id: string; name: string; source: string; route: string; layers: Layer[]; hidden?: boolean };
+export type View = { id: string; screenId: string; name: string; x: number; y: number; width: number; height: number; heightMode?: 'content'|'fixed'; hidden?: boolean };
 export type Workspace = { version: 2; name: string; project: Project; screens: Screen[]; views: View[] };
 import { presets, deviceSets, resolveDevices } from './devices';
 export { presets } from './devices';
@@ -22,6 +22,7 @@ export function loadWorkspace(value: unknown): Workspace {
   for (const s of d.screens) {
     if (!s || typeof s.id !== 'string' || !s.id || ids.has(s.id) || typeof s.name !== 'string') throw new Error('Invalid screen');
     s.source ??= ''; s.route ??= '';
+    if(s.hidden!==undefined&&typeof s.hidden!=='boolean') throw new Error('Invalid screen visibility');
     if(typeof s.route !== 'string' || (s.route && (!d.project.url || screenRoute(s.route)!==s.route))) throw new Error('Invalid screen route');
     if (!validSource(s.source)) throw new Error('Invalid preview URL');
     ids.add(s.id); s.layers = validate({version: 1, name: s.name, width:720, height:520, layers:s.layers}).layers;
@@ -29,6 +30,7 @@ export function loadWorkspace(value: unknown): Workspace {
   for (const v of d.views) {
     if (!v || typeof v.id !== 'string' || !v.id || ids.has(v.id) || typeof v.name !== 'string' || !d.screens.some(s => s.id === v.screenId)) throw new Error('Invalid viewport');
     ids.add(v.id);
+    if(v.hidden!==undefined&&typeof v.hidden!=='boolean')throw new Error('Invalid viewport visibility');
     if(v.heightMode!==undefined&&!['content','fixed'].includes(v.heightMode))throw new Error('Invalid viewport height mode');
     if (![v.x,v.y,v.width,v.height].every(Number.isFinite) || v.width < 100 || v.height < 100 || v.width > 10000 || v.height > 10000) throw new Error('Invalid viewport geometry');
   }
@@ -39,6 +41,20 @@ export class WorkspaceEditor {
   document = createWorkspace(); active = 'view-1'; selected = ''; past: Workspace[] = []; future: Workspace[] = []; private settling = false;
   contentSizes=new Map<string,{source:string;width:number;viewportHeight:number;height:number}>();
   get frames(){return this.document.views.map(v=>{const screen=this.document.screens.find(s=>s.id===v.screenId)!,source=screenSource(screen,this.document.project),size=this.contentSizes.get(v.id);return source&&v.heightMode!=='fixed'&&size?.source===source&&size.width===v.width&&size.viewportHeight===v.height?{...v,height:size.height}:v;});}
+  /** Frames drawn on the canvas: a viewport is shown when neither it nor its screen is hidden. */
+  get shownFrames(){return this.frames.filter(v=>this.isShown(v.id));}
+  isShown(viewId: string){const v=this.document.views.find(v=>v.id===viewId);return !!v&&!v.hidden&&!this.document.screens.find(s=>s.id===v.screenId)?.hidden;}
+  /** Show or hide a screen (with all its viewports) or a single viewport, as one undo step. */
+  setHidden(id: string, hidden: boolean): boolean {
+    return this.change(d=>{
+      const target=d.screens.find(s=>s.id===id)??d.views.find(v=>v.id===id); if(!target)return;
+      if(hidden) target.hidden=true; else delete target.hidden;
+      // Showing a viewport inside a hidden screen reveals the screen too, keeping its other viewports' own state.
+      // Showing a screen whose viewports are all hidden shows them all, so the screen appears.
+      if(!hidden&&!('screenId' in target)&&d.views.every(v=>v.screenId!==id||v.hidden))for(const v of d.views)if(v.screenId===id)delete v.hidden;
+      if(!hidden&&'screenId' in target){const s=d.screens.find(s=>s.id===target.screenId);if(s?.hidden){delete s.hidden;for(const v of d.views)if(v.screenId===s.id&&v.id!==id)v.hidden=true;}}
+    });
+  }
   get frame(){return this.frames.find(v=>v.id===this.active)??this.frames[0];}
   get view() { return this.document.views.find(v => v.id === this.active) ?? this.document.views[0]; }
   get screen() { return this.document.screens.find(s => s.id === this.view.screenId)!; }
@@ -201,7 +217,7 @@ export class WorkspaceEditor {
   }
   move(x: number,y: number,resize=false,snapZoom=0) {
     if(!Number.isFinite(x+y)) return;
-    if (!resize && snapZoom > 0 && this.selected === this.active) { const snapped=snapMove(this.frame,this.frames,x,y,snapZoom); x=snapped.dx; y=snapped.dy; }
+    if (!resize && snapZoom > 0 && this.selected === this.active) { const snapped=snapMove(this.frame,this.shownFrames,x,y,snapZoom); x=snapped.dx; y=snapped.dy; }
     const id=this.selected, active=this.active,frameHeight=this.frame.height;
     this.change(d=>{ const v=d.views.find(v=>v.id===active)!; const n=id===active?v:d.screens.find(s=>s.id===v.screenId)!.layers.find(n=>n.id===id); if(!n)return;
       if(resize) { if(id!==active && 'widthMode' in n && n.widthMode==='fill') { const current=resolveLayer(n,v.width).width; n.right=v.width-n.x-Math.min(10000,Math.max(1,Math.round(current+x))); } n.width=Math.min(10000,Math.max(id===active?100:1,Math.round(n.width+x))); n.height=Math.min(10000,Math.max(id===active?100:1,Math.round((id===active?frameHeight:n.height)+y))); if(id===active){v.name='Custom';v.heightMode='fixed';} }
@@ -209,10 +225,10 @@ export class WorkspaceEditor {
     });
   }
   hit(x: number,y: number, tolerance=9): boolean {
-    const v=this.frame,n=this.selected===v.id?v:this.target;
+    const v=this.frame,n=this.isShown(v.id)?(this.selected===v.id?v:this.target):undefined;
     const ox=this.selected===v.id?0:v.x, oy=this.selected===v.id?0:v.y;
     if(n && Math.abs(x-ox-n.x-n.width)<tolerance && Math.abs(y-oy-n.y-n.height)<tolerance) return true;
-    for(const f of [...this.frames].reverse()) {
+    for(const f of [...this.shownFrames].reverse()) {
       if(x<f.x || x>f.x+f.width || y<f.y-tolerance*3 || y>f.y+f.height) continue;
       this.active=f.id;
       const layer=y>=f.y?[...this.layers].reverse().find(n=>x-f.x>=n.x && y-f.y>=n.y && x-f.x<=n.x+n.width && y-f.y<=n.y+n.height):undefined;

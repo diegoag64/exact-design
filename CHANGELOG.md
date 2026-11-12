@@ -7,10 +7,13 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 ### Added
 
 - Tooltips for every icon button. They appear quickly on hover or keyboard focus, show the keyboard shortcut, and explain what the button does.
+- Hide screens and individual viewports with the eye button that appears when you hover a row in the Screens panel, or from a viewport's context menu. Hidden frames leave the canvas, stop loading their previews, and are skipped by hit testing, snapping, and **Fit all screens**. Visibility is saved with the workspace and can be undone.
+- A loading veil over the canvas when the page opens. It hides the canvas from the first frame, counts live previews as they render, then fades out so the screens appear together. Fast loads show only the empty canvas, workspaces without visible live previews skip it, a click or **Edit app** dismisses it, it leaves on its own if loading stalls, and it never returns after the first load.
 - **Reduce preview effects** beside the zoom controls. Canvas previews omit backdrop blur at every zoom and skip CSS animations, which keeps the GPU nearly idle while the canvas is still. Full-screen Preview is unchanged, and the setting is remembered.
 
 ### Fixed
 
+- Two studio pages open at once, such as two tabs, no longer overwrite each other's preview readiness, sizes, and editing state. Each page now scopes its frame ids.
 - Reduced canvas layout and label-measurement work during pan and zoom, and kept live previews on compositor layers as the camera moves. Overview navigation with many visible previews remains limited by browser rendering.
 
 ### Changed

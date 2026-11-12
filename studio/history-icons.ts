@@ -11,6 +11,8 @@ export function historyIcon(entry:Pick<HistoryEntry,'kind'|'changes'>){
   if(kind==='workspace-connect'||kind==='workspace-disconnect'||kind==='workspace-setup')return 'link-2';
   if(['workspace-add','workspace-add-all','workspace-blank','workspace-screen','workspace-variant','workspace-variants'].includes(kind))return 'frame';
   if(kind==='workspace-arrange')return 'grid-2x2';
+  if(kind==='workspace-hide')return 'eye-off';
+  if(kind==='workspace-show')return 'eye';
   const properties=entry.changes.map(c=>c.property);
   if(kind==='workspace-move')return 'move';
   if(properties.some(p=>p==='text-content'||p==='text'))return 'type';

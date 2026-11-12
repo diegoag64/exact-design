@@ -96,6 +96,20 @@ test('studio icons, context menus and canvas gestures share the desktop interact
     await page.evaluate(()=>document.activeElement?.blur());await page.keyboard.down('Space');
     expect(await page.locator('button[aria-label="Pan"]').getAttribute('aria-pressed')).toBe('false');await page.keyboard.up('Space');
     await page.getByRole('button',{name:'Close',exact:true}).click();
+    // Eye toggles appear on row hover, hide frames from the canvas, and stay visible while hidden.
+    const viewEye=page.locator('[data-testid="visibility-view-1"]'),screenEye=page.locator('[data-testid="visibility-screen-1"]'),frame=page.locator('[data-testid="frame-view-1"]');
+    const opacity=(l:any)=>l.evaluate((el:Element)=>getComputedStyle(el).opacity);
+    await page.mouse.move(800,800);await page.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="visibility-view-1"]')).opacity==='0');
+    await page.locator('[data-testid="view-view-1"]').hover();await page.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="visibility-view-1"]')).opacity==='1');
+    expect(await viewEye.getAttribute('aria-label')).toBe('Hide viewport');
+    await viewEye.click();await frame.waitFor({state:'detached'});
+    expect(await viewEye.getAttribute('aria-label')).toBe('Show viewport');
+    expect(await screenEye.getAttribute('aria-label')).toBe('Show screen');
+    await page.mouse.move(800,800);expect(await opacity(viewEye)).toBe('1');expect(await opacity(screenEye)).toBe('1');
+    await screenEye.click();await frame.waitFor();
+    expect(await viewEye.getAttribute('aria-label')).toBe('Hide viewport');
+    await screenEye.click();await frame.waitFor({state:'detached'});
+    await page.getByRole('button',{name:'Undo',exact:true}).click();await frame.waitFor();
     expect(errors).toEqual([]);
   }finally{await page?.context().close();await suite?.browser.close();child.kill('SIGTERM');await child.exited;await rm(temp,{recursive:true,force:true});}
 },60000);

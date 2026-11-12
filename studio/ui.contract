@@ -298,6 +298,67 @@ component ToolbarButton
     button press=press class=Tool aria-label=label data-tip=(hint == "" ? label : hint) aria-keyshortcuts=shortcut aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.action" : "transparent") color=(selected ? "ink.on-action" : "ink.primary")
       Icon(name=icon, size=16, angle=0)
 
+// Tree-row visibility toggle: shown while its row is hovered or the item is hidden,
+// otherwise only on its own hover or keyboard focus.
+style RevealTool
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex-shrink=0
+  width=24
+  height=24
+  padding=4
+  border-width=0
+  border-radius="radius.control"
+  background-color="transparent"
+  color="ink.secondary"
+  cursor="default"
+  opacity=1
+  :hover
+    opacity=1
+    background-color="surface.hover"
+  :active
+    background-color="surface.pressed"
+  :focus-visible
+    opacity=1
+    box-shadow="inset 0 0 0 2px accent"
+
+style ConcealedTool
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex-shrink=0
+  width=24
+  height=24
+  padding=4
+  border-width=0
+  border-radius="radius.control"
+  background-color="transparent"
+  color="ink.secondary"
+  cursor="default"
+  opacity=0
+  :hover
+    opacity=1
+    background-color="surface.hover"
+  :active
+    background-color="surface.pressed"
+  :focus-visible
+    opacity=1
+    box-shadow="inset 0 0 0 2px accent"
+
+component VisibilityButton
+  props
+    name: string
+    hidden: bool
+    revealed: bool
+    testId: string
+    press: action
+  view
+    button press=press class=(hidden or revealed ? RevealTool : ConcealedTool) aria-label=(hidden ? `Show ${name}` : `Hide ${name}`) aria-pressed=hidden data-tip=(hidden ? `Show ${name}` : `Hide ${name}`) testId=testId
+      Icon(name=(hidden ? "eye-off" : "eye"), size=14, angle=0)
+
 // 24px icon action for section titles and field rows.
 component SmallButton
   props

@@ -304,3 +304,16 @@ test('each viewport scopes its stored build and inspector identity before Exact 
   expect(scopePreviewIdentity(html,'')).toBe(html);
   expect(scopePreviewIdentity('<script>app()</script>','phone')).toBe('<script>app()</script>');
 });
+
+test('a full frame table evicts frames left by closed pages, but never live ones',async()=>{
+  const bridge=new ElementBridge('http://127.0.0.1:1');
+  const post=(frame:string)=>fetch(bridge.origin+'/__exact_design/tree',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({frame,page:'page',plan:'plan',build:'build',inspecting:false,nodes:[],after:0,url:'/',routeUrl:'/',width:400,viewportHeight:800,contentHeight:800,fullHeight:false})});
+  const fill=(seen:number)=>{bridge.frames.clear();for(let i=0;i<200;i++){const frame=`old~view-${i}`;bridge.frames.set(frame,{frame,page:'page',build:'build',plan:'plan',inspecting:false,nodes:[],seen:Date.now()-seen});bridge.commands.set(frame,[]);}};
+  try{
+    fill(10000);
+    expect((await post('new~view-1')).status).toBe(200);
+    expect(bridge.frames.size).toBe(200);expect(bridge.frames.has('new~view-1')).toBe(true);expect(bridge.commands.size).toBe(199);
+    fill(1000);
+    expect((await post('new~view-2')).status).toBe(429);
+  }finally{bridge.server.stop(true);}
+});

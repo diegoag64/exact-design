@@ -61,6 +61,7 @@ Import components and styles from `./ui.contract`; import `Icon` from `./icons.c
 | `Tool` | Custom button compositions using the standard hit area and interaction states |
 | `Field` | Native text inputs and selects; Exact owns their focus behavior |
 | `TreeRow` | Layer row hover and keyboard focus treatment |
+| `VisibilityButton` | 24px eye toggle at the end of a tree row. It appears while the row is hovered or focused, and stays visible with `eye-off` while the item is hidden |
 | `InspectorValue` | Single compound-value field with an inline All/Both identifier |
 | `PanelSection` | Padding, vertical rhythm, and divider for inspector groups |
 | `Menu` | Popover surface, width, border, radius, and elevation |
@@ -104,11 +105,16 @@ Icons use a 24-unit viewBox, a 1.75-unit stroke, and a 16px box; tree glyphs use
 | Shift+1 | Fit all screens |
 | Shift+2 | Fit the active screen, or selected local layer |
 | Click a screen in the sidebar | Smoothly pan to its top; keep zoom unchanged |
+| Click a row's eye in the sidebar | Hide or show that screen or viewport. Hidden frames are not drawn, loaded, hit-tested, snapped to, or fitted |
 | Select an offscreen app layer | Move the canvas camera just enough to reveal it |
 
 Text entry keeps its own keys. Source apps receive their normal input in Preview mode. Canvas iframe gestures are accepted only from a registered window inside the canvas with the expected origin and `__ed_canvas=1`. Input ownership survives native inspection ending or restarting; full-screen Preview uses `__ed_canvas=0`. Camera updates remain in the Contract and persist through the existing workspace storage.
 
 Each canvas frame uses CSS translation and scale, with a browser compositing hint supplied by the preview hatch. Frames remain mounted during navigation so app state, source identities, and editing sessions survive camera changes. Below 15% zoom, canvas previews drop CSS backdrop filters: at that size a blur spans a few screen pixels, but the GPU still re-renders it on every frame. They return above 18%, and the gap prevents flicker near the boundary. The hatch reads the zoom from the frame scale that Exact writes, so camera state stays in the Contract. A preview that loads or reloads receives the current detail level. Full-screen Preview always shows full detail.
+
+On page load, a veil covers the canvas from the first frame until every visible live preview has rendered (`booting`), so frames appear together instead of loading in one by one. Its indicator (pulsing device outlines, a count and a progress bar) fades in after 300ms, so a fast load shows only the empty canvas. The veil waits for a setup link to finish and leaves the moment every preview has reported. It also leaves on a click, on **Edit app**, after 4 seconds without progress, or after 15 seconds in all. A workspace with no visible live previews drops it as soon as the workspace loads, without the indicator or a fade. It does not return after the first load. Under reduced motion it appears and leaves without animation.
+
+The studio scopes each frame id it sends to the helper to the page (`<page>~view-1`, from the page's start time), and strips the scope from replies. Two studio pages showing the same workspace therefore never share a frame's readiness, size, or editing state. Each reload registers new ids, so when the helper's 200-frame table is full it evicts the frame that a closed page left behind longest ago. Live frames report every 400ms.
 
 **Reduce preview effects** (`reducedEffects`, a persisted Contract state) drops backdrop filters at every zoom and removes CSS animations with `animation: none`, so animated elements show their resting style. The view writes it to `data-preview-effects` on the hatch element, and the hatch relays it to each canvas preview with the zoom detail level. Switching restyles every visible preview at once, which costs a single long frame; turning it off restarts the previews' CSS animations.
 
