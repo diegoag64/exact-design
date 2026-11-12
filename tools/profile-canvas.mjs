@@ -4,7 +4,7 @@
 //
 //   bun tools/profile-canvas.mjs                              # the working tree, 5 trials
 //   bun tools/profile-canvas.mjs --variant base=main --variant head=WORKTREE
-//   options: --trials N  --frames N  --dpr N  --headed  --out FILE  --traces DIR  --keep
+//   options: --trials N  --frames N  --dpr N  --headed  --out FILE  --traces DIR  --categories LIST  --preview-css NAME=CSS  --keep
 import {mkdir,mkdtemp,cp,readdir,readFile,writeFile,rm} from 'node:fs/promises';
 import {resolve,dirname} from 'node:path';
 import {homedir} from 'node:os';
@@ -15,6 +15,8 @@ const argv=process.argv.slice(2),flag=name=>argv.includes(name);
 const option=(name,fallback)=>{const i=argv.indexOf(name);return i>=0?argv[i+1]:fallback;};
 const variants=argv.flatMap((a,i)=>a==='--variant'?[argv[i+1]]:[]).map(v=>{const [name,ref=name]=v.split('=');return {name,ref};});
 if(!variants.length)variants.push({name:'worktree',ref:'WORKTREE'});
+// Experiment knob: CSS injected into every preview of one variant, such as removing an effect.
+const previewCss=Object.fromEntries(argv.flatMap((a,i)=>a==='--preview-css'?[argv[i+1]]:[]).map(v=>[v.slice(0,v.indexOf('=')),v.slice(v.indexOf('=')+1)]));
 const trials=Number(option('--trials',5)),frames=Number(option('--frames',120)),dpr=Number(option('--dpr',2)),headed=flag('--headed');
 const out=resolve(option('--out',resolve(root,'.exact/profile-canvas.json'))),traces=option('--traces');
 const env={...process.env,PATH:`${resolve(homedir(),'.cargo/bin')}:${process.env.PATH}`,EXACT_FEEDBACK:'0'};
@@ -80,7 +82,7 @@ const DRIVER=`window.__drive=async(mode,n)=>{
   const peak=start.zoom*Math.pow(step,n/2);
   return {times,start,end:camera(),peakZoom:Math.min(3,peak)};
 };`;
-const CATEGORIES='devtools.timeline,disabled-by-default-devtools.timeline,disabled-by-default-devtools.timeline.frame,toplevel,benchmark,cc,viz,gpu';
+const CATEGORIES=['devtools.timeline,disabled-by-default-devtools.timeline,disabled-by-default-devtools.timeline.frame,toplevel,benchmark,cc,viz,gpu',option('--categories')].filter(Boolean).join(',');
 
 function summarizeTrace(events){
   const threads=new Map(events.filter(e=>e.ph==='M'&&e.name==='thread_name').map(e=>[`${e.pid}:${e.tid}`,e.args.name]));
@@ -114,6 +116,7 @@ async function trial(variant,index){
     const previews=()=>page.frames().filter(f=>f.url().includes('__ed_canvas=1'));
     for(const end=Date.now()+120000;previews().length<30;await page.waitForTimeout(250))if(Date.now()>end)throw new Error(`${previews().length} of 30 previews loaded\n${failed.slice(0,3).join('\n')}`);
     await Promise.all(previews().map(f=>f.waitForFunction(()=>document.readyState==='complete'&&globalThis.exact,undefined,{timeout:120000,polling:250})));
+    if(previewCss[variant.name])await Promise.all(previews().map(f=>f.addStyleTag({content:previewCss[variant.name]})));
     await page.waitForTimeout(8000);
     await page.getByRole('button',{name:'Fit all screens',exact:true}).click();await page.waitForTimeout(1500);
     await page.evaluate(DRIVER);
@@ -156,7 +159,7 @@ try{
     (summary[v.name]??={})[mode]={meanInterval:stats(means).median,spread:Math.max(...means)-Math.min(...means),p95Interval:stats(p95s).median,
       gpuBusyPct:100*stats(gpuBusy).median,droppedPct:100*stats(dropped).median,layerizeMs:stats(layerize).median};
   }
-  const report={date:new Date().toISOString(),options:{trials,frames,dpr,headed,viewport:'1280x800'},variants:started.map(({name,ref,commit})=>({name,ref,commit})),summary,results};
+  const report={date:new Date().toISOString(),options:{trials,frames,dpr,headed,viewport:'1280x800'},variants:started.map(({name,ref,commit})=>({name,ref,commit,previewCss:previewCss[name]})),summary,results};
   await mkdir(dirname(out),{recursive:true});await writeFile(out,JSON.stringify(report,null,2));
   console.table(Object.fromEntries(Object.entries(summary).flatMap(([v,modes])=>Object.entries(modes).map(([m,s])=>[`${v} ${m}`,Object.fromEntries(Object.entries(s).map(([k,x])=>[k,x===null?null:+x.toFixed(2)]))]))));
   console.log(`report: ${out}`);

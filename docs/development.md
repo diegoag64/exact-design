@@ -69,6 +69,8 @@ Pan moves in one direction and back. Zoom sweeps from the fitted overview to 100
 | `--headed` | off | Show the browser. The default runs `--headless=new`, which does not present to a display. |
 | `--out FILE` | `.exact/profile-canvas.json` | Report with every trial |
 | `--traces DIR` | none | Save each Chromium trace |
+| `--categories LIST` | none | Add trace categories, such as `disabled-by-default-viz.quads` |
+| `--preview-css NAME=CSS` | none | Inject CSS into every preview of variant `NAME`, to test an effect's cost |
 | `--keep` | off | Keep the temporary copies under `.exact` after the run |
 
 The summary reports, per variant and scenario, the median across trials of each trial's mean and p95 frame interval, and the spread of trial means. Frame intervals come from animation-frame callbacks on the studio page. The trace columns give the share of trace time the GPU main thread was busy, the share of compositor frames dropped or partly presented, and layerization time per frame. Each trial in the report also lists the busiest events on the GPU, renderer, and compositor threads.
