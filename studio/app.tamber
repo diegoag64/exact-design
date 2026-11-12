@@ -8,7 +8,7 @@ theme
   surface.canvas = light-dark(#e5e5e5, #1e1e1e)
   surface.hover = light-dark(#f0f0f0, #383838)
   surface.pressed = light-dark(#e5e5e5, #444444)
-  surface.action = light-dark(#0877c9, #0d99ff)
+  surface.action = #0877c9 scheme=fixed
   surface.selected = light-dark(#e5f4ff, #164b70)
   surface.scrim = #00000040 scheme=fixed
   line.subtle = light-dark(#e6e6e6, #3e3e3e)
