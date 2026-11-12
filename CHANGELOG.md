@@ -6,6 +6,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Added
 
+- An MIT license and open-source project files: a contributing guide, a security policy, a code of conduct, issue forms, and a pull request template with before-and-after screenshots.
 - Tooltips for every icon button. They appear quickly on hover or keyboard focus, show the keyboard shortcut, and explain what the button does.
 - Hide screens and individual viewports with the eye button that appears when you hover a row in the Screens panel, or from a viewport's context menu. Hidden frames leave the canvas, stop loading their previews, and are skipped by hit testing, snapping, and **Fit all screens**. Visibility is saved with the workspace and can be undone.
 - A loading veil over the canvas when the page opens. It hides the canvas from the first frame, counts live previews as they render, then fades out so the screens appear together. Fast loads show only the empty canvas, workspaces without visible live previews skip it, a click or **Edit app** dismisses it, it leaves on its own if loading stalls, and it never returns after the first load.
@@ -19,8 +20,6 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 ### Changed
 
 - Below 15% zoom, live canvas previews omit backdrop blur, which is only a few pixels wide at that size. Idle and pan with many visible previews no longer re-render each blur on every frame.
-- Prepared the repository for open source: MIT license, contributing guide, security policy, code of conduct, issue forms, and a pull request template with before-and-after screenshots and a checklist.
-- Browser regression tests find Rust through the home directory instead of a fixed user path.
 - Shortened the root README and separated usage and development documentation.
 - Added repository-wide agent instructions, PR title and description requirements, a PR template, and a changelog maintenance convention.
 

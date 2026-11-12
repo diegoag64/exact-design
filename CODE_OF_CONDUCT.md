@@ -4,6 +4,6 @@ This project adopts the [Contributor Covenant, version 2.1](https://www.contribu
 
 ## Reporting
 
-Report unacceptable behavior to the maintainer, [@diegoag64](https://github.com/diegoag64). To report privately, use GitHub's [report content](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam) feature on the comment, issue, or pull request.
+Report unacceptable behavior to the maintainer, [@diegoag64](https://github.com/diegoag64). To report privately, use **Report content** on the comment, issue, or pull request and choose **Report to repository admins**. See GitHub's [guide to reporting content](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam).
 
 The maintainer reviews every report and may remove content, or block contributors who break this code of conduct.

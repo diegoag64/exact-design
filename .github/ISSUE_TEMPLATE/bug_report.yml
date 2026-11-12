@@ -27,6 +27,7 @@ body:
         - Live previews
         - Inspector or app editing
         - Draft review or Apply
+        - Performance
         - Ember demo
         - Setup or local checks
         - Docs

@@ -1,19 +1,15 @@
 # Contributing
 
-Thanks for your interest in Exact Design. This is a small project maintained in spare time, so reviews may take a while. For anything larger than a small fix, open an issue first so we can agree on the approach before you write code.
+Thanks for your interest in Exact Design. The project is early, and its direction is still taking shape, so I'm building most of it myself for now. As it settles, I'd like to work more closely with regular contributors.
 
-## Ways to contribute
+## What to send
 
-- **Report a bug** with the bug report form. Include steps to reproduce and a screenshot or recording when the problem is visible.
-- **Suggest a feature** with the feature request form. Describe the problem before the solution.
-- **Send a pull request** for an issue you've discussed, a documentation fix, or a small bug fix.
-- **Help triage.** Point out duplicate issues, or confirm that an old bug no longer happens on the latest `main`.
+- **Bug fixes.** Small fixes for obvious bugs can go straight to a pull request. For larger ones, link the issue that shows the bug.
+- **Performance improvements.** Very welcome. Include before and after measurements; see [Performance changes](#performance-changes).
+- **Documentation fixes.**
+- **Anything else**, such as a new feature, a UI change, or a refactor: open an issue first so we can talk it through. Unplanned pull requests of this kind may be closed while the direction is still forming.
 
-Search open issues and pull requests before you start. If an open pull request already covers your bug, test it and comment with what you saw instead of opening another one.
-
-Pull requests for new features, UI redesigns, or large refactors that weren't agreed in an issue first will likely be closed, however well they're made. Review time is the scarce resource here.
-
-Report security problems privately. See [SECURITY.md](SECURITY.md).
+Report bugs and ideas with the issue forms, and search existing issues and pull requests first. Report security problems privately; see [SECURITY.md](SECURITY.md).
 
 ## Workflow
 
@@ -44,6 +40,10 @@ This repository has no hosted CI. You run the checks and report the results in y
 
 Before changing studio controls, theme tokens, icons, or canvas interactions, read [docs/studio-design-system.md](docs/studio-design-system.md).
 
+### Performance changes
+
+Measure before and after on the same machine and setup. For canvas navigation, `bun run profile:canvas --variant base=main --variant change=WORKTREE` compares your working tree against `main`; see [Benchmark canvas navigation](docs/development.md#benchmark-canvas-navigation). Report the numbers and how you ran them.
+
 ## Pull request title
 
 Use `<type>(<scope>): <summary>`, within 72 characters:
@@ -62,10 +62,10 @@ The [pull request template](.github/pull_request_template.md) has four parts:
 - **Screenshots**: before and after images for any visible change. Take both at the same window size, zoom, and theme. Use a short recording for interactions such as drag, hover, or animation. If the change has no visible effect, write "Not applicable" and say why.
 
   Add images and recordings as GitHub attachments: drag or paste them into the description or a comment. Don't commit them to the repository or link to files on your branch.
-- **Validation**: how you found the problem, how you checked the fix, and what you saw. List the commands you ran and their results, and anything you couldn't test. "Tests pass" on its own isn't enough.
+- **Validation**: how you checked the change and what you saw, such as reproduction steps before and after a fix, or measurements for a performance change. List the commands you ran and their results, and anything you couldn't test. "Tests pass" on its own isn't enough.
 - **Checklist**: the conventions below.
 
-If an AI agent wrote some or all of the change, say so at the end of the description and name the model and tool. Agent-written pull requests are welcome, and they meet the same bar as any other: you're responsible for having reviewed and run the change.
+If an AI agent did some or all of the work, name the model and tool at the end of the description. Agent-written pull requests are welcome; you're responsible for having reviewed and run the change.
 
 ## Conventions
 

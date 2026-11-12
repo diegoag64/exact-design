@@ -17,7 +17,7 @@ If nothing visible changed, replace the table with "Not applicable" and a reason
 
 ## Validation
 
-<!-- Say how you found the problem, how you checked the fix, and what you saw. List the commands you ran and their results. "Tests pass" alone isn't enough. State what you didn't test and why. Add a Risks or migration section below only when needed. -->
+<!-- Say how you checked the change and what you saw: reproduction steps before and after a fix, or measurements for a performance change. List the commands you ran and their results. "Tests pass" alone isn't enough. State what you didn't test and why. Add a Risks or migration section below only when needed. -->
 
 ## Checklist
 
@@ -26,6 +26,6 @@ If nothing visible changed, replace the table with "Not applicable" and a reason
 - [ ] Visible changes include before and after screenshots attached to this PR, not committed, or the Screenshots section explains why they're missing.
 - [ ] User-visible changes have an entry under Unreleased in `CHANGELOG.md`.
 - [ ] Affected documentation is updated.
-- [ ] This PR fixes one problem. Unrelated cleanup is in a separate PR.
+- [ ] This PR addresses one problem. Unrelated cleanup is in a separate PR.
 
 <!-- If an AI agent did some or all of the work, name the model and tool here. -->
