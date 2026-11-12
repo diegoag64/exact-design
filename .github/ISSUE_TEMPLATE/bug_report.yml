@@ -1,29 +1,77 @@
 name: Bug report
-description: Report something in the studio or the Ember demo that doesn't work as expected.
+description: Report broken behavior, a regression, or a crash in the studio or the Ember demo.
 labels: [bug]
 body:
-  - type: textarea
-    id: what-happened
+  - type: markdown
     attributes:
-      label: What happened
-      description: Describe the problem and what you expected instead.
+      value: |
+        Search existing issues first and keep each report to one problem.
+        Report security problems privately instead. See SECURITY.md.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and found no duplicate.
+          required: true
+        - label: I reproduced this on the latest `main`.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Canvas, screens, or viewports
+        - Live previews
+        - Inspector or app editing
+        - Draft review or Apply
+        - Ember demo
+        - Setup or local checks
+        - Docs
+        - Not sure
     validations:
       required: true
+
   - type: textarea
     id: steps
     attributes:
       label: Steps to reproduce
+      description: The shortest sequence that triggers the problem.
       placeholder: |
         1. Run `bun run dev` and `bun run demo`.
         2. Open the setup link.
         3. ...
     validations:
       required: true
+
   - type: textarea
-    id: screenshots
+    id: expected
     attributes:
-      label: Screenshots or recording
-      description: Drag images or a short video here when the problem is visible.
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - Blocks work completely
+        - Frequent failure or major degradation
+        - Occasional failure or minor bug
+        - Cosmetic
+    validations:
+      required: true
+
   - type: input
     id: commit
     attributes:
@@ -31,6 +79,7 @@ body:
       description: Output of `git rev-parse --short HEAD`.
     validations:
       required: true
+
   - type: input
     id: environment
     attributes:
@@ -39,9 +88,25 @@ body:
       placeholder: macOS 26.1, Chrome 142
     validations:
       required: true
+
   - type: textarea
     id: logs
     attributes:
       label: Logs
-      description: Relevant terminal or browser console output.
+      description: The most relevant terminal or browser console output only. Redact anything private.
       render: text
+
+  - type: upload
+    id: attachments
+    attributes:
+      label: Screenshots or recording
+      description: Attach images or a short video when the problem is visible.
+    validations:
+      required: false
+      accept: ".png,.jpg,.jpeg,.gif,.webp,.mp4,.mov,.webm,.log,.txt"
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround
+      description: A temporary workaround, if you found one.

@@ -1,0 +1,6 @@
+# Keep LF line endings on every platform.
+* text=auto eol=lf
+
+# Generated files: collapsed in GitHub diffs and excluded from language stats.
+studio/exact.mjs linguist-generated
+studio/icons.contract linguist-generated

@@ -7,6 +7,11 @@ Thanks for your interest in Exact Design. This is a small project maintained in 
 - **Report a bug** with the bug report form. Include steps to reproduce and a screenshot or recording when the problem is visible.
 - **Suggest a feature** with the feature request form. Describe the problem before the solution.
 - **Send a pull request** for an issue you've discussed, a documentation fix, or a small bug fix.
+- **Help triage.** Point out duplicate issues, or confirm that an old bug no longer happens on the latest `main`.
+
+Search open issues and pull requests before you start. If an open pull request already covers your bug, test it and comment with what you saw instead of opening another one.
+
+Pull requests for new features, UI redesigns, or large refactors that weren't agreed in an issue first will likely be closed, however well they're made. Review time is the scarce resource here.
 
 Report security problems privately. See [SECURITY.md](SECURITY.md).
 
@@ -20,7 +25,7 @@ Outside contributors work from a fork. Only the maintainer can push branches to 
 4. Make your change and run the checks below.
 5. Push to your fork and open a pull request against `main`.
 
-Keep each pull request focused on one change. Pull requests are squash-merged, so the PR title becomes the commit message on `main`.
+Keep each pull request focused on one problem. Include everything that fix needs, such as tests and docs, and put cleanup, refactors, or a second fix in their own pull requests. Pull requests are squash-merged, so the PR title becomes the commit message on `main`.
 
 ## Run checks locally
 
@@ -57,8 +62,10 @@ The [pull request template](.github/pull_request_template.md) has four parts:
 - **Screenshots**: before and after images for any visible change. Take both at the same window size, zoom, and theme. Use a short recording for interactions such as drag, hover, or animation. If the change has no visible effect, write "Not applicable" and say why.
 
   Add images and recordings as GitHub attachments: drag or paste them into the description or a comment. Don't commit them to the repository or link to files on your branch.
-- **Validation**: the commands you ran and their results, and anything you couldn't test.
+- **Validation**: how you found the problem, how you checked the fix, and what you saw. List the commands you ran and their results, and anything you couldn't test. "Tests pass" on its own isn't enough.
 - **Checklist**: the conventions below.
+
+If an AI agent wrote some or all of the change, say so at the end of the description and name the model and tool. Agent-written pull requests are welcome, and they meet the same bar as any other: you're responsible for having reviewed and run the change.
 
 ## Conventions
 
