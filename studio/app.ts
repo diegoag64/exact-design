@@ -3,6 +3,7 @@ import type { Answer, Sources, Ctx2D, Frame } from './app.contract.d.ts';
 import { WorkspaceEditor, validSource } from './workspace';
 import { WorkspacePersistence } from './persistence';
 import {DraftStorage} from './draft-storage';
+import {draftReview} from './draft-review';
 import { emptySpacing } from './spacing';
 import { screenSource,localPreview } from './project';
 import { parseRoutes, type DiscoveredScreen } from './discovery';
@@ -106,31 +107,32 @@ const sources: Sources = {
     }});
   },
   design: async ([op,session,url,version,row,value,timestamp], _store, storage) => {
-    const empty={operation:op,historyChanged:false,instances:1,draftCount:0,draftState:'',draftError:'',canApply:false,ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,selectionRevision:0,message:'',rows:[],availableProperties:[],canUndo:false,applied:false,spacingId:'',spacingPlan:'',spacingFrame:'',spacingInputs:[]};
+    const empty={operation:op,historyChanged:false,instances:1,draftCount:0,draftState:'',draftError:'',canApply:false,ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,selectionRevision:0,message:'',rows:[],availableProperties:[],canUndo:false,applied:false,draftFiles:[],spacingId:'',spacingPlan:'',spacingFrame:'',spacingInputs:[]};
     try {
       await drafts.load(storage.fs);
       const origin=url?new URL(url).origin:designOrigins.get(session)??'';
       const previous=drafts.get(origin);
       const draftState=op==='open'?previous:'';
-      if(['edit','field','spacing','override','add-property','undo','discard','apply'].includes(op))await history.load(storage.fs);
+      if(['edit','field','spacing','override','add-property','undo','revert','discard','apply'].includes(op))await history.load(storage.fs);
       const response=await fetch(`${DISCOVERY_API}/design`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,session,url:origin,version,row,value,draftState})});
       let result=await response.json();
       if(!result.ok&&designViews.has(session))result={...designViews.get(session),...result,historyChanged:false};
       if(op==='open'&&result.ok){designOrigins.set(result.session,origin);if(result.bridgeOrigin)previewBridges.set(origin,result.bridgeOrigin);}
       if(result.ok&&typeof result.draftState==='string'&&origin){
         const changes=draftChanges(previous,result.draftState,op==='apply');
-        if(['edit','field','spacing','override','add-property','undo','discard','apply'].includes(op)&&changes.length){
-          await history.append(storage.fs,{time:new Date(timestamp).toISOString(),kind:op==='apply'?'apply':op==='undo'?'undo':op==='discard'?'discard':'draft',project:origin,label:op==='apply'?'Apply to code':op==='undo'?'Undo draft':op==='discard'?'Discard draft':'Edit '+[...new Set(changes.map(c=>c.property))].join(', '),target:result.selectedLabel||result.source||'App design',changes,beforeState:previous,afterState:result.draftState});
+        if(['edit','field','spacing','override','add-property','undo','revert','discard','apply'].includes(op)&&changes.length){
+          await history.append(storage.fs,{time:new Date(timestamp).toISOString(),kind:op==='apply'?'apply':op==='undo'?'undo':op==='revert'?'revert':op==='discard'?'discard':'draft',project:origin,label:op==='apply'?'Apply to code':op==='undo'?'Undo draft':op==='revert'?'Revert change':op==='discard'?'Discard draft':'Edit '+[...new Set(changes.map(c=>c.property))].join(', '),target:result.selectedLabel||result.source||'App design',changes,beforeState:previous,afterState:result.draftState});
           result.historyChanged=true;
         }
         await drafts.save(storage.fs,origin,result.draftState);
       }
       if(result.ok&&op!=='close')designViews.set(result.session??session,result);
       if(op==='close'){designOrigins.delete(session);designViews.delete(session);}
-      return {...empty,...result,operation:op,origin:op==='open'?origin:'',session:op==='close'?'':result.session??session};
+      return {...empty,...result,draftFiles:draftReview(result.draftState??''),operation:op,origin:op==='open'?origin:'',session:op==='close'?'':result.session??session};
     } catch(e) {
       if((e as {code?:string}).code==='bake') throw e;
-      return {...empty,...designViews.get(session),operation:op,ok:false,historyChanged:false,error:e instanceof Error?e.message:'Could not reach the editing helper. Reconnect before making another change.'};
+      const last=designViews.get(session);
+      return {...empty,...last,draftFiles:draftReview(last?.draftState??''),operation:op,ok:false,historyChanged:false,error:e instanceof Error?e.message:'Could not reach the editing helper. Reconnect before making another change.'};
     }
   },
   discover: async ([owner,existing,revision]) => {

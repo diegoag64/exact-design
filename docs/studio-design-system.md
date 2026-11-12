@@ -1,6 +1,6 @@
 # Studio design system
 
-The studio uses compact, neutral panels around an unobstructed canvas. Blue identifies selection and primary actions; pink identifies spacing measurements. App previews retain their own appearance. The shell supports light and dark system themes.
+The studio follows Figma's UI3 layout: two full-height panels around an unobstructed canvas, with no top bar. The left panel opens with the project header; the right panel opens with the document actions. Floating chrome — the tool bar, zoom control, status toast, and collapsed-panel headers — sits on the canvas. Blue identifies selection and primary actions; pink identifies spacing measurements. App previews retain their own appearance. The shell supports light and dark system themes.
 
 ## Source of truth
 
@@ -20,17 +20,18 @@ The Exact Contract owns view state and actions. Browser hatches handle browser-s
 
 | Role | Tokens / values |
 | --- | --- |
-| Surfaces | `surface.panel`, `surface.field`, `surface.canvas` |
+| Surfaces | `surface.panel`, `surface.field`, `surface.raised` (selected segment), `surface.canvas`, `surface.notice` (pending drafts, info tiles) |
 | Interaction | `surface.hover`, `surface.pressed`, `surface.selected`, `surface.action` |
+| Review diffs | `surface.diff-add` / `ink.diff-add`, `surface.diff-remove` / `ink.diff-remove` |
 | Text and icons | `ink.primary`, `ink.secondary`, `ink.muted`, `ink.selected`, `ink.on-action`, `ink.danger` |
 | Boundaries | `line.subtle`, `line.strong` |
 | Accent | `accent`, also used by canvas selection outlines |
-| Typography | `type.body` 12px, `type.caption` 11px, `type.heading` 13px |
-| Corners | `radius.control` 4px, `radius.panel` 8px, `radius.menu` 10px |
-| Elevation | `shadow.menu`, reserved for floating controls and menus |
+| Typography | `type.body` 12px, `type.caption` 11px, `type.heading` 13px, `type.mono` 11px for source, routes, and diffs |
+| Corners | `radius.control` 5px, `radius.panel` 8px, `radius.menu` 12px (menus, dialogs, floating bars) |
+| Elevation | `shadow.menu` for menus and dialogs, `shadow.toolbar` for floating bars, `shadow.raised` for selected segments |
 | Panel widths | `screensWidth()` 240px, `inspectorWidth()` 260px |
-| Control sizes | 32px tool buttons, 30px fields, 28–32px tree rows |
-| Spacing | 4px increments; 8px control gaps, 12px section gaps, 16px section padding |
+| Control sizes | 48px panel headers, 40px section title rows, 32px tool buttons, 28px fields, buttons, and tree rows, 24px section actions |
+| Spacing | 4px grid. Panel sections pad 12px top, 16px left and bottom, 12px right; 8px between controls, 10px between inspector properties, 1px between tree rows. Tree rows indent 12px per level |
 
 Panel geometry and camera calculations read the same width helpers. Dense tool typography is fixed-size for now; support for larger text remains a separate accessibility task. The canvas renderer uses the fixed `#0d99ff` accent because its drawing API does not resolve Tamber tokens.
 
@@ -41,9 +42,19 @@ Import components and styles from `./ui.contract`; import `Icon` from `./icons.c
 | Primitive | Use |
 | --- | --- |
 | `Icon` | `name`, `size`, `angle`; inherits the enclosing control's text color |
-| `IconButton` | Labeled tool button with selected, disabled, hint, shortcut, and test ID props |
-| `PropertyField` | Caption and input with a descriptive accessible label |
+| `IconButton` | Labeled 32px tool button with selected, disabled, hint, shortcut, and test ID props |
+| `ToolbarButton` | Floating-toolbar tool; the active tool is filled with the action colour |
+| `SmallButton` | 24px icon action beside a section title or field (add, delete, duplicate, revert) |
+| `InlineField` | Figma-style field: a prefix letter (X, Y, W, H, T/R/B/L) or icon shares one `FieldShell` box with its input |
+| `PropertyField` | `InlineField` with a letter prefix and a descriptive accessible label |
+| `FieldLabel` | Caption above a full-width control |
 | `SectionHeading` | Consistent compact inspector heading |
+| `PrimaryButton` / `SecondaryButton` | 28px text buttons with optional leading icon; one primary action per surface |
+| `Segmented` / `Segment` | Segmented control; `aria-pressed` drives the selected (`:checked`) look |
+| `RowButton` | Full-width secondary action with a leading icon |
+| `FloatingBar` | Canvas chrome surface: toolbar, zoom, collapsed headers, status toast |
+| `Dialog` | Modal surface for Add screen, Project, Export, and Review |
+| `Divider` / `Kbd` | Toolbar separator; keyboard hint chip |
 | `MenuItem` | Action, optional icon and shortcut hint, disabled/destructive state, closing menu target |
 | `MenuDivider` | Separation between groups of related actions |
 | `Tool` | Custom button compositions using the standard hit area and interaction states |
@@ -60,6 +71,8 @@ IconButton(icon="hand", label="Pan", hint="Pan (H) · Hold Space to pan",
 PropertyField(label="X", accessibleLabel="X position", value=`${node.x}`,
   testId="position-x", change=moveX)
 ```
+
+Native inputs and selects cannot take state parts, so they keep the platform focus ring. Prefix glyphs never overlay a control: they sit in the same `FieldShell` beside a transparent input, which keeps the verify audit's covered-text check clean.
 
 Use accessible labels for icon-only controls and descriptive names for fields. A tooltip supplements the label. Disable actions that are temporarily unavailable; omit operations the tool does not implement. Do not add decorative eyebrows, placeholder tabs, or buttons that cannot perform an action.
 
@@ -116,9 +129,15 @@ Background polling does not set write-busy state, fade draft actions, or refresh
 
 Literal text uses a multiline Content field. Preview text overrides preserve the runtime's underlying text and restore it on undo or discard. Source writes escape the literal, validate the batch, and check the file digest. Text bound to application data remains read-only here.
 
+## Review before Apply
+
+Pending drafts appear in a highlighted card at the top of the inspector with a count, undo, discard, **Review**, and **Apply**. **Review** opens a dialog that groups `draftFiles` by source file in line order. Each change shows its property icon, readable name, element label, line, and a `property=value` diff, with swatches for literal colours and badges for new properties, replaced expressions, and shared styles. A per-change revert sends the `revert` design operation: it removes one patch, keeps the rest of the draft, adds one undo step, and records a timeline entry. Applying or discarding from the dialog uses the same checked operations as the card, and the dialog closes when the draft is empty.
+
+`studio/draft-review.ts` builds the review model from the serialized draft, so older saved drafts render without migration. Patches store the selected element's label when staged.
+
 ## Design timeline
 
-The Timeline toolbar button opens a horizontal sequence of edits. Each point uses an icon for its operation or edited property. Selecting it shows the action, element, author, time, source address, and before/after values. `studio/history-icons.ts` derives icons from event metadata, so older saved entries gain the same treatment. Opening history does not rewind the live design. Closing it restores the full canvas area.
+The clock button in the floating toolbar opens a horizontal sequence of edits. Each point uses an icon for its operation or edited property. Selecting it shows the action, element, author, time, source address, and before/after values. `studio/history-icons.ts` derives icons from event metadata, so older saved entries gain the same treatment. Opening history does not rewind the live design. Closing it restores the full canvas area.
 
 `studio/design-history.ts` persists an append-only journal in `app:/data/design-history.json`. Entries have an ID, parent ID, timestamp, project, actor (`user` or `ai`), operation kind, target, structured changes, and before/after state. The current manual editor records `user`; the actor field supports a later AI command adapter. There is no AI editing endpoint yet.
 

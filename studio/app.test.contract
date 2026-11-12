@@ -822,3 +822,35 @@ test "context actions select the clicked layer and keep screen operations separa
   tap "menu-variant-phone"
   clock data
   expect state doc.views.length == 2
+
+test "review pending design changes and revert one before applying"
+  size 1440x900
+  request POST "http://127.0.0.1:5176/mode" {"mode":"elements"}
+  tap "view-view-1"
+  clock data
+  type "preview-url" "http://127.0.0.1:5176/"
+  type "preview-url" key "Enter"
+  clock data
+  tap "edit-app"
+  clock data
+  clock +1800 real
+  tap "element-2"
+  clock +300 real
+  clock data
+  type "design-property-0" "#123456"
+  type "design-property-0" key "Enter"
+  clock data
+  expect text "draft-count" == "1 unsaved change"
+  tap "review-design"
+  expect tree has "review-dialog"
+  expect tree has "review-change-0-0"
+  tap "review-cancel"
+  expect tree missing "review-dialog"
+  expect tree has "apply-design"
+  tap "review-design"
+  tap "review-revert-0-0"
+  clock data
+  expect tree missing "review-dialog"
+  expect tree missing "apply-design"
+  expect text "design-property-0" == "#ffffff"
+  request POST "http://127.0.0.1:5176/fixture/assert-color?value=%23ffffff" {}

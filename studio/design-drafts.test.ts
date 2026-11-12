@@ -97,3 +97,14 @@ test('text drafts escape literal content and never rewrite a data expression',as
     expect(bindingTargets({nodes:[{file:path,line:4,col:7},{file:path,line:5,col:7}]},app,binding)).toEqual([{site:0,properties:['text-content']}]);
   }finally{await rm(app,{recursive:true,force:true});}
 });
+test('reverting one change keeps the rest of the draft and remains undoable',()=>{
+  const d=new DesignDraft(),files={'app.contract':digest(source)};
+  const gap=patch(),color=patch('color','#123456');
+  d.stage(gap,files);d.stage({...color,label:'Greeting'},files);
+  d.revert(gap.key);expect(d.snapshot().map(p=>p.key)).toEqual([color.key]);
+  expect(d.conflict(files)).toBe(false);
+  expect(()=>d.revert(gap.key)).toThrow('no longer');
+  d.undo();expect(d.count).toBe(2);
+  const restored=new DesignDraft();restored.restore(d.serialize());
+  expect(restored.snapshot().find(p=>p.key===color.key)?.label).toBe('Greeting');
+});
