@@ -1,0 +1,150 @@
+test "the dashboard opens on a lived-in day"
+  epoch "2026-11-11T21:00:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  clock data
+  expect text "remaining" == "1,287"
+  expect text "steps" == "7,842"
+  expect text "water-count" == "5 of 8 · 1.25 L"
+  expect text "meal-kcal-lunch" == "560"
+  expect tree missing "meal-kcal-dinner"
+
+test "logging dinner from the dashboard spends the budget and is kept"
+  epoch "2026-11-11T21:00:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  clock data
+  tap "add-dinner"
+  clock data
+  clock settle
+  type "food-search" "pizza"
+  clock data
+  expect tree missing "food-poke"
+  tap "food-pizza"
+  clock data
+  clock settle
+  expect tree missing "food-pizza"
+  expect text "remaining" == "747"
+  expect text "meal-kcal-dinner" == "540"
+  reload
+  clock data
+  expect text "remaining" == "747"
+
+test "water fills glass by glass"
+  epoch "2026-11-11T21:00:00Z"
+  time-zone "America/Los_Angeles"
+  size 834x1112
+  clock data
+  tap "water-more"
+  clock data
+  expect text "water-count" == "6 of 8 · 1.50 L"
+  tap "glass-2"
+  clock data
+  expect text "water-count" == "2 of 8 · 0.50 L"
+  reload
+  clock data
+  expect text "water-count" == "2 of 8 · 0.50 L"
+
+test "the diary moves between days and removes a food"
+  epoch "2026-11-11T21:00:00Z"
+  time-zone "America/Los_Angeles"
+  size 1440x900
+  clock data
+  tap "tab-diary"
+  clock data
+  expect text "diary-kcal" == "1,259"
+  tap "remove-2026-11-11-snacks-apple"
+  clock data
+  expect text "diary-kcal" == "1,164"
+  expect text "meal-total-snacks" == "1 item · 174 kcal"
+  tap "day-10"
+  clock data
+  expect text "diary-kcal" == "1,716"
+  tap "diary-add-dinner"
+  clock data
+  clock settle
+  tap "food-shake"
+  clock data
+  clock settle
+  expect text "diary-kcal" == "1,896"
+  tap "tab-today"
+  expect text "remaining" == "1,382"
+
+test "a logged ride lands in activity"
+  epoch "2026-11-11T21:00:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  clock data
+  tap "tab-activity"
+  clock data
+  tap "log-workout"
+  clock settle
+  tap "kind-cycle"
+  tap "minutes-more"
+  tap "minutes-more"
+  expect text "minutes" == "40"
+  expect text "workout-estimate" == "About 320 kcal"
+  tap "save-workout"
+  clock data
+  clock settle
+  expect tree has "workout-s6"
+  expect text "activity-steps" == "7,842"
+  tap "tab-today"
+  expect text "remaining" == "1,607"
+
+test "onboarding builds a plan and the app adopts it"
+  epoch "2026-11-11T21:00:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  clock data
+  tap "tab-profile"
+  tap "redo-onboarding"
+  clock settle
+  expect tree has "welcome"
+  tap "get-started"
+  clock settle
+  type "ob-name" ""
+  expect disabled "next-goal"
+  type "ob-name" "Riley"
+  tap "goal-gain"
+  tap "next-goal"
+  clock settle
+  tap "weight-more"
+  tap "weight-more"
+  expect text "ob-weight" == "75.2"
+  tap "level-active"
+  tap "next-measure"
+  clock settle
+  expect text "plan-kcal" == "3,110"
+  expect text "plan-Protein" == "150 g"
+  expect text "plan-Carbs" == "409 g"
+  expect text "plan-Fat" == "97 g"
+  tap "next-plan"
+  clock data
+  clock settle
+  expect tree missing "welcome"
+  expect text "remaining" == "2,337"
+  tap "tab-profile"
+  expect text "profile-name" == "Riley"
+  expect text "target-Calories" == "3,110 kcal"
+  reload
+  clock data
+  tap "tab-profile"
+  expect text "weight-now" == "75.2"
+
+test "reset asks first, then restores the sample week"
+  epoch "2026-11-11T21:00:00Z"
+  time-zone "America/Los_Angeles"
+  size 1440x900
+  clock data
+  tap "water-more"
+  clock data
+  expect text "water-count" == "6 of 8 · 1.50 L"
+  tap "tab-profile"
+  tap "reset"
+  clock settle
+  tap "confirm-reset"
+  clock data
+  clock settle
+  tap "tab-today"
+  expect text "water-count" == "5 of 8 · 1.25 L"

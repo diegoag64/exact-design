@@ -1,0 +1,1352 @@
+// Ember: a calorie and activity tracker. One file draws the iPhone app (UIKit's tab bar,
+// sheets and glass buttons), the Mac and wide web windows (a sidebar beside a dashboard),
+// and a phone-width browser. Each tab, sheet and onboarding step is a route of its own.
+use EmptyState from "exact:content"
+
+routes nav
+  tab today "/"
+    welcome "/welcome"
+    onboardingGoal "/onboarding"
+    onboardingBody "/onboarding/body"
+    onboardingPlan "/onboarding/plan"
+  tab diary "/diary"
+    addFood "/diary/add"
+  tab activity "/activity"
+    logWorkout "/activity/log"
+  tab profile "/profile"
+
+shape Viewport
+  width: number
+  prefersReducedMotion: bool
+
+shape Time
+  epochAtZero: number
+  utcOffset: number
+
+shape Profile
+  name: string
+  goal: string
+  weight: number
+  target: number
+  height: number
+  age: number
+  activity: string
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+  steps: number
+  water: number
+  onboarded: bool
+
+shape Food
+  id: string
+  name: string
+  portion: string
+  kcal: number
+  protein: number
+  carbs: number
+  fat: number
+  kind: string
+
+shape Item
+  id: string
+  name: string
+  portion: string
+  kcal: number
+  protein: number
+  carbs: number
+  fat: number
+  kind: string
+
+shape Meal
+  id: string
+  title: string
+  kcal: number
+  entries: Item[]
+
+shape Day
+  day: string
+  label: string
+  kcal: number
+  protein: number
+  carbs: number
+  fat: number
+  water: number
+  burned: number
+  meals: Meal[]
+
+shape MealSum
+  id: string
+  title: string
+  kcal: number
+  count: number
+  detail: string
+
+shape DayStat
+  day: string
+  weekday: string
+  date: string
+  kcal: number
+  steps: number
+  active: number
+
+shape Workout
+  id: string
+  kind: string
+  title: string
+  minutes: number
+  kcal: number
+  detail: string
+  when: string
+
+shape Weigh
+  day: string
+  label: string
+  kg: number
+
+shape Board
+  profile: Profile
+  label: string
+  eaten: number
+  protein: number
+  carbs: number
+  fat: number
+  water: number
+  steps: number
+  distance: number
+  active: number
+  exercise: number
+  resting: number
+  hourly: number[]
+  week: DayStat[]
+  meals: MealSum[]
+  workouts: Workout[]
+  streak: number
+  weights: Weigh[]
+
+shape Reply
+  ok: bool
+  error: string
+
+keyframes rise
+  from opacity=0 translate="0px 16px"
+
+keyframes ringIn
+  from stroke-dashoffset=100
+
+keyframes drift
+  from translate="0px 0px" scale=1
+  to translate="-24px 16px" scale=1.14
+
+keyframes grow
+  from translate="-100% 0px"
+
+keyframes lift
+  from translate="0px 100%"
+
+// The look, named once so the design editor shows each as a shared style.
+style Card
+  display="flex"
+  flex-direction="column"
+  box-sizing="border-box"
+  min-width=0
+  padding=20
+  border-radius=28
+  background-color="card"
+  border="1px solid line"
+  box-shadow="0 1px 2px glass-shade, 0 24px 48px -32px glass-shade"
+
+style Glass
+  background-color="glass"
+  backdrop-filter="blur(30px) saturate(1.8)"
+  border="1px solid glass-edge"
+  box-shadow="inset 0 1px 0 glass-edge, 0 24px 60px -32px glass-shade"
+
+style Tile
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex-shrink=0
+  width=44
+  height=44
+  border-radius=14
+
+style Round
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex-shrink=0
+  width=36
+  height=36
+  padding=0
+  border-width=0
+  border-radius=18
+  font-size="0.9375rem"
+
+style Pill
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  gap=8
+  height=56
+  padding-left=24
+  padding-right=24
+  border-width=0
+  border-radius=28
+  background-color="cta"
+  background-image="linear-gradient(135deg, var(--cta) 0%, var(--cta-2) 100%)"
+  color="on-accent"
+  font-size="1.1875rem"
+  font-weight=700
+  box-shadow="0 16px 32px -14px cta"
+
+style Chip
+  display="flex"
+  align-items="center"
+  gap=6
+  height=34
+  padding-left=12
+  padding-right=14
+  border-width=0
+  border-radius=17
+  font-size="0.8125rem"
+  font-weight=650
+
+style GlassChip
+  display="flex"
+  align-items="center"
+  gap=6
+  height=36
+  padding-left=12
+  padding-right=14
+  border-radius=18
+  font-size="0.875rem"
+  font-weight=650
+  background-color="glass"
+  backdrop-filter="blur(30px) saturate(1.8)"
+  border="1px solid glass-edge"
+  box-shadow="inset 0 1px 0 glass-edge, 0 10px 30px -18px glass-shade"
+
+style Num
+  font-family="ui-rounded, system-ui"
+  font-variant-numeric="tabular-nums"
+  font-weight=750
+  letter-spacing="-0.5px"
+
+style Caption
+  font-size="0.8125rem"
+  color="ink-2"
+
+style Eyebrow
+  font-size="0.75rem"
+  font-weight=700
+  letter-spacing="0.8px"
+  color="ink-2"
+
+fn num(n: number): string = formatNumber(round(n), "decimal")
+fn frac(part: number, whole: number): number = whole <= 0 ? 0 : max(0, min(1, part / whole))
+fn pct(part: number, whole: number): string = `${round(frac(part, whole) * 100)}%`
+fn hourOf(ms: number, offset: number): number = floor(ms / 3600000 + offset / 60) - 24 * floor((ms / 3600000 + offset / 60) / 24)
+fn greeting(hour: number): string = hour < 5 ? "Good evening" : hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
+fn topOf(xs: number[]): number = match first(sortBy(xs, x => x, "desc")) { case some(x) => x, case none => 0 }
+fn lowOf(xs: number[]): number = match first(sortBy(xs, x => x)) { case some(x) => x, case none => 0 }
+fn mealTitle(id: string): string = id == "breakfast" ? "Breakfast" : id == "lunch" ? "Lunch" : id == "dinner" ? "Dinner" : "Snacks"
+fn mealIcon(id: string): string = id == "breakfast" ? "symbol:icon.sunrise" : id == "lunch" ? "symbol:icon.sun" : id == "dinner" ? "symbol:icon.moon" : "symbol:icon.cookie"
+fn mealTint(id: string): string = id == "breakfast" ? "amber" : id == "lunch" ? "ember" : id == "dinner" ? "iris" : "rose"
+fn foodIcon(kind: string): string = kind == "drink" ? "symbol:icon.drop" : `symbol:icon.${kind}`
+fn foodTint(kind: string): string = kind == "coffee" or kind == "bread" or kind == "grains" or kind == "egg" ? "amber" : kind == "leaf" or kind == "avocado" ? "fern" : kind == "fish" or kind == "drink" ? "sky" : kind == "fruit" or kind == "carrot" or kind == "pizza" ? "ember" : kind == "cookie" or kind == "bowl" ? "rose" : "iris"
+fn workIcon(kind: string): string = kind == "run" ? "symbol:icon.run" : kind == "walk" ? "symbol:icon.walk" : kind == "strength" ? "symbol:icon.barbell" : kind == "cycle" ? "symbol:icon.bike" : kind == "yoga" ? "symbol:icon.yoga" : "symbol:icon.swim"
+fn workTint(kind: string): string = kind == "run" ? "ember" : kind == "walk" ? "fern" : kind == "strength" ? "iris" : kind == "cycle" ? "amber" : kind == "yoga" ? "rose" : "sky"
+fn workTitle(kind: string): string = kind == "run" ? "Run" : kind == "walk" ? "Walk" : kind == "strength" ? "Strength" : kind == "cycle" ? "Cycle" : kind == "yoga" ? "Yoga" : "Swim"
+fn workRate(kind: string): number = kind == "run" ? 10.7 : kind == "walk" ? 5 : kind == "strength" ? 6 : kind == "cycle" ? 8 : kind == "yoga" ? 4 : 9
+fn goalTitle(goal: string): string = goal == "lose" ? "Lose weight" : goal == "gain" ? "Build strength" : "Stay balanced"
+fn goalIcon(goal: string): string = goal == "lose" ? "symbol:icon.down" : goal == "gain" ? "symbol:icon.barbell" : "symbol:icon.target"
+fn bmr(w: number, h: number, a: number): number = 10 * w + 6.25 * h - 5 * a - 78
+fn factor(level: string): number = level == "light" ? 1.375 : level == "active" ? 1.725 : 1.55
+fn adjust(goal: string): number = goal == "lose" ? -450 : goal == "gain" ? 300 : 0
+fn planKcal(goal: string, w: number, h: number, a: number, level: string): number = max(1200, round((bmr(w, h, a) * factor(level) + adjust(goal)) / 10) * 10)
+fn planProtein(goal: string, w: number): number = round(w * (goal == "maintain" ? 1.6 : 2))
+fn planFat(kcal: number): number = round(kcal * 0.28 / 9)
+fn planCarbs(kcal: number, protein: number, fat: number): number = max(0, round((kcal - protein * 4 - fat * 9) / 4))
+fn weeksTo(goal: string, w: number, target: number): number = goal == "maintain" ? 0 : max(0, ceil((goal == "lose" ? w - target : target - w) / (goal == "lose" ? 0.5 : 0.25)))
+
+component App
+  resource viewport = exactViewport() as shape Viewport
+  resource time = exactTime() as shape Time
+  state now = 0
+  derive today = formatDate(time.epochAtZero + now, time.utcOffset, "iso")
+  state pickedDay = ""
+  derive diaryDay = pickedDay == "" ? today : pickedDay
+  resource board = loadBoard(today) as shape Board else empty()
+  resource day = loadDay(today, diaryDay) as shape Day else empty()
+  state query = ""
+  resource foods = searchFoods(query) as shape Food[] else empty()
+  mutation logged as shape Reply queue refreshes board, day then afterLog
+  mutation changed as shape Reply queue refreshes board, day
+  mutation trained as shape Reply queue refreshes board, day then afterTrain
+  mutation saved as shape Reply queue refreshes board, day then afterSave
+  state meal = "dinner"
+  state addDay = ""
+  state kind = "run"
+  state minutes = 30
+  state name = "Sam"
+  state goal = "lose"
+  state weight = 74
+  state target = 70
+  state height = 178
+  state age = 31
+  state level = "moderate"
+  derive w = viewport.width
+  derive cols = (w >= 900 ? w - 240 : w) >= 1040 ? 3 : (w >= 900 ? w - 240 : w) >= 640 ? 2 : 1
+  derive phone = w < 600
+  derive pad = w < 600 ? 16 : 32
+  derive still = viewport.prefersReducedMotion
+  derive flow = top(nav).name == "welcome" or top(nav).name == "onboardingGoal" or top(nav).name == "onboardingBody" or top(nav).name == "onboardingPlan"
+  derive hello = `${greeting(hourOf(time.epochAtZero + now, time.utcOffset))}, ${board.profile.name}`
+  derive kcalPlan = planKcal(goal, weight, height, age, level)
+  derive proteinPlan = planProtein(goal, weight)
+  derive fatPlan = planFat(kcalPlan)
+  derive carbsPlan = planCarbs(kcalPlan, proteinPlan, fatPlan)
+  derive logError = match logged { case some(r) => r.error, case none => "" }
+  derive trainError = match trained { case some(r) => r.error, case none => "" }
+  derive saveError = match saved { case some(r) => r.error, case none => "" }
+  task tick mount
+    every(60000, step)
+  action step
+    now = performanceNow()
+  action follow(url: string)
+    nav = go(nav, url)
+  action back
+    nav = back(nav)
+  action pick(tab: string)
+    nav = select(nav, tab)
+  action pickDay(d: string)
+    pickedDay = d
+  action openAdd(m: string, d: string)
+    meal = m
+    addDay = d
+    query = ""
+    nav = go(nav, path("addFood"))
+  action chooseMeal(m: string)
+    meal = m
+  action search(v: string)
+    query = v
+  action add(id: string)
+    send logged = addFood(today, (addDay == "" ? today : addDay), meal, id)
+  action afterLog
+    if logError == ""
+      nav = back(nav)
+  action remove(id: string)
+    send changed = removeEntry(today, id)
+  action drink(glasses: number)
+    send changed = setWater(today, today, glasses)
+  action openLog
+    kind = "run"
+    minutes = 30
+    nav = go(nav, path("logWorkout"))
+  action chooseKind(k: string)
+    kind = k
+  action nudgeMinutes(by: number)
+    minutes = max(5, min(240, minutes + by))
+  action train
+    send trained = logWorkout(today, kind, minutes, formatTime(time.epochAtZero + performanceNow(), time.utcOffset, "short"))
+  action afterTrain
+    if trainError == ""
+      nav = back(nav)
+  action welcome
+    nav = go(nav, path("welcome"))
+  action begin
+    name = board.profile.name
+    goal = board.profile.goal == "" ? "lose" : board.profile.goal
+    weight = board.profile.weight > 0 ? board.profile.weight : 74
+    target = board.profile.target > 0 ? board.profile.target : 70
+    height = board.profile.height > 0 ? board.profile.height : 178
+    age = board.profile.age > 0 ? board.profile.age : 31
+    level = board.profile.activity == "" ? "moderate" : board.profile.activity
+    nav = go(nav, path("onboardingGoal"))
+  // Leaving onboarding pops whichever tab it was opened on, then shows Today.
+  action skipIntro
+    nav = select(select(nav, nav.tab), "today")
+  action editName(v: string)
+    name = v
+  action chooseGoal(g: string)
+    goal = g
+  action toMeasure
+    nav = go(nav, path("onboardingBody"))
+  action toPlan
+    nav = go(nav, path("onboardingPlan"))
+  action nudge(field: string, by: number)
+    if field == "weight"
+      weight = max(35, min(250, weight + by))
+    else if field == "target"
+      target = max(35, min(250, target + by))
+    else if field == "height"
+      height = max(120, min(230, height + by))
+    else
+      age = max(14, min(100, age + by))
+  action chooseLevel(l: string)
+    level = l
+  action finish
+    send saved = saveProfile(today, name, goal, weight, target, height, age, level, kcalPlan, proteinPlan, carbsPlan, fatPlan)
+  action afterSave
+    if saveError == ""
+      nav = select(select(nav, nav.tab), "today")
+  action reset
+    send changed = resetDemo(today)
+  view
+    main navigationKey=`${top(nav).id}` navigationBack="back" navigate=follow width="100%" height="100%" display="flex" flex-direction="column" background-color="page" color="ink" font-family="system-ui" testId="app"
+      column flex=1 min-height=0 position="relative"
+        for t in nav.tabs key=t.name
+          column role="tabpanel" id=`panel-${t.name}` position="absolute" inset=0
+            for e in t.stack key=e.id
+              if e.name == "today" or e.name == "diary" or e.name == "activity" or e.name == "profile"
+                column navigationKey=`${e.id}` navigationScroll=`content-${e.id}` navigationBar="none" position="absolute" inset=0 background-color="page" background-image=(e.name == "today" ? "radial-gradient(110% 420px at 50% 0%, var(--ember-soft) 0%, transparent 100%)" : e.name == "diary" ? "radial-gradient(110% 420px at 50% 0%, var(--amber-soft) 0%, transparent 100%)" : e.name == "activity" ? "radial-gradient(110% 420px at 50% 0%, var(--fern-soft) 0%, transparent 100%)" : "radial-gradient(110% 420px at 50% 0%, var(--iris-soft) 0%, transparent 100%)")
+                  scroll id=`content-${e.id}` flex=1 min-height=0
+                    column width="100%" max-width="77.5rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding-left=pad padding-right=pad padding-bottom=(phone ? 120 : 48) gap=18
+                      if e.name == "today"
+                        TodayView(b=board, cols=cols, phone=phone, still=still, hello=hello, today=today, pick=pick, openAdd=openAdd, drink=drink)
+                      else if e.name == "diary"
+                        DiaryView(b=board, d=day, cols=cols, phone=phone, still=still, pickDay=pickDay, openAdd=openAdd, remove=remove)
+                      else if e.name == "activity"
+                        ActivityView(b=board, cols=cols, phone=phone, still=still, openLog=openLog)
+                      else
+                        ProfileView(b=board, cols=cols, phone=phone, still=still)
+                          column class=Card gap=0 padding="4px 20px"
+                            button press=welcome appearance="none" display="flex" align-items="center" gap=14 padding="14px 0" border-width=0 background-color="transparent" color="ink" text-align="left" testId="redo-onboarding"
+                              column class=Tile width=36 height=36 border-radius=11 background-color="ember-soft" color="ember"
+                                image "symbol:icon.sparkle" aria-hidden=true
+                              text "Replay onboarding" flex=1 font-size="1rem" font-weight=600
+                              image "symbol:icon.next" color="ink-3" aria-hidden=true
+                            button commandfor="reset-demo" command="show-modal" appearance="none" display="flex" align-items="center" gap=14 padding="14px 0" border-width=0 border-top="1px solid line" background-color="transparent" color="ember-ink" text-align="left" testId="reset"
+                              column class=Tile width=36 height=36 border-radius=11 background-color="card-2" color="ember"
+                                image "symbol:refresh" aria-hidden=true
+                              text "Reset demo data" flex=1 font-size="1rem" font-weight=600
+                          dialog id="reset-demo" role="alertdialog" aria-label="Reset demo data?"
+                            text "Your diary, workouts and plan return to the sample week."
+                            button press=reset destructive=true commandfor="reset-demo" command="close" testId="confirm-reset"
+                              text "Reset"
+                            button commandfor="reset-demo" command="close"
+                              text "Cancel"
+                  if e.name == "today" or e.name == "diary"
+                    button buttonStyle="prominent-glass" press=openAdd("dinner", (e.name == "diary" ? diaryDay : today)) position="absolute" right=20 bottom=20 width=58 height=58 aria-label="Log food" testId=`fab-${e.name}`
+                      image "symbol:add"
+              if e.name == "addFood"
+                column navigationKey=`${e.id}` navigationPresentation="modal" navigationScroll=`content-${e.id}` navigationDetent="large" position="absolute" inset=0 background-color="page"
+                  header
+                    button id="back" press=back aria-label="Cancel" testId="add-cancel"
+                      image "symbol:close"
+                    text `Add to ${mealTitle(meal)}` role="heading"
+                    input type="search" value=query input=search placeholder="Search 26 foods" aria-label="Search foods" testId="food-search"
+                  scroll id=`content-${e.id}` flex=1 min-height=0
+                    AddFood(foods=foods, meal=meal, error=logError, busy=pending(logged), loading=pending(foods), query=query, chooseMeal=chooseMeal, add=add)
+              if e.name == "logWorkout"
+                column navigationKey=`${e.id}` navigationPresentation="modal" navigationScroll=`content-${e.id}` navigationDetent="large" position="absolute" inset=0 background-color="page"
+                  header
+                    button id="back" press=back aria-label="Cancel" testId="log-cancel"
+                      image "symbol:close"
+                    text "Log workout" role="heading"
+                    button press=train buttonStyle="bordered-prominent" disabled=pending(trained) aria-label="Save workout" testId="save-workout"
+                      image "symbol:checkmark"
+                  scroll id=`content-${e.id}` flex=1 min-height=0
+                    LogWorkout(kind=kind, minutes=minutes, error=trainError, chooseKind=chooseKind, nudge=nudgeMinutes)
+              if e.name == "welcome"
+                column navigationKey=`${e.id}` navigationPresentation="fullscreen" navigationBar="none" position="absolute" inset=0 background-color="page" overflow="hidden"
+                  Aurora(kind="bloom", still=still)
+                  scroll flex=1 min-height=0 position="relative"
+                    Welcome(phone=phone, still=still, begin=begin, skip=skipIntro)
+              if e.name == "onboardingGoal" or e.name == "onboardingBody" or e.name == "onboardingPlan"
+                column navigationKey=`${e.id}` navigationPresentation="fullscreen" navigationBar="none" position="absolute" inset=0 background-color="page" overflow="hidden"
+                  Aurora(kind="dawn", still=still)
+                  column position="relative" flex=1 min-height=0 background-color="glass"
+                    row width="100%" max-width="37.5rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="14px 20px 6px" align-items="center" gap=14
+                      button press=back class=Round width=42 height=42 border-radius=21 background-color="glass-strong" color="ink" aria-label="Back" testId="ob-back"
+                        image "symbol:icon.prev"
+                      row flex=1 gap=6 aria-hidden=true
+                        for i in range(3) key=i
+                          column flex=1 height=6 border-radius=3 background-color=(i < (e.name == "onboardingGoal" ? 1 : e.name == "onboardingBody" ? 2 : 3) ? "ember" : "glass-edge")
+                      text `${e.name == "onboardingGoal" ? 1 : e.name == "onboardingBody" ? 2 : 3} of 3` class=Caption font-weight=600
+                    scroll flex=1 min-height=0
+                      column width="100%" max-width="37.5rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="18px 20px 24px" gap=22
+                        if e.name == "onboardingGoal"
+                          GoalStep(name=name, goal=goal, editName=editName, chooseGoal=chooseGoal)
+                        else if e.name == "onboardingBody"
+                          MeasureStep(goal=goal, weight=weight, target=target, height=height, age=age, level=level, nudge=nudge, chooseLevel=chooseLevel)
+                        else
+                          PlanStep(name=name, goal=goal, weight=weight, target=target, kcal=kcalPlan, protein=proteinPlan, carbs=carbsPlan, fat=fatPlan, still=still)
+                    column width="100%" max-width="37.5rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="8px 20px 24px" gap=10
+                      if saveError != "" and e.name == "onboardingPlan"
+                        text saveError role="alert" color="ember-ink" font-size="0.875rem" text-align="center" testId="save-error"
+                      if e.name == "onboardingGoal"
+                        button press=toMeasure class=Pill disabled=(name.trim() == "") opacity=(name.trim() == "" ? 0.5 : 1) testId="next-goal"
+                          text "Continue"
+                          image "symbol:icon.arrow" aria-hidden=true
+                      else if e.name == "onboardingBody"
+                        button press=toPlan class=Pill testId="next-measure"
+                          text "Continue"
+                          image "symbol:icon.arrow" aria-hidden=true
+                      else
+                        button press=finish class=Pill disabled=pending(saved) testId="next-plan"
+                          text "Start tracking"
+                          image "symbol:icon.arrow" aria-hidden=true
+      row role="tablist" display=(flow ? "none" : "flex") testId="tabs"
+        button role="tab" aria-controls="panel-today" aria-selected=(nav.tab == "today") press=pick("today") testId="tab-today" flex=1
+          image "symbol:icon.flame"
+          text "Today"
+        button role="tab" aria-controls="panel-diary" aria-selected=(nav.tab == "diary") press=pick("diary") testId="tab-diary" flex=1
+          image "symbol:icon.fork"
+          text "Diary"
+        button role="tab" aria-controls="panel-activity" aria-selected=(nav.tab == "activity") press=pick("activity") testId="tab-activity" flex=1
+          image "symbol:icon.bolt"
+          text "Activity"
+        button role="tab" aria-controls="panel-profile" aria-selected=(nav.tab == "profile") press=pick("profile") testId="tab-profile" flex=1
+          image "symbol:icon.person"
+          text "Profile"
+
+// Soft colour behind glass: three drifting pools of light. The glass is drawn as this
+// layer's next sibling, which is how the Mac samples a backdrop too.
+component Aurora
+  props
+    kind: string
+    still: bool
+  view
+    column position="absolute" inset=-40 aria-hidden=true animation=(still ? "none" : "drift 16s ease-in-out infinite alternate") background-image=(kind == "fresh" ? "radial-gradient(55% 45% at 18% 18%, var(--aura-5) 0%, transparent 100%), radial-gradient(50% 50% at 86% 22%, var(--aura-6) 0%, transparent 100%), radial-gradient(70% 55% at 55% 100%, var(--aura-3) 0%, transparent 100%)" : kind == "dusk" ? "radial-gradient(55% 45% at 18% 18%, var(--aura-4) 0%, transparent 100%), radial-gradient(50% 50% at 86% 22%, var(--aura-2) 0%, transparent 100%), radial-gradient(70% 55% at 55% 100%, var(--aura-6) 0%, transparent 100%)" : kind == "dawn" ? "radial-gradient(55% 45% at 18% 18%, var(--aura-3) 0%, transparent 100%), radial-gradient(50% 50% at 86% 22%, var(--aura-1) 0%, transparent 100%), radial-gradient(70% 55% at 55% 100%, var(--aura-6) 0%, transparent 100%)" : kind == "bloom" ? "radial-gradient(55% 45% at 18% 18%, var(--aura-1) 0%, transparent 100%), radial-gradient(50% 50% at 86% 22%, var(--aura-2) 0%, transparent 100%), radial-gradient(70% 55% at 55% 100%, var(--aura-4) 0%, transparent 100%)" : "radial-gradient(55% 45% at 18% 18%, var(--aura-1) 0%, transparent 100%), radial-gradient(50% 50% at 86% 22%, var(--aura-2) 0%, transparent 100%), radial-gradient(70% 55% at 55% 100%, var(--aura-3) 0%, transparent 100%)")
+
+component Ring
+  props
+    size: number
+    width: number
+    fraction: number
+    from: string
+    to: string
+    track: string
+    gid: string
+    still: bool
+  slot
+  view
+    column position="relative" width=size height=size flex-shrink=0 align-items="center" justify-content="center"
+      svg position="absolute" left=0 top=0 width=size height=size viewBox=`0 0 ${size} ${size}` aria-hidden=true
+        defs
+          linearGradient id=gid x1="0%" y1="0%" x2="100%" y2="100%"
+            stop offset="0%" stop-color=from
+            stop offset="100%" stop-color=to
+        circle cx=(size / 2) cy=(size / 2) r=((size - width) / 2) fill="none" stroke=track stroke-width=width
+        if fraction > 0
+          circle cx=(size / 2) cy=(size / 2) r=((size - width) / 2) fill="none" stroke=`url(#${gid})` stroke-width=width stroke-linecap="round" pathLength=100 stroke-dasharray="100 100" stroke-dashoffset=(100 - min(1, fraction) * 100) transform=`rotate(-90 ${size / 2} ${size / 2})` animation=(still ? "none" : "ringIn 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) both")
+      column position="relative" align-items="center"
+        children
+
+component TopBar
+  props
+    eyebrow: string
+    title: string
+    phone: bool
+  slot
+  view
+    row flex-wrap="wrap" align-items="flex-end" gap=12 padding-top=(phone ? 14 : 40) padding-bottom=2
+      column flex="1 1 12rem" min-width=0 gap=4
+        text eyebrow class=Eyebrow
+        text title role="heading" aria-level=1 font-size=(phone ? "1.875rem" : "2.375rem") font-weight=800 letter-spacing="-1px" line-height=1.2
+      children
+
+component Head
+  props
+    title: string
+    detail: string
+  view
+    row align-items="baseline" gap=8 flex=1 min-width=0
+      text title role="heading" aria-level=2 flex=1 font-size="1.125rem" font-weight=700 letter-spacing="-0.3px"
+      text detail class=Caption
+
+component Stat
+  props
+    icon: string
+    tint: string
+    label: string
+    value: string
+    unit: string
+  view
+    column flex="1 1 5.5rem" min-width=0 gap=6
+      row align-items="center" gap=6
+        image icon color=tint font-size="0.875rem" aria-hidden=true
+        text label class=Caption font-weight=600
+      row align-items="baseline" gap=4
+        text value class=Num font-size="1.375rem"
+        text unit class=Caption
+
+component Bar
+  props
+    label: string
+    value: number
+    goal: number
+    tint: string
+    unit: string
+    still: bool
+  view
+    column gap=8
+      row align-items="baseline" gap=8
+        column width=8 height=8 border-radius=4 background-color=tint align-self="center"
+        text label flex=1 font-size="0.9375rem" font-weight=600
+        text num(value) class=Num font-size="0.9375rem"
+        text `/ ${num(goal)} ${unit}` class=Caption
+      column height=10 border-radius=5 background-color=`${tint}-soft` overflow="hidden"
+        column height="100%" width=pct(value, goal) border-radius=5 background-color=tint animation=(still ? "none" : "grow 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
+
+component FoodTile
+  props
+    kind: string
+  view
+    column class=Tile width=42 height=42 border-radius=13 background-color=`${foodTint(kind)}-soft` color=foodTint(kind)
+      image foodIcon(kind) font-size="1.25rem" aria-hidden=true
+
+component Columns
+  props
+    values: number[]
+    labels: string[]
+    goal: number
+    tint: string
+    still: bool
+  view
+    ColumnBars(values=values, labels=labels, goal=goal, scale=max(goal * 1.15, topOf(values)), tint=tint, still=still)
+
+component ColumnBars
+  props
+    values: number[]
+    labels: string[]
+    goal: number
+    scale: number
+    tint: string
+    still: bool
+  view
+    column gap=10
+      row height=132 align-items="flex-end" gap=8 position="relative"
+        if goal > 0
+          column position="absolute" left=0 right=0 bottom=pct(goal, scale) border-top="1.5px dashed ink-3" aria-hidden=true
+        for v, i in values key=i
+          column flex=1 height="100%" justify-content="flex-end" align-items="center" overflow="hidden"
+            column width="100%" max-width=30 height=pct(v, scale) min-height=4 border-radius=9 background-color=(i == values.length - 1 ? tint : "card-2") background-image=(i == values.length - 1 ? (tint == "fern" ? "linear-gradient(180deg, var(--fern-2) 0%, var(--fern) 100%)" : "linear-gradient(180deg, var(--ember-2) 0%, var(--ember) 100%)") : "none") animation=(still ? "none" : `lift 700ms ${i * 50}ms cubic-bezier(0.2, 0.8, 0.2, 1) both`)
+      row gap=8
+        for l, i in labels key=i
+          text l flex=1 text-align="center" font-size="0.75rem" font-weight=(i == labels.length - 1 ? 700 : 500) color=(i == labels.length - 1 ? "ink" : "ink-2")
+
+component TodayView
+  props
+    b: Board
+    cols: number
+    phone: bool
+    still: bool
+    hello: string
+    today: string
+    pick: action
+    openAdd: action
+    drink: action
+  view
+    column gap=18
+      TopBar(eyebrow=b.label.toUpperCase(), title=hello, phone=phone)
+        button press=pick("profile") class=GlassChip color="ink" aria-label=`${b.streak}-day streak` testId="streak"
+          image "symbol:icon.flame" color="ember" aria-hidden=true
+          text `${b.streak}` class=Num
+      if cols == 1
+        Energy(b=b, wide=false, still=still)
+        Macros(b=b, still=still)
+        Move(b=b, still=still, pick=pick)
+        Water(count=b.water, goal=b.profile.water, drink=drink)
+        Meals(meals=b.meals, today=today, openAdd=openAdd)
+        Week(b=b, still=still)
+      else if cols == 2
+        Energy(b=b, wide=true, still=still)
+        row gap=18 align-items="flex-start"
+          column flex=1 min-width=0 gap=18
+            Macros(b=b, still=still)
+            Meals(meals=b.meals, today=today, openAdd=openAdd)
+          column flex=1 min-width=0 gap=18
+            Move(b=b, still=still, pick=pick)
+            Water(count=b.water, goal=b.profile.water, drink=drink)
+            Week(b=b, still=still)
+      else
+        row gap=18 align-items="stretch"
+          column flex=2 min-width=0
+            Energy(b=b, wide=true, still=still)
+          column flex=1 min-width=0 gap=18
+            Move(b=b, still=still, pick=pick)
+            Water(count=b.water, goal=b.profile.water, drink=drink)
+        row gap=18 align-items="flex-start"
+          column flex=1 min-width=0
+            Macros(b=b, still=still)
+          column flex=1 min-width=0
+            Meals(meals=b.meals, today=today, openAdd=openAdd)
+          column flex=1 min-width=0
+            Week(b=b, still=still)
+
+// The focal point: what is left to eat today, on glass over a warm aurora.
+component Energy
+  props
+    b: Board
+    wide: bool
+    still: bool
+  view
+    column position="relative" flex=1 border-radius=34 overflow="hidden" testId="energy" animation=(still ? "none" : "rise 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
+      Aurora(kind="warm", still=still)
+      column position="relative" flex=1 class=Glass margin=8 border-radius=28 padding=(wide ? 28 : 22) gap=(wide ? 24 : 20) justify-content="space-between"
+        row align-items="center" gap=10
+          row class=Chip background-color="glass-strong" color="ember"
+            image "symbol:icon.flame" aria-hidden=true
+            text "Energy" color="ink"
+          row flex=1
+          text `${round(frac(b.eaten, b.profile.calories + b.active) * 100)}% of budget` class=Caption font-weight=600
+        column flex-direction=(wide ? "row" : "column") align-items="center" gap=(wide ? 36 : 22)
+          Ring(size=(wide ? 220 : 228), width=20, fraction=frac(b.eaten, b.profile.calories + b.active), from="ember-2", to="ember", track="glass-edge", gid="energy-ring", still=still)
+            column align-items="center" gap=2
+              text num(b.profile.calories - b.eaten + b.active) class=Num font-size="3.125rem" letter-spacing="-2px" testId="remaining"
+              text (b.profile.calories - b.eaten + b.active >= 0 ? "kcal left" : "kcal over") class=Caption font-weight=600
+          column flex=1 width="100%" gap=18
+            row flex-wrap="wrap" row-gap=16 gap=12
+              Stat(icon="symbol:icon.target", tint="iris", label="Goal", value=num(b.profile.calories), unit="kcal")
+              Stat(icon="symbol:icon.fork", tint="amber", label="Eaten", value=num(b.eaten), unit="kcal")
+              Stat(icon="symbol:icon.flame", tint="ember", label="Burned", value=num(b.active), unit="kcal")
+            column height=1 background-color="glass-edge"
+            row align-items="center" gap=10
+              image "symbol:icon.sparkle" color="ember" aria-hidden=true
+              text (b.eaten == 0 ? "A fresh day. Log breakfast to get going." : b.profile.calories - b.eaten + b.active > 600 ? "Plenty of room for a proper dinner." : b.profile.calories - b.eaten + b.active >= 0 ? "Nearly there. Keep dinner light." : "Over budget today. A walk would help.") flex=1 font-size="0.875rem" line-height=1.4 color="ink-2"
+
+component Macros
+  props
+    b: Board
+    still: bool
+  view
+    column class=Card gap=18 testId="macros"
+      Head(title="Macros", detail=`${num(b.eaten)} kcal eaten`)
+      Bar(label="Protein", value=b.protein, goal=b.profile.protein, tint="rose", unit="g", still=still)
+      Bar(label="Carbs", value=b.carbs, goal=b.profile.carbs, tint="amber", unit="g", still=still)
+      Bar(label="Fat", value=b.fat, goal=b.profile.fat, tint="iris", unit="g", still=still)
+
+component Move
+  props
+    b: Board
+    still: bool
+    pick: action
+  view
+    column class=Card gap=18 testId="move"
+      row align-items="center" gap=8
+        Head(title="Move", detail="")
+        button press=pick("activity") appearance="none" display="flex" align-items="center" gap=4 padding=0 border-width=0 background-color="transparent" color="ember-ink" font-size="0.875rem" font-weight=600 testId="see-activity"
+          text "Activity"
+          image "symbol:icon.next" font-size="0.75rem" aria-hidden=true
+      row justify-content="space-between" gap=8
+        column flex=1 align-items="center" gap=10
+          Ring(size=78, width=9, fraction=frac(b.steps, b.profile.steps), from="fern-2", to="fern", track="fern-soft", gid="move-steps", still=still)
+            image "symbol:icon.shoe" color="fern" font-size="1.375rem" aria-hidden=true
+          column align-items="center" gap=1
+            text num(b.steps) class=Num font-size="1.125rem" testId="steps"
+            text "steps" class=Caption
+        column flex=1 align-items="center" gap=10
+          Ring(size=78, width=9, fraction=frac(b.active, 600), from="ember-2", to="ember", track="ember-soft", gid="move-active", still=still)
+            image "symbol:icon.flame" color="ember" font-size="1.375rem" aria-hidden=true
+          column align-items="center" gap=1
+            text num(b.active) class=Num font-size="1.125rem"
+            text "active kcal" class=Caption
+        column flex=1 align-items="center" gap=10
+          Ring(size=78, width=9, fraction=frac(b.exercise, 45), from="amber", to="ember-2", track="amber-soft", gid="move-exercise", still=still)
+            image "symbol:icon.timer" color="amber" font-size="1.375rem" aria-hidden=true
+          column align-items="center" gap=1
+            text `${b.exercise}` class=Num font-size="1.125rem"
+            text "exercise min" class=Caption
+
+component Water
+  props
+    count: number
+    goal: number
+    drink: action
+  view
+    column class=Card gap=16 testId="water"
+      row align-items="center" gap=12
+        column class=Tile background-color="sky-soft" color="sky"
+          image "symbol:icon.drop" font-size="1.25rem" aria-hidden=true
+        column flex=1 min-width=0 gap=2
+          text "Water" font-size="1.0625rem" font-weight=700
+          text `${count} of ${goal} · ${(count * 0.25).toFixed(2)} L` class=Caption white-space="nowrap" testId="water-count"
+        button press=drink(max(0, count - 1)) class=Round background-color="card-2" color="ink" disabled=(count == 0) aria-label="Remove a glass" testId="water-less"
+          image "symbol:icon.minus"
+        button press=drink(count + 1) class=Round background-color="sky" color="on-accent" aria-label="Add a glass" testId="water-more"
+          image "symbol:icon.plus"
+      row gap=6
+        for i in range(max(goal, count)) key=i
+          button press=drink(i + 1) appearance="none" flex=1 height=36 padding=0 border-width=0 border-radius=11 background-color=(i < count ? "sky" : "sky-soft") aria-label=`${i + 1} glasses` testId=`glass-${i + 1}`
+
+component Meals
+  props
+    meals: MealSum[]
+    today: string
+    openAdd: action
+  view
+    column class=Card gap=6 testId="meals"
+      Head(title="Meals", detail=`${meals.filter(m => m.count > 0).length} of 4 logged`)
+      for m, i in meals key=m.id
+        row align-items="center" gap=14 padding-top=12 padding-bottom=12 border-top=(i == 0 ? "none" : "1px solid line")
+          column class=Tile background-color=`${mealTint(m.id)}-soft` color=mealTint(m.id)
+            image mealIcon(m.id) font-size="1.25rem" aria-hidden=true
+          column flex=1 min-width=0 gap=2
+            text m.title font-size="1rem" font-weight=650
+            text (m.count == 0 ? "Nothing logged yet" : m.detail) class=Caption white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+          if m.count > 0
+            text num(m.kcal) class=Num font-size="1rem" testId=`meal-kcal-${m.id}`
+          button press=openAdd(m.id, today) class=Round background-color=(m.count == 0 ? "ember" : "card-2") color=(m.count == 0 ? "on-accent" : "ink") aria-label=`Add to ${m.title}` testId=`add-${m.id}`
+            image "symbol:icon.plus"
+
+component Week
+  props
+    b: Board
+    still: bool
+  view
+    column class=Card gap=16 testId="week"
+      Head(title="This week", detail=`avg ${num(sum(b.week.map(d => d.kcal)) / max(1, b.week.length))} kcal`)
+      Columns(values=b.week.map(d => d.kcal), labels=b.week.map(d => d.weekday.slice(0, 1)), goal=b.profile.calories, tint="ember", still=still)
+
+component DiaryView
+  props
+    b: Board
+    d: Day
+    cols: number
+    phone: bool
+    still: bool
+    pickDay: action
+    openAdd: action
+    remove: action
+  view
+    column gap=18
+      TopBar(eyebrow=d.label.toUpperCase(), title="Food diary", phone=phone)
+      row gap=(phone ? 6 : 10) role="radiogroup" aria-label="Day"
+        for s in b.week key=s.day
+          button press=pickDay(s.day) role="radio" aria-checked=(s.day == d.day) appearance="none" flex=1 min-width=0 display="flex" flex-direction="column" align-items="center" gap=4 padding="10px 0 8px" border-radius=18 border=(s.day == d.day ? "1px solid ink" : "1px solid line") background-color=(s.day == d.day ? "ink" : "card") color=(s.day == d.day ? "page" : "ink") testId=`day-${s.date}`
+            text s.weekday.slice(0, 3) font-size="0.6875rem" font-weight=700 letter-spacing="0.4px" opacity=0.7
+            text s.date class=Num font-size="1.1875rem"
+            column width=5 height=5 border-radius=3 background-color=(s.kcal > 0 ? "ember" : "transparent")
+      if cols == 1
+        DaySummary(b=b, d=d, still=still)
+        for m in d.meals key=m.id
+          MealCard(m=m, day=d.day, openAdd=openAdd, remove=remove)
+      else
+        row gap=18 align-items="flex-start"
+          column flex=(cols == 3 ? 1 : 5) min-width=0 gap=18
+            DaySummary(b=b, d=d, still=still)
+          column flex=(cols == 3 ? 2 : 6) min-width=0 gap=18
+            if cols == 3
+              row gap=18 align-items="flex-start"
+                column flex=1 min-width=0 gap=18
+                  for m in d.meals.filter(x => x.id == "breakfast" or x.id == "dinner") key=m.id
+                    MealCard(m=m, day=d.day, openAdd=openAdd, remove=remove)
+                column flex=1 min-width=0 gap=18
+                  for m in d.meals.filter(x => x.id == "lunch" or x.id == "snacks") key=m.id
+                    MealCard(m=m, day=d.day, openAdd=openAdd, remove=remove)
+            else
+              for m in d.meals key=m.id
+                MealCard(m=m, day=d.day, openAdd=openAdd, remove=remove)
+
+component DaySummary
+  props
+    b: Board
+    d: Day
+    still: bool
+  view
+    column position="relative" border-radius=30 overflow="hidden" testId="day-summary"
+      Aurora(kind="warm", still=still)
+      column position="relative" class=Glass margin=8 border-radius=24 padding=22 gap=18
+        row align-items="flex-end" gap=8
+          column flex=1 min-width=0 gap=4
+            text "Eaten" class=Caption font-weight=600
+            row align-items="baseline" gap=6
+              text num(d.kcal) class=Num font-size="2.5rem" letter-spacing="-1.5px" testId="diary-kcal"
+              text `/ ${num(b.profile.calories)} kcal` class=Caption
+          column align-items="flex-end" gap=4
+            text "Left" class=Caption font-weight=600
+            text num(max(0, b.profile.calories - d.kcal + d.burned)) class=Num font-size="1.375rem" color="ember-ink"
+        column height=12 border-radius=6 background-color="glass-edge" overflow="hidden"
+          column height="100%" width=pct(d.kcal, b.profile.calories + d.burned) border-radius=6 background-image="linear-gradient(90deg, var(--amber) 0%, var(--ember) 60%, var(--rose) 100%)" animation=(still ? "none" : "grow 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
+        row gap=10
+          MacroTile(label="Protein", tint="rose", grams=d.protein, goal=b.profile.protein)
+          MacroTile(label="Carbs", tint="amber", grams=d.carbs, goal=b.profile.carbs)
+          MacroTile(label="Fat", tint="iris", grams=d.fat, goal=b.profile.fat)
+        row gap=10
+          row class=Chip flex=1 min-width=0 white-space="nowrap" background-color="glass-strong" color="sky"
+            image "symbol:icon.drop" aria-hidden=true
+            text `${(d.water * 0.25).toFixed(2)} L water` color="ink"
+          row class=Chip flex=1 min-width=0 white-space="nowrap" background-color="glass-strong" color="ember"
+            image "symbol:icon.flame" aria-hidden=true
+            text `${num(d.burned)} burned` color="ink"
+
+component MacroTile
+  props
+    label: string
+    tint: string
+    grams: number
+    goal: number
+  view
+    column flex=1 min-width=0 gap=8 padding=12 border-radius=16 background-color="glass-strong"
+      row align-items="center" gap=6
+        column width=7 height=7 border-radius=4 background-color=tint
+        text label class=Caption font-weight=600
+      text `${grams} g` class=Num font-size="1.125rem"
+      column height=4 border-radius=2 background-color=`${tint}-soft` overflow="hidden"
+        column height="100%" border-radius=2 background-color=tint width=pct(grams, goal)
+
+component MealCard
+  props
+    m: Meal
+    day: string
+    openAdd: action
+    remove: action
+  view
+    column class=Card padding=0 gap=0 overflow="hidden" testId=`meal-${m.id}`
+      row align-items="center" gap=12 padding="16px 16px 14px 18px"
+        column class=Tile background-color=`${mealTint(m.id)}-soft` color=mealTint(m.id)
+          image mealIcon(m.id) font-size="1.25rem" aria-hidden=true
+        column flex=1 min-width=0 gap=2
+          text m.title role="heading" aria-level=2 font-size="1.0625rem" font-weight=700
+          text (m.entries.length == 0 ? "Nothing logged yet" : `${m.entries.length} ${m.entries.length == 1 ? "item" : "items"} · ${num(m.kcal)} kcal`) class=Caption testId=`meal-total-${m.id}`
+        button press=openAdd(m.id, day) class=Chip background-color="ember-soft" color="ember-ink" aria-label=`Add food to ${m.title}` testId=`diary-add-${m.id}`
+          image "symbol:icon.plus" aria-hidden=true
+          text "Add"
+      for x in m.entries key=x.id
+        row align-items="center" gap=12 padding="12px 12px 12px 18px" border-top="1px solid line"
+          FoodTile(kind=x.kind)
+          column flex=1 min-width=0 gap=3
+            text x.name font-size="0.9375rem" font-weight=600 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+            text `${x.portion} · P ${x.protein} · C ${x.carbs} · F ${x.fat}` font-size="0.75rem" color="ink-2" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+          text `${x.kcal}` class=Num font-size="0.9375rem"
+          button press=remove(x.id) class=Round width=30 height=30 background-color="transparent" color="ink-3" aria-label=`Remove ${x.name}` testId=`remove-${x.id}`
+            image "symbol:icon.close" font-size="0.875rem"
+
+component ActivityView
+  props
+    b: Board
+    cols: number
+    phone: bool
+    still: bool
+    openLog: action
+  view
+    column gap=18
+      TopBar(eyebrow=b.label.toUpperCase(), title="Activity", phone=phone)
+        button press=openLog class=GlassChip color="ink" testId="log-workout"
+          image "symbol:icon.plus" color="fern" aria-hidden=true
+          text "Workout"
+      if cols == 1
+        Steps(b=b, wide=false, still=still)
+        Hourly(bars=b.hourly, top=topOf(b.hourly), still=still)
+        StepWeek(b=b, still=still)
+        Workouts(items=b.workouts, openLog=openLog)
+      else
+        Steps(b=b, wide=true, still=still)
+        row gap=18 align-items="flex-start"
+          column flex=1 min-width=0 gap=18
+            Hourly(bars=b.hourly, top=topOf(b.hourly), still=still)
+            StepWeek(b=b, still=still)
+          column flex=1 min-width=0 gap=18
+            Workouts(items=b.workouts, openLog=openLog)
+
+component Steps
+  props
+    b: Board
+    wide: bool
+    still: bool
+  view
+    column position="relative" border-radius=34 overflow="hidden" testId="steps-card" animation=(still ? "none" : "rise 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
+      Aurora(kind="fresh", still=still)
+      column position="relative" class=Glass margin=8 border-radius=28 padding=(wide ? 28 : 22) gap=22 flex-direction=(wide ? "row" : "column") align-items="center"
+        Ring(size=(wide ? 200 : 210), width=20, fraction=frac(b.steps, b.profile.steps), from="fern-2", to="fern", track="glass-edge", gid="steps-ring", still=still)
+          column align-items="center" gap=2
+            image "symbol:icon.shoe" color="fern" font-size="1.375rem" aria-hidden=true
+            text num(b.steps) class=Num font-size="2.5rem" letter-spacing="-1.5px" testId="activity-steps"
+            text `of ${num(b.profile.steps)} steps` class=Caption font-weight=600
+        column flex=1 width="100%" gap=12
+          row gap=12
+            Tilestat(icon="symbol:icon.mountain", tint="sky", label="Distance", value=b.distance.toFixed(1), unit="km")
+            Tilestat(icon="symbol:icon.flame", tint="ember", label="Active", value=num(b.active), unit="kcal")
+          row gap=12
+            Tilestat(icon="symbol:icon.timer", tint="amber", label="Exercise", value=`${b.exercise}`, unit="min")
+            Tilestat(icon="symbol:icon.pulse", tint="rose", label="Resting", value=`${b.resting}`, unit="bpm")
+
+component Tilestat
+  props
+    icon: string
+    tint: string
+    label: string
+    value: string
+    unit: string
+  view
+    column flex=1 min-width=0 gap=10 padding=14 border-radius=20 background-color="glass-strong"
+      row align-items="center" gap=8
+        column class=Tile width=28 height=28 border-radius=9 background-color=`${tint}-soft` color=tint
+          image icon font-size="0.875rem" aria-hidden=true
+        text label class=Caption font-weight=600
+      row align-items="baseline" gap=4
+        text value class=Num font-size="1.5rem"
+        text unit class=Caption
+
+component Hourly
+  props
+    bars: number[]
+    top: number
+    still: bool
+  view
+    column class=Card gap=16 testId="hourly"
+      Head(title="Today", detail="steps by hour")
+      row height=120 align-items="flex-end" gap=3 overflow="hidden"
+        for v, i in bars key=i
+          column flex=1 height=pct(v, top) min-height=4 border-radius=4 background-color=(v > 0 ? "fern" : "card-2") animation=(still ? "none" : `lift 600ms ${i * 20}ms cubic-bezier(0.2, 0.8, 0.2, 1) both`)
+      row
+        for l in ["12 AM", "6 AM", "12 PM", "6 PM"] key=l
+          text l flex=1 font-size="0.6875rem" color="ink-2"
+
+component StepWeek
+  props
+    b: Board
+    still: bool
+  view
+    column class=Card gap=16 testId="step-week"
+      Head(title="This week", detail=`${num(sum(b.week.map(d => d.steps)))} steps`)
+      Columns(values=b.week.map(d => d.steps), labels=b.week.map(d => d.weekday.slice(0, 1)), goal=b.profile.steps, tint="fern", still=still)
+
+component Workouts
+  props
+    items: Workout[]
+    openLog: action
+  view
+    column class=Card gap=4 testId="workouts"
+      row align-items="center" gap=8 padding-bottom=6
+        Head(title="Workouts", detail="")
+        button press=openLog class=Chip background-color="fern-soft" color="fern" testId="log-workout-inline"
+          image "symbol:icon.plus" aria-hidden=true
+          text "Log"
+      if items.length == 0
+        EmptyState(symbol="symbol:activity", title="No workouts yet", message="Log a run, a ride or a stretch and it lands here.")
+      for x, i in items key=x.id
+        row align-items="center" gap=14 padding-top=12 padding-bottom=12 border-top=(i == 0 ? "none" : "1px solid line") testId=`workout-${x.id}`
+          column class=Tile background-color=`${workTint(x.kind)}-soft` color=workTint(x.kind)
+            image workIcon(x.kind) font-size="1.3125rem" aria-hidden=true
+          column flex=1 min-width=0 gap=2
+            text x.title font-size="1rem" font-weight=650
+            text x.when class=Caption
+          column align-items="flex-end" gap=2
+            text `${x.kcal}` class=Num font-size="1.0625rem"
+            text `${x.minutes} min` class=Caption
+
+component ProfileView
+  props
+    b: Board
+    cols: number
+    phone: bool
+    still: bool
+  slot
+  view
+    column gap=18
+      TopBar(eyebrow="PROFILE", title="You", phone=phone)
+      column flex-direction=(cols == 1 ? "column" : "row") gap=18 align-items=(cols == 1 ? "stretch" : "flex-start")
+        column flex=1 min-width=0 gap=18
+          column position="relative" border-radius=34 overflow="hidden" testId="profile-card"
+            Aurora(kind="dusk", still=still)
+            column position="relative" class=Glass margin=8 border-radius=28 padding=24 gap=20
+              row align-items="center" gap=16
+                column width=72 height=72 flex-shrink=0 border-radius=36 align-items="center" justify-content="center" background-image="linear-gradient(135deg, var(--cta) 0%, var(--cta-2) 100%)" box-shadow="0 0 0 4px glass-edge"
+                  text b.profile.name.slice(0, 1).toUpperCase() class=Num font-size="1.875rem" color="on-accent"
+                column flex=1 min-width=0 gap=6
+                  text b.profile.name font-size="1.5rem" font-weight=800 letter-spacing="-0.5px" testId="profile-name"
+                  row class=Chip align-self="flex-start" background-color="glass-strong" color="ember"
+                    image goalIcon(b.profile.goal) aria-hidden=true
+                    text goalTitle(b.profile.goal) color="ink"
+              row flex-wrap="wrap" row-gap=16 gap=12
+                Stat(icon="symbol:icon.flame", tint="ember", label="Streak", value=`${b.streak}`, unit="days")
+                Stat(icon="symbol:icon.barbell", tint="iris", label="Workouts", value=`${b.workouts.length}`, unit="logged")
+                Stat(icon="symbol:icon.target", tint="fern", label="Daily", value=num(b.profile.calories), unit="kcal")
+          Weight(b=b)
+        column flex=1 min-width=0 gap=18
+          column class=Card gap=0 padding="16px 20px 6px" testId="targets"
+            Head(title="Daily targets", detail="")
+            Target(label="Calories", icon="symbol:icon.flame", tint="ember", value=`${num(b.profile.calories)} kcal`, first=true)
+            Target(label="Protein", icon="symbol:icon.egg", tint="rose", value=`${b.profile.protein} g`, first=false)
+            Target(label="Carbs", icon="symbol:icon.grains", tint="amber", value=`${b.profile.carbs} g`, first=false)
+            Target(label="Fat", icon="symbol:icon.avocado", tint="iris", value=`${b.profile.fat} g`, first=false)
+            Target(label="Steps", icon="symbol:icon.shoe", tint="fern", value=num(b.profile.steps), first=false)
+            Target(label="Water", icon="symbol:icon.drop", tint="sky", value=`${b.profile.water} ${b.profile.water == 1 ? "glass" : "glasses"}`, first=false)
+          children
+
+component Target
+  props
+    label: string
+    icon: string
+    tint: string
+    value: string
+    first: bool
+  view
+    row align-items="center" gap=14 padding-top=12 padding-bottom=12 border-top=(first ? "none" : "1px solid line")
+      column class=Tile width=34 height=34 border-radius=11 background-color=`${tint}-soft` color=tint
+        image icon font-size="1.0625rem" aria-hidden=true
+      text label flex=1 font-size="1rem" font-weight=600
+      text value class=Num font-size="1rem" color="ink-2" testId=`target-${label}`
+
+// Weekly weigh-ins as lollipops: each stem's height is the distance above the goal weight.
+component Weight
+  props
+    b: Board
+  view
+    column class=Card gap=16 testId="weight"
+      row align-items="flex-end" gap=10
+        column flex=1 min-width=0 gap=4
+          text "Weight" role="heading" aria-level=2 font-size="1.125rem" font-weight=700
+          row align-items="baseline" gap=6
+            text b.profile.weight.toFixed(1) class=Num font-size="2.125rem" letter-spacing="-1px" testId="weight-now"
+            text "kg" class=Caption
+        column align-items="flex-end" gap=6
+          row class=Chip background-color="fern-soft" color="fern"
+            image "symbol:icon.down" aria-hidden=true
+            text (match first(b.weights) { case some(f) => `${(b.profile.weight - f.kg).toFixed(1)} kg`, case none => "0.0 kg" }) color="ink"
+          text `Goal ${b.profile.target.toFixed(1)} kg` class=Caption
+      Stems(weights=b.weights, top=topOf(b.weights.map(y => y.kg)), low=lowOf(b.weights.map(y => y.kg)))
+      row
+        text (match first(b.weights) { case some(f) => f.label, case none => "" }) flex=1 font-size="0.6875rem" color="ink-2"
+        text "Now" font-size="0.6875rem" font-weight=700 color="ink"
+
+component Stems
+  props
+    weights: Weigh[]
+    top: number
+    low: number
+  view
+    row height=130 align-items="flex-end" gap=6
+      for x, i in weights key=x.day
+        column flex=1 height="100%" justify-content="flex-end" align-items="center"
+          column width=12 height=12 flex-shrink=0 border-radius=6 box-sizing="border-box" border="3px solid iris" background-color=(i == weights.length - 1 ? "iris" : "card")
+          column width=3 height=pct(x.kg - low + (top - low) * 0.25 + 0.2, (top - low) * 1.25 + 0.2) min-height=4 border-radius=2 background-image="linear-gradient(180deg, var(--iris) 0%, var(--iris-soft) 100%)"
+
+component AddFood
+  props
+    foods: Food[]
+    meal: string
+    error: string
+    busy: bool
+    loading: bool
+    query: string
+    chooseMeal: action
+    add: action
+  view
+    column width="100%" max-width="42.5rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding=16 gap=14
+      row role="radiogroup" aria-label="Meal"
+        for m in ["breakfast", "lunch", "dinner", "snacks"] key=m
+          button role="radio" aria-checked=(meal == m) press=chooseMeal(m) testId=`meal-pick-${m}`
+            text mealTitle(m)
+      if error != ""
+        text error role="alert" color="ember-ink" font-size="0.875rem" testId="add-error"
+      if foods.length == 0 and not loading
+        EmptyState(symbol="symbol:search", title="No matches", message=`Nothing in the library matches “${query}”.`)
+      else
+        column class=Card padding=0 gap=0 overflow="hidden"
+          for f, i in foods key=f.id
+            row align-items="center" gap=12 padding="12px 12px 12px 16px" border-top=(i == 0 ? "none" : "1px solid line")
+              FoodTile(kind=f.kind)
+              column flex=1 min-width=0 gap=3
+                text f.name font-size="0.9375rem" font-weight=600
+                text `${f.portion} · ${f.protein} g protein` font-size="0.75rem" color="ink-2"
+              row align-items="baseline" gap=3
+                text `${f.kcal}` class=Num font-size="0.9375rem"
+                text "kcal" font-size="0.75rem" color="ink-2"
+              button press=add(f.id) disabled=busy class=Round background-color="ember" color="on-accent" aria-label=`Add ${f.name}` testId=`food-${f.id}`
+                image "symbol:icon.plus"
+
+component LogWorkout
+  props
+    kind: string
+    minutes: number
+    error: string
+    chooseKind: action
+    nudge: action
+  view
+    column width="100%" max-width="38.75rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding=20 gap=22
+      column gap=12
+        text "TYPE" class=Eyebrow
+        row flex-wrap="wrap" gap=10 role="radiogroup" aria-label="Workout type"
+          for k in ["run", "walk", "cycle", "strength", "yoga", "swim"] key=k
+            button press=chooseKind(k) role="radio" aria-checked=(kind == k) appearance="none" flex="1 1 30%" min-width=96 display="flex" flex-direction="column" align-items="center" gap=8 padding="16px 8px" border-radius=20 border=(kind == k ? "2px solid ember" : "2px solid line") background-color=(kind == k ? "ember-soft" : "card") color="ink" testId=`kind-${k}`
+              column class=Tile width=40 height=40 border-radius=13 background-color=`${workTint(k)}-soft` color=workTint(k)
+                image workIcon(k) font-size="1.25rem" aria-hidden=true
+              text workTitle(k) font-size="0.875rem" font-weight=650
+      column class=Card gap=18 align-items="center" padding=24
+        text "DURATION" class=Eyebrow
+        row align-items="center" gap=20
+          button press=nudge(-5) class=Round width=52 height=52 border-radius=26 background-color="card-2" color="ink" aria-label="Five minutes less" testId="minutes-less"
+            image "symbol:icon.minus"
+          row align-items="baseline" gap=6 min-width=130 justify-content="center"
+            text `${minutes}` class=Num font-size="3.5rem" letter-spacing="-2px" testId="minutes"
+            text "min" class=Caption font-size="1rem"
+          button press=nudge(5) class=Round width=52 height=52 border-radius=26 background-color="card-2" color="ink" aria-label="Five minutes more" testId="minutes-more"
+            image "symbol:icon.plus"
+        row class=Chip background-color="ember-soft" color="ember"
+          image "symbol:icon.flame" aria-hidden=true
+          text `About ${round(minutes * workRate(kind))} kcal` color="ink" testId="workout-estimate"
+      if error != ""
+        text error role="alert" color="ember-ink" font-size="0.875rem" testId="log-error"
+
+component Welcome
+  props
+    phone: bool
+    still: bool
+    begin: action
+    skip: action
+  view
+    column min-height="100%" width="100%" max-width="32.5rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding=(phone ? "56px 22px 28px" : "72px 28px 40px") gap=30 justify-content="space-between" testId="welcome"
+      column align-items="center" gap=22 text-align="center" animation=(still ? "none" : "rise 800ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
+        column class=Glass width=96 height=96 border-radius=30 align-items="center" justify-content="center" color="ember"
+          image "symbol:icon.flame" font-size="3.125rem" aria-hidden=true
+        column align-items="center" gap=14
+          text "EMBER" class=Eyebrow letter-spacing="5px" color="ink"
+          text "Fuel the day. Feel the difference." role="heading" aria-level=1 font-size=(phone ? "2.375rem" : "2.875rem") font-weight=800 letter-spacing="-1.5px" line-height=1.05
+          text "Meals, movement and water in one calm place, with a plan that adapts to you." font-size="1.0625rem" line-height=1.45 color="ink-2" max-width=400
+      column class=Glass border-radius=28 padding="6px 18px" animation=(still ? "none" : "rise 800ms 120ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
+        Feature(icon="symbol:icon.fork", tint="amber", title="Log a meal in seconds", detail="Twenty-six everyday foods, one tap each.", first=true)
+        Feature(icon="symbol:icon.flame", tint="ember", title="Rings that keep you honest", detail="Energy, steps and water at a glance.", first=false)
+        Feature(icon="symbol:icon.sparkle", tint="iris", title="A plan built for you", detail="Calories and macros from your goal.", first=false)
+      column gap=10 animation=(still ? "none" : "rise 800ms 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
+        button press=begin class=Pill testId="get-started"
+          text "Get started"
+          image "symbol:icon.arrow" aria-hidden=true
+        button press=skip appearance="none" height=44 border-width=0 background-color="transparent" color="ink-2" font-size="0.9375rem" font-weight=600 testId="skip-intro"
+          text "I already have a plan"
+
+component Feature
+  props
+    icon: string
+    tint: string
+    title: string
+    detail: string
+    first: bool
+  view
+    row align-items="center" gap=14 padding-top=14 padding-bottom=14 border-top=(first ? "none" : "1px solid glass-edge")
+      column class=Tile width=40 height=40 border-radius=13 background-color=`${tint}-soft` color=tint
+        image icon font-size="1.1875rem" aria-hidden=true
+      column flex=1 min-width=0 gap=2
+        text title font-size="1rem" font-weight=650
+        text detail class=Caption
+
+component GoalStep
+  props
+    name: string
+    goal: string
+    editName: action
+    chooseGoal: action
+  view
+    column gap=22
+      column gap=8
+        text "What brings you here?" role="heading" aria-level=1 font-size="2rem" font-weight=800 letter-spacing="-1px" line-height=1.2
+        text "Pick a direction. You can change it any time." font-size="1rem" color="ink-2"
+      column class=Glass border-radius=22 padding="12px 18px" gap=2
+        text "Your name" class=Caption font-weight=600
+        input value=name input=editName placeholder="First name" aria-label="Your name" autocomplete="given-name" border="none" background-color="transparent" color="ink" font-size="1.25rem" font-weight=650 padding=0 height=32 testId="ob-name"
+      column gap=12 role="radiogroup" aria-label="Goal"
+        for g in ["lose", "maintain", "gain"] key=g
+          button press=chooseGoal(g) role="radio" aria-checked=(goal == g) appearance="none" class=Glass display="flex" align-items="center" gap=16 padding=18 border-radius=24 border=(goal == g ? "2px solid ember" : "2px solid glass-edge") background-color=(goal == g ? "glass-strong" : "glass") color="ink" text-align="left" testId=`goal-${g}`
+            column class=Tile width=48 height=48 border-radius=16 background-color=(goal == g ? "ember" : "ember-soft") color=(goal == g ? "on-accent" : "ember")
+              image goalIcon(g) font-size="1.375rem" aria-hidden=true
+            column flex=1 min-width=0 gap=3
+              text goalTitle(g) font-size="1.0625rem" font-weight=700
+              text (g == "lose" ? "A gentle deficit, about 0.5 kg a week." : g == "gain" ? "A small surplus with plenty of protein." : "Eat to your energy and feel good.") class=Caption
+            column width=24 height=24 border-radius=12 flex-shrink=0 box-sizing="border-box" align-items="center" justify-content="center" border=(goal == g ? "none" : "2px solid ink-3") background-color=(goal == g ? "ember" : "transparent") color="on-accent"
+              if goal == g
+                image "symbol:icon.check" font-size="0.8125rem" aria-hidden=true
+
+component MeasureStep
+  props
+    goal: string
+    weight: number
+    target: number
+    height: number
+    age: number
+    level: string
+    nudge: action
+    chooseLevel: action
+  view
+    column gap=22
+      column gap=8
+        text "A little about you" role="heading" aria-level=1 font-size="2rem" font-weight=800 letter-spacing="-1px" line-height=1.2
+        text "We size your daily energy from this. It stays on this device." font-size="1rem" color="ink-2"
+      column class=Glass border-radius=24 padding="4px 18px"
+        Measure(field="weight", label="Weight", unit="kg", value=weight.toFixed(1), step=0.5, first=true, nudge=nudge)
+        if goal != "maintain"
+          Measure(field="target", label="Goal weight", unit="kg", value=target.toFixed(1), step=0.5, first=false, nudge=nudge)
+        Measure(field="height", label="Height", unit="cm", value=`${height}`, step=1, first=false, nudge=nudge)
+        Measure(field="age", label="Age", unit="years", value=`${age}`, step=1, first=false, nudge=nudge)
+      column gap=12
+        text "HOW ACTIVE ARE YOU?" class=Eyebrow
+        row gap=10 role="radiogroup" aria-label="Activity"
+          Level(id="light", title="Light", icon="symbol:icon.walk", level=level, choose=chooseLevel)
+          Level(id="moderate", title="Moderate", icon="symbol:icon.run", level=level, choose=chooseLevel)
+          Level(id="active", title="Very active", icon="symbol:icon.barbell", level=level, choose=chooseLevel)
+
+component Measure
+  props
+    field: string
+    label: string
+    unit: string
+    value: string
+    step: number
+    first: bool
+    nudge: action
+  view
+    row align-items="center" gap=12 padding-top=14 padding-bottom=14 border-top=(first ? "none" : "1px solid glass-edge")
+      column flex=1 min-width=0 gap=2
+        text label class=Caption font-weight=600
+        row align-items="baseline" gap=5
+          text value class=Num font-size="1.625rem" testId=`ob-${field}`
+          text unit class=Caption
+      button press=nudge(field, 0 - step) class=Round width=40 height=40 border-radius=20 background-color="glass-strong" color="ink" aria-label=`Less ${label}` testId=`${field}-less`
+        image "symbol:icon.minus"
+      button press=nudge(field, step) class=Round width=40 height=40 border-radius=20 background-color="glass-strong" color="ink" aria-label=`More ${label}` testId=`${field}-more`
+        image "symbol:icon.plus"
+
+component Level
+  props
+    id: string
+    title: string
+    icon: string
+    level: string
+    choose: action
+  view
+    button press=choose(id) role="radio" aria-checked=(level == id) appearance="none" class=Glass flex=1 min-width=0 display="flex" flex-direction="column" align-items="center" gap=8 padding="16px 6px" border-radius=20 border=(level == id ? "2px solid ember" : "2px solid glass-edge") background-color=(level == id ? "glass-strong" : "glass") color=(level == id ? "ember" : "ink-2") testId=`level-${id}`
+      image icon font-size="1.5rem" aria-hidden=true
+      text title font-size="0.875rem" font-weight=650 color="ink"
+
+component PlanStep
+  props
+    name: string
+    goal: string
+    weight: number
+    target: number
+    kcal: number
+    protein: number
+    carbs: number
+    fat: number
+    still: bool
+  view
+    column gap=22
+      column gap=8
+        text `Your plan, ${name.trim() == "" ? "friend" : name.trim()}` role="heading" aria-level=1 font-size="2rem" font-weight=800 letter-spacing="-1px" line-height=1.2
+        text (goal == "maintain" ? "Enough energy to hold steady and feel strong." : `About ${weeksTo(goal, weight, target)} ${weeksTo(goal, weight, target) == 1 ? "week" : "weeks"} to reach ${target.toFixed(1)} kg at a steady pace.`) font-size="1rem" color="ink-2" testId="plan-pace"
+      column class=Glass border-radius=30 padding=24 gap=22 align-items="center"
+        Ring(size=210, width=18, fraction=1, from="ember-2", to="rose", track="glass-edge", gid="plan-ring", still=still)
+          column align-items="center" gap=2
+            text num(kcal) class=Num font-size="3rem" letter-spacing="-2px" testId="plan-kcal"
+            text "kcal a day" class=Caption font-weight=600
+        row gap=10 width="100%"
+          PlanMacro(label="Protein", tint="rose", grams=protein)
+          PlanMacro(label="Carbs", tint="amber", grams=carbs)
+          PlanMacro(label="Fat", tint="iris", grams=fat)
+      row gap=12 align-items="center" padding="4px 6px"
+        image "symbol:icon.sparkle" color="ember" aria-hidden=true
+        text "Ember nudges these targets as your weight changes." flex=1 class=Caption line-height=1.4
+
+component PlanMacro
+  props
+    label: string
+    tint: string
+    grams: number
+  view
+    column flex=1 min-width=0 gap=6 padding=14 border-radius=18 background-color="glass-strong" align-items="center"
+      text label class=Caption font-weight=600
+      text `${grams} g` class=Num font-size="1.25rem" color=tint testId=`plan-${label}`
