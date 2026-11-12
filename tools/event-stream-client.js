@@ -1,5 +1,6 @@
 // Exact's dev events and editor commands share one project WebSocket through
 // a SharedWorker. Older browsers fall back to a socket per frame.
+// That includes Exact's per-page live-reload stream (/__dev/page in the pinned SDK).
 // EventSource's HTTP/1 connections otherwise starve lazy app/data imports once
 // several previews are open on the project's shared storage origin.
 (()=>{
@@ -45,7 +46,7 @@
     onopen=null;onmessage=null;onerror=null;lastEventId='';retry=0;
     constructor(value,options){
       super();const url=new URL(value,document.baseURI);
-      if(url.origin!==location.origin||!['/__dev/events','/__exact_design/events'].includes(url.pathname))return new NativeEventSource(value,options);
+      if(url.origin!==location.origin||!['/__dev/events','/__dev/page','/__exact_design/events'].includes(url.pathname))return new NativeEventSource(value,options);
       this.url=url.href;this.path=url.pathname+url.search;this.id=String(++serial);this.withCredentials=!!options?.withCredentials;
       streams.set(this.id,this);connect();subscribe(this);
     }

@@ -15,7 +15,7 @@ shape SnapTarget
 
 fn propertyIcon(property: string, value: string): string = property == "flex-direction" ? (value.startsWith("row") ? "columns-2" : "rows-2") : property == "align-items" ? (value == "flex-start" ? "align-vertical-justify-start" : value == "center" ? "align-vertical-justify-center" : value == "flex-end" ? "align-vertical-justify-end" : value == "stretch" ? "move-vertical" : "align-vertical-justify-end") : value == "flex-start" ? "align-horizontal-justify-start" : value == "center" ? "align-horizontal-justify-center" : value == "flex-end" ? "align-horizontal-justify-end" : "between-horizontal-start"
 
-fn deviceIcon(name: string): string = name == "Phone" ? "smartphone" : name == "Tablet" ? "tablet" : "monitor"
+fn deviceIcon(name: string): string = name.includes("Phone") or name == "Android" ? "smartphone" : name.includes("iPad") or name == "Tablet" ? "tablet" : "monitor"
 fn propertyPrefix(property: string): string = property == "left" ? "X" : property == "top" ? "Y" : property == "width" ? "W" : property == "height" ? "H" : ""
 fn propertyGlyph(property: string): string = property == "rotate" ? "rotate-cw" : property == "opacity" ? "blend" : property == "border-radius" ? "radius" : property == "font-size" ? "a-large-small" : property == "line-height" ? "baseline" : property == "letter-spacing" ? "whole-word" : property == "z-index" ? "layers" : property == "border-width" ? "minus" : property == "gap" or property == "row-gap" or property == "column-gap" ? "between-horizontal-start" : ""
 fn compoundIcon(property: string): string = property == "padding" ? "square-dashed" : property == "margin" ? "scan" : property == "border-radius" ? "radius" : "between-horizontal-start"
@@ -106,6 +106,22 @@ shape Document
   code: string
   status: string
   resizing: bool
+  devices: DeviceOption[]
+  deviceSets: DeviceSet[]
+
+shape DeviceOption
+  name: string
+  slug: string
+  kind: string
+  width: number
+  height: number
+  label: string
+
+shape DeviceSet
+  name: string
+  slug: string
+  label: string
+  count: number
 
 shape Reply
   error: string
@@ -471,6 +487,12 @@ component Studio
   action addViewport(preset: string)
     addingViewport = false
     command("variant", preset)
+  action addViewportSet(name: string)
+    addingViewport = false
+    startTidy()
+    command("variants", name)
+  action tidyUp
+    command("arrange", "")
   state projectName = ""
   state projectUrl = ""
   state projectNameChanged = false
@@ -524,7 +546,12 @@ component Studio
     send libraryChanged = library("connect", projectNameValue, projectUrlValue, "", time.epochAtZero + performanceNow())
   action disconnectProject
     send libraryChanged = library("disconnect", "", "", "", time.epochAtZero + performanceNow())
+  action addAllScreens
+    startTidy()
+    send libraryChanged = library("add-all", "", "", screenPreset, time.epochAtZero + performanceNow())
   action saveScreen
+    if doc.deviceSets.filter(s => s.name == screenPreset).length > 0
+      startTidy()
     send libraryChanged = library(screenKind, screenName, screenPath, screenPreset, time.epochAtZero + performanceNow())
   action toggleGroup(id: string)
     collapsed = collapsed.includes(id) ? collapsed.filter(value => value != id) : collapsed.concat([id])
@@ -539,9 +566,62 @@ component Studio
     resetView()
   task fitLoaded when fitWhenReady and fittedSignature != previews.signature and previews.ready and previews.requests == doc.previewRequests and not pending(doc) and not pending(renderedScene)
     after(1, fitLoadedScreens)
+  // After a bulk add, frames report content heights over several seconds. Tidy on each new measurement
+  // for a short window (one merged undo step) and keep the camera fitted until the person pans or zooms.
+  state tidyWhenReady = false
+  state tidySignature = ""
+  state tidyFit = false
+  state tidyFitted = ""
+  action startTidy
+    tidyWhenReady = true
+    tidySignature = ""
+    tidyFit = true
+    tidyFitted = ""
+  action finishTidy
+    tidyWhenReady = false
+  task stopTidy when tidyWhenReady
+    after(20000, finishTidy)
+  action tidyLoadedScreens
+    tidySignature = previews.signature
+    command("arrange", "settle")
+  task autoTidy when tidyWhenReady and previews.ready and previews.signature != tidySignature and previews.requests == doc.previewRequests and not pending(doc) and not pending(renderedScene) and not pending(libraryChanged) and not pending(changed)
+    after(400, tidyLoadedScreens)
+  action refitAfterTidy
+    tidyFitted = tidySignature
+    resetView()
+  task tidyRefit when tidyFit and tidySignature != "" and tidyFitted != tidySignature and not pending(changed) and not pending(doc) and not pending(renderedScene)
+    after(1, refitAfterTidy)
+  derive addableScreens = discovered.routes.filter(r => not r.added and not r.dynamic).length
+  // A setup link (`/?connect=<app url>&name=<name>&viewports=<set or device>`) connects that project and adds
+  // each of its screens once per browser; reloading the link leaves later edits alone.
+  derive setupUrl = top(nav).name == "editor" ? searchParam(top(nav), "connect") : ""
+  derive setupName = searchParam(top(nav), "name") == "" ? "project" : searchParam(top(nav), "name")
+  derive setupKey = `${setupUrl} ${searchParam(top(nav), "name")} ${searchParam(top(nav), "viewports")}`
+  state appliedSetup = "" persist
+  state setupRunning = false
+  state setupError = ""
+  state setupDismissed = false
+  action runSetup
+    appliedSetup = setupKey
+    setupError = ""
+    setupRunning = true
+    startTidy()
+    send libraryChanged = library("setup", searchParam(top(nav), "name"), setupUrl, searchParam(top(nav), "viewports"), time.epochAtZero + performanceNow())
+  action dismissSetupError
+    setupError = ""
+    setupDismissed = true
+  // A failed setup (the app not started yet) runs again on the next load, unless its error was dismissed.
+  task autoSetup when setupUrl != "" and appliedSetup != setupKey and setupError == "" and not setupDismissed and not pending(doc) and not pending(libraryChanged)
+    after(1, runSetup)
   action afterLibrary
     match libraryChanged
       case some(r)
+        if setupRunning
+          setupRunning = false
+          if not r.ok
+            setupError = r.error
+            appliedSetup = ""
+            tidyWhenReady = false
         if r.ok
           if top(nav).name != "editor"
             nav = back(nav)
@@ -619,6 +699,7 @@ component Studio
   action down(e: PointerEvent)
     cancelPan()
     fitWhenReady = false
+    tidyFit = false
     if e.button == 0
       freeDrag = e.altKey
       dragging = true
@@ -646,6 +727,7 @@ component Studio
   action wheel(e: WheelEvent)
     cancelPan()
     fitWhenReady = false
+    tidyFit = false
     preventDefault()
     if e.ctrlKey or e.metaKey
       let z = min(3, max(0.01, zoom * (1 - e.deltaY * 0.005)))
@@ -765,9 +847,12 @@ component Studio
             MenuItem(label="Duplicate screen", icon="copy", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-duplicate", press=command("duplicate", ""))
             for preset in ["Phone", "Tablet", "Desktop"] key=preset
               MenuItem(label=`Add ${preset.toLowerCase()} viewport`, icon=deviceIcon(preset), shortcut="", disabled=false, destructive=false, menu="studio-menu", testId=`menu-variant-${preset.toLowerCase()}`, press=addViewport(preset))
+            MenuItem(label="Add every size", icon="monitor-smartphone", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-variant-every-size", press=addViewportSet("Every size"))
           if doc.selected != ""
             MenuItem(label="Delete", icon="trash-2", shortcut="⌫", disabled=doc.frameSelected and doc.views.length == 1, destructive=true, menu="studio-menu", testId="menu-delete", press=command("delete", ""))
         MenuDivider()
+        if not editing
+          MenuItem(label="Tidy up", icon="layout-grid", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-tidy", press=tidyUp)
         MenuItem(label="Zoom to fit", icon="maximize", shortcut="⇧1", disabled=false, destructive=false, menu="studio-menu", testId="menu-fit", press=resetView)
         MenuItem(label=(editing or doc.frameSelected ? "Zoom to screen" : "Zoom to selection"), icon="scan", shortcut="⇧2", disabled=false, destructive=false, menu="studio-menu", testId="menu-fit-selection", press=fitSelection)
         MenuDivider()
@@ -802,6 +887,7 @@ component Studio
                   else
                     row height=40 flex-shrink=0 box-sizing="border-box" align-items="center" gap=4 padding="0 12px 0 16px"
                       SectionHeading(label="Screens")
+                      SmallButton(icon="layout-grid", label="Tidy up", selected=false, disabled=false, testId="tidy-up", press=tidyUp)
                       SmallButton(icon="plus", label="Add screen", selected=false, disabled=false, testId="add-screen", press=addScreen)
                     scroll flex=1 min-height=0
                       column padding="0 8px 12px" gap=1
@@ -869,6 +955,18 @@ component Studio
                   row class=FloatingBar position="absolute" bottom=68 left="50%" translate="-50% 0" height=32 padding="0 12px" gap=8 max-width="calc(100% - 32px)" min-width=0 z-index=2 role="status" color=(doc.status == "Saved" ? "ink.secondary" : "ink.danger")
                     Icon(name=(doc.status == "Saved" ? "check" : "circle-alert"), size=14, angle=0)
                     text doc.status testId="save-status" font="type.body" color="ink.primary" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" min-width=0
+                if setupRunning
+                  row class=FloatingBar position="absolute" bottom=108 left="50%" translate="-50% 0" height=36 padding="0 12px" gap=8 z-index=2 role="status" color="ink.secondary" testId="setup-status"
+                    Icon(name="refresh-cw", size=14, angle=0)
+                    text `Setting up ${setupName}…` font="type.body" color="ink.primary" white-space="nowrap"
+                if setupError != ""
+                  row class=FloatingBar position="absolute" bottom=108 left="50%" translate="-50% 0" max-width="calc(100% - 32px)" min-height=36 padding="4px 4px 4px 12px" gap=8 z-index=2 role="alert" testId="setup-error"
+                    column color="ink.danger" flex-shrink=0
+                      Icon(name="circle-alert", size=14, angle=0)
+                    text `Couldn't set up ${setupName}: ${setupError}` font="type.body" color="ink.primary" flex=1 min-width=0
+                    button press=runSetup class=SecondaryButton height=26 padding="0 10px" testId="setup-retry"
+                      text "Retry"
+                    SmallButton(icon="x", label="Dismiss", selected=false, disabled=false, testId="setup-dismiss", press=dismissSetupError)
                 row class=FloatingBar display=(panelOverlay ? "none" : "flex") position="absolute" bottom=16 left="50%" translate="-50% 0" z-index=2
                   ToolbarButton(icon="mouse-pointer-2", label="Select", hint="Select (V)", shortcut="v", selected=not hand, disabled=false, testId="select-tool", press=selectTool)
                   ToolbarButton(icon="hand", label="Pan", hint="Pan (H) · Hold Space to pan", shortcut="h", selected=hand, disabled=false, testId="hand-tool", press=handTool)
@@ -1087,21 +1185,29 @@ component Studio
                               SmallButton(icon="plus", label="Add viewport", selected=addingViewport, disabled=false, testId="add-viewport", press=toggleViewportMenu)
                               SmallButton(icon="trash-2", label="Delete viewport", selected=false, disabled=(doc.views.length == 1), testId="delete", press=command("delete", ""))
                             if addingViewport
-                              column gap=2 padding=4 border-radius="radius.control" background-color="surface.field"
-                                for preset in ["Phone", "Tablet", "Desktop"] key=preset
-                                  button press=addViewport(preset) class=RowButton height=26 aria-label=`Add ${preset} viewport` testId=`variant-${preset.toLowerCase()}`
-                                    column color="ink.muted"
-                                      Icon(name=deviceIcon(preset), size=14, angle=0)
-                                    text `Add ${preset.toLowerCase()} viewport`
+                              column gap=1 padding=4 border-radius="radius.control" background-color="surface.field"
+                                for set in doc.deviceSets key=set.slug
+                                  button press=addViewportSet(set.name) class=RowButton height=26 aria-label=`Add ${set.name} set` title=`Add each size in ${set.name} that this screen does not show yet` testId=`variant-set-${set.slug}`
+                                    column color="ink.selected"
+                                      Icon(name="monitor-smartphone", size=14, angle=0)
+                                    text set.label flex=1 min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                                column height=1 margin="3px 4px" background-color="line.subtle" aria-hidden=true
+                                scroll max-height=232
+                                  column gap=1
+                                    for device in doc.devices key=device.slug
+                                      button press=addViewport(device.name) class=RowButton height=26 aria-label=`Add ${device.name} viewport` testId=`variant-${device.slug}`
+                                        column color="ink.muted"
+                                          Icon(name=deviceIcon(device.name), size=14, angle=0)
+                                        text device.name flex=1 min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                                        text `${device.width} × ${device.height}` font="type.caption" color="ink.muted" font-variant-numeric="tabular-nums"
                             row class=FieldShell
                               row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" pointer-events="none" aria-hidden=true
                                 Icon(name=deviceIcon(v.name), size=14, angle=0)
                               select value=v.name change=prop("preset") class=Field flex=1 background-color="transparent" padding-left=0 aria-label="Viewport preset" testId="viewport-preset"
                                 if v.name == "Custom"
                                   option "Custom" value="Custom" disabled=true
-                                option "Phone" value="Phone"
-                                option "Tablet" value="Tablet"
-                                option "Desktop" value="Desktop"
+                                for device in doc.devices key=device.slug
+                                  option device.label value=device.name
                             row gap=8 align-items="center"
                               PropertyField(label="W", accessibleLabel="Viewport width", value=`${v.width}`, change=prop("width"), testId="frame-width")
                               PropertyField(label="H", accessibleLabel="Viewport height", value=`${v.height}`, change=prop("height"), testId="frame-height")
@@ -1364,12 +1470,15 @@ component Studio
                           Icon(name="route", size=14, angle=0)
                         input value=screenPath input=screenPathInput class=Field flex=1 background-color="transparent" padding-left=0 placeholder="/settings" aria-label="Route" testId="new-screen-route"
                   column gap=4
-                    FieldLabel(label="First viewport")
-                    row class=Segmented
-                      for preset in ["Phone", "Tablet", "Desktop"] key=preset
-                        button press=choosePreset(preset) class=Segment aria-pressed=(screenPreset == preset) testId=`new-preset-${preset}`
-                          Icon(name=deviceIcon(preset), size=14, angle=0)
-                          text preset font="type.body"
+                    FieldLabel(label="Viewports")
+                    row class=FieldShell
+                      row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" aria-hidden=true
+                        Icon(name=(doc.deviceSets.filter(s => s.name == screenPreset).length > 0 ? "monitor-smartphone" : deviceIcon(screenPreset)), size=14, angle=0)
+                      select value=screenPreset change=choosePreset class=Field flex=1 background-color="transparent" padding-left=0 aria-label="Viewports" testId="new-screen-viewports"
+                        for set in doc.deviceSets key=set.slug
+                          option set.label value=set.name
+                        for device in doc.devices key=device.slug
+                          option device.label value=device.name
                   if libraryError != ""
                     row gap=8 align-items="flex-start" color="ink.danger"
                       Icon(name="circle-alert", size=14, angle=0)
@@ -1384,6 +1493,10 @@ component Studio
                   button press=saveProject disabled=(projectNameValue.trim() == "" or projectUrlValue.trim() == "" or pending(libraryChanged)) class=PrimaryButton testId="save-project"
                     text (doc.projectUrl == "" ? "Connect" : "Save")
                 else
+                  if screenKind == "add" and discovered.owner == doc.projectUrl and not pending(discovered) and addableScreens > 0
+                    button press=addAllScreens disabled=pending(libraryChanged) class=SecondaryButton title="Add every listed screen that is not on the canvas yet, each with the chosen viewports" testId="add-all-screens"
+                      Icon(name="layout-grid", size=14, angle=0)
+                      text `Add all ${addableScreens}`
                   row flex=1
                   button press=saveScreen disabled=(screenName.trim() == "" or pending(libraryChanged)) class=PrimaryButton testId="create-screen"
                     Icon(name="plus", size=14, angle=0)

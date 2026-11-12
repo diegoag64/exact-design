@@ -39,6 +39,7 @@ test('studio icons, context menus and canvas gestures share the desktop interact
     await page.waitForFunction(()=>document.activeElement?.getAttribute('role')==='menuitem');
     await page.keyboard.press('End');expect(await page.evaluate(()=>document.activeElement.id)).toBe('menu-inspector');
     await page.keyboard.press('Home');expect(await page.evaluate(()=>document.activeElement.id)).toBe('menu-delete');
+    await page.keyboard.press('ArrowDown');expect(await page.evaluate(()=>document.activeElement.id)).toBe('menu-tidy');
     await page.keyboard.press('ArrowDown');expect(await page.evaluate(()=>document.activeElement.id)).toBe('menu-fit');
     await page.keyboard.press('Escape');expect(await menu.isVisible()).toBe(false);expect(await heading.evaluate(el=>el===document.activeElement)).toBe(true);
     // Menu actions address the right-clicked row, not the previous selection.

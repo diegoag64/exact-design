@@ -30,6 +30,11 @@ test('WebSocket control streams preserve upstream IDs and close their subscripti
     expect(await read()).toMatchObject({id:'native',kind:'open'});
     expect(await read()).toEqual({id:'native',kind:'event',type:'message',data:'{"nonce":"run"}',lastEventId:'9'});
     expect(paths).toEqual(['/__dev/events']);expect(headers).toEqual(['8']);
+    // The pinned SDK's per-page live-reload stream shares the socket too; a native EventSource per frame starves HTTP/1.
+    socket.send(JSON.stringify({op:'open',id:'page',path:'/__dev/page'}));
+    expect(await read()).toMatchObject({id:'page',kind:'open'});
+    expect(await read()).toMatchObject({id:'page',kind:'event',data:'{"nonce":"run"}'});
+    expect(paths).toEqual(['/__dev/events','/__dev/page']);paths.length=1;
     socket.send(JSON.stringify({op:'open',id:'editor',path:'/__exact_design/events?frame=phone'}));
     expect(await read()).toMatchObject({id:'editor',kind:'open'});
     bridge.select('phone','target');expect(await read()).toMatchObject({id:'editor',kind:'event',lastEventId:'1'});

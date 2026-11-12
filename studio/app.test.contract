@@ -426,7 +426,7 @@ test "discover screens, resolve parameters, and refresh the manifest"
   tap "discovered-0"
   expect text "new-screen-name" == "Library"
   expect text "new-screen-route" == "/"
-  tap "new-preset-Tablet"
+  type "new-screen-viewports" "Tablet"
   tap "create-screen"
   clock data
   expect state doc.route == "/"
@@ -854,3 +854,99 @@ test "review pending design changes and revert one before applying"
   expect tree missing "apply-design"
   expect text "design-property-0" == "#ffffff"
   request POST "http://127.0.0.1:5176/fixture/assert-color?value=%23ffffff" {}
+
+test "add a device set to a screen and tidy up"
+  size 1440x900
+  tap "view-view-1"
+  clock data
+  tap "add-viewport"
+  tap "variant-set-core"
+  clock data
+  expect state doc.views.length == 4
+  expect state doc.views.3.width == 1440
+  tap "add-viewport"
+  tap "variant-set-core"
+  clock data
+  expect state doc.views.length == 4
+  tap "add-viewport"
+  tap "variant-ipad-mini"
+  clock data
+  expect state doc.views.length == 5
+  expect state doc.width == 744
+  tap "tidy-up"
+  clock data
+  expect state doc.views.1.x == 800
+
+test "add every discovered screen with a device set"
+  size 1440x900
+  request POST "http://127.0.0.1:5176/mode" {"mode":"normal"}
+  tap "project-connection"
+  type "project-name" "Discovered app"
+  type "project-url" "http://127.0.0.1:5176"
+  tap "save-project"
+  clock data
+  tap "add-screen"
+  clock data
+  type "new-screen-viewports" "Core"
+  expect text "add-all-screens" == "Add all 2"
+  tap "add-all-screens"
+  clock data
+  expect state doc.groups.length == 3
+  expect state doc.views.length == 7
+  tap "add-screen"
+  clock data
+  expect tree missing "add-all-screens"
+
+test "presented modal routes keep the device height in automatic mode"
+  size 1440x900
+  request POST "http://127.0.0.1:5176/mode" {"mode":"full-height"}
+  tap "view-view-1"
+  clock data
+  type "preview-url" "http://127.0.0.1:5176/sheet"
+  type "preview-url" key "Enter"
+  clock data
+  clock +1500 real
+  expect state doc.views.0.autoHeight == true
+  expect state scene.views.0.height == 520
+  type "preview-url" "http://127.0.0.1:5176/"
+  type "preview-url" key "Enter"
+  clock data
+  clock +1500 real
+  expect state scene.views.0.height == 1670
+
+test "a setup link connects a project and adds its screens once"
+  size 1440x900
+  at "/?connect=http://127.0.0.1:5176&name=Discovered%20app&viewports=Core"
+  request POST "http://127.0.0.1:5176/mode" {"mode":"normal"}
+  reload
+  clock data
+  clock +600 real
+  clock data
+  expect tree missing "setup-error"
+  expect state doc.projectName == "Discovered app"
+  expect state doc.groups.length == 2
+  expect state doc.views.length == 6
+  tap "undo"
+  clock data
+  expect state doc.projectUrl == ""
+  expect state doc.groups.length == 1
+  tap "redo"
+  clock data
+  expect state doc.views.length == 6
+  reload
+  clock data
+  clock +600 real
+  clock data
+  expect state doc.groups.length == 2
+  expect state doc.views.length == 6
+
+test "a setup link to an unreachable app explains the failure"
+  size 1440x900
+  at "/?connect=http://127.0.0.1:9&name=Nowhere"
+  clock data
+  clock +600 real
+  clock data
+  expect tree has "setup-error"
+  expect state doc.projectUrl == ""
+  tap "setup-dismiss"
+  expect tree missing "setup-error"

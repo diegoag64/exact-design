@@ -40,7 +40,7 @@ export class ElementBridge {
     if(packet.op==='close')return;
     if(packet.op!=='open'||streams.size>=800||typeof packet.path!=='string'||packet.path.length>2048)return;
     let url;try{url=new URL(packet.path,this.origin);}catch{return;}
-    if(url.origin!==this.origin||!['/__dev/events','/__exact_design/events'].includes(url.pathname))return;
+    if(url.origin!==this.origin||!['/__dev/events','/__dev/page','/__exact_design/events'].includes(url.pathname))return;
     const abort=new AbortController();streams.set(packet.id,abort);
     const send=(data:any)=>{if(!abort.signal.aborted)ws.send(JSON.stringify({id:packet.id,...data}));};
     try{
