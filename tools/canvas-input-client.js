@@ -47,6 +47,15 @@ addEventListener('pointerout',e=>{if(canvasMode&&!e.relatedTarget)window.__exact
 for(const type of ['pointercancel','blur','pagehide'])addEventListener(type,()=>{if(canvasMode)window.__exactDesignHover?.(null);},true);
 addEventListener('pointerup',()=>{if(canvasMode)queueMicrotask(()=>window.__exactDesignClearNativeHover?.());},true);
 
+// At small canvas zoom the studio asks for low detail: backdrop blurs are
+// dropped, since the GPU re-renders each one on every frame for little effect.
+let lowDetail=null;
+addEventListener('message',e=>{
+  if(!canvasMode||e.source!==parent||e.data?.kind!=='exact-design:preview-detail')return;
+  if(e.data.low&&!lowDetail){lowDetail=document.createElement('style');lowDetail.textContent='*,*::before,*::after{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}';(document.head??document.documentElement).append(lowDetail);}
+  else if(!e.data.low&&lowDetail){lowDetail.remove();lowDetail=null;}
+});
+
 addEventListener('wheel',e=>{
   if(!canvasMode)return;
   window.__exactDesignHover?.(null);

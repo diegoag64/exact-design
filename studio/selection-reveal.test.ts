@@ -41,6 +41,23 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
     const previewFrames=await Promise.all((await page.locator('iframe[title="Live app preview"]').elementHandles()).map(async handle=>await handle.contentFrame()));
     for(const preview of previewFrames)await preview.waitForFunction(()=>document.getElementById('exact-inspect'),undefined,{polling:50});
     await page.getByRole('button',{name:'Fit all screens',exact:true}).click();
+    // Previews drop backdrop blurs only below 15% zoom, and restore them above 18%.
+    const probe=(expected:string)=>Promise.all(previewFrames.map(preview=>preview.waitForFunction(expected=>{
+      let el=document.getElementById('detail-probe');
+      if(!el){el=document.createElement('div');el.id='detail-probe';el.style.backdropFilter='blur(4px)';document.body.append(el);}
+      return getComputedStyle(el).backdropFilter===expected;
+    },expected,{polling:50,timeout:3000})));
+    const frameScale=()=>page.evaluate(()=>parseFloat(document.querySelector('#canvas-stage > [data-testid^="frame-"]').style.scale));
+    const zoomBy=(factor:number)=>page.locator('[aria-label="Design canvas"]').dispatchEvent('wheel',{ctrlKey:true,deltaY:(1-factor)/0.005});
+    await probe('blur(4px)');
+    while(await frameScale()>=0.16)await zoomBy(0.9);
+    await probe('blur(4px)');
+    while(await frameScale()>=0.15)await zoomBy(0.9);
+    await probe('none');
+    while(await frameScale()<=0.17)await zoomBy(1.05);
+    await probe('none');
+    await page.getByRole('button',{name:'Fit all screens',exact:true}).click();await probe('blur(4px)');
+    for(const preview of previewFrames)await preview.evaluate(()=>document.getElementById('detail-probe')?.remove());
     const assertHover=async(text:string)=>{
       for(const preview of previewFrames){
         await preview.waitForFunction(text=>{

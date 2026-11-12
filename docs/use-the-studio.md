@@ -82,4 +82,4 @@ Use these shortcuts when a text field is not focused:
 - **Command or Control+Z** undoes.
 - **Command or Control+Shift+Z** redoes.
 
-Scroll to pan and pinch to zoom. Use the panel buttons to hide or restore the sidebar and inspector.
+Scroll to pan and pinch to zoom. Use the panel buttons to hide or restore the sidebar and inspector. Below 15% zoom, canvas previews omit backdrop blur to keep navigation smooth. Zoom in, or use full-screen Preview, to see it.

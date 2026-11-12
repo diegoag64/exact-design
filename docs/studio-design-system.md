@@ -99,7 +99,7 @@ Icons use a 24-unit viewBox, a 1.75-unit stroke, and a 16px box; tree glyphs use
 
 Text entry keeps its own keys. Source apps receive their normal input in Preview mode. Canvas iframe gestures are accepted only from a registered window inside the canvas with the expected origin and `__ed_canvas=1`. Input ownership survives native inspection ending or restarting; full-screen Preview uses `__ed_canvas=0`. Camera updates remain in the Contract and persist through the existing workspace storage.
 
-Each canvas frame uses CSS translation and scale, with a browser compositing hint supplied by the preview hatch. Frames remain mounted during navigation so app state, source identities, and editing sessions survive camera changes.
+Each canvas frame uses CSS translation and scale, with a browser compositing hint supplied by the preview hatch. Frames remain mounted during navigation so app state, source identities, and editing sessions survive camera changes. Below 15% zoom, canvas previews drop CSS backdrop filters: at that size a blur spans a few screen pixels, but the GPU still re-renders it on every frame. They return above 18%, and the gap prevents flicker near the boundary. The hatch reads the zoom from the frame scale that Exact writes, so camera state stays in the Contract. A preview that loads or reloads receives the current detail level. Full-screen Preview always shows full detail.
 
 ## Context menus
 

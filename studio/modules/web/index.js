@@ -3,6 +3,10 @@
 import {installCanvasNavigation} from './canvas-navigation.js';
 import {installMenus} from './menus.js';
 const hosts=new WeakMap();
+const FRAME='#canvas-stage > [data-testid^="frame-"]',DETAIL='exact-design:preview-detail';
+// Below this zoom a backdrop blur spans a few screen pixels, but the GPU still
+// re-renders it each frame. The gap between the bounds stops flicker at the edge.
+const LOW_DETAIL_BELOW=0.15,FULL_DETAIL_ABOVE=0.18;
 class PreviewEngines {
   frames=new Map();
   constructor(root){
@@ -11,10 +15,16 @@ class PreviewEngines {
     // composited while its camera scale changes, without flattening the world.
     this.paintStyle=document.createElement('style');
     // The style lives in the document head, outside the Contract-managed tree.
-    this.paintStyle.textContent='#canvas-stage > [data-testid^="frame-"]{will-change:translate,scale}';
+    this.paintStyle.textContent=`${FRAME}{will-change:translate,scale}`;
     document.head.append(this.paintStyle);
     this.observer=new MutationObserver(()=>this.update());
     this.observer.observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['src']});
+    // Zoom is read from the frame scale Exact writes, not kept as separate state.
+    this.lowDetail=false;
+    this.zoom=new MutationObserver(()=>this.zoomChanged());
+    this.zoom.observe(root,{subtree:true,attributes:true,attributeFilter:['style']});
+    this.loaded=e=>{if(e.target.matches?.(`${FRAME} iframe`))this.detail(e.target);};
+    root.addEventListener('load',this.loaded,true);
     this.update();
   }
   update(){
@@ -32,7 +42,16 @@ class PreviewEngines {
       document.documentElement.append(frame);this.frames.set(origin,frame);
     }
   }
-  close(){this.stopNavigation();this.stopMenus();this.observer.disconnect();this.paintStyle.remove();for(const frame of this.frames.values())frame.remove();this.frames.clear();}
+  zoomChanged(){
+    const zoom=parseFloat(this.root.querySelector(FRAME)?.style.scale);
+    if(!Number.isFinite(zoom))return;
+    const low=this.lowDetail?zoom<FULL_DETAIL_ABOVE:zoom<LOW_DETAIL_BELOW;
+    if(low===this.lowDetail)return;
+    this.lowDetail=low;
+    for(const frame of this.root.querySelectorAll(`${FRAME} iframe`))this.detail(frame);
+  }
+  detail(frame){frame.contentWindow?.postMessage({kind:DETAIL,low:this.lowDetail},'*');}
+  close(){this.stopNavigation();this.stopMenus();this.observer.disconnect();this.zoom.disconnect();this.root.removeEventListener('load',this.loaded,true);this.paintStyle.remove();for(const frame of this.frames.values())frame.remove();this.frames.clear();}
 }
 export function element(context){
   if(context.hatch==='preview-engines'&&!hosts.has(context.element))hosts.set(context.element,new PreviewEngines(context.element));
