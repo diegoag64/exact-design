@@ -1,11 +1,12 @@
 // Browser-owned DOM work belongs in an Exact hatch, outside data sources.
 // The data runtime survives changes to the visible canvas and Preview frames.
 import {installCanvasNavigation} from './canvas-navigation.js';
+import {installMenus} from './menus.js';
 const hosts=new WeakMap();
 class PreviewEngines {
   frames=new Map();
   constructor(root){
-    this.root=root;this.stopNavigation=installCanvasNavigation(root);
+    this.root=root;this.stopNavigation=installCanvasNavigation(root);this.stopMenus=installMenus(root);
     this.observer=new MutationObserver(()=>this.update());
     this.observer.observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['src']});
     this.update();
@@ -25,7 +26,7 @@ class PreviewEngines {
       document.documentElement.append(frame);this.frames.set(origin,frame);
     }
   }
-  close(){this.stopNavigation();this.observer.disconnect();for(const frame of this.frames.values())frame.remove();this.frames.clear();}
+  close(){this.stopNavigation();this.stopMenus();this.observer.disconnect();for(const frame of this.frames.values())frame.remove();this.frames.clear();}
 }
 export function element(context){
   if(context.hatch==='preview-engines'&&!hosts.has(context.element))hosts.set(context.element,new PreviewEngines(context.element));

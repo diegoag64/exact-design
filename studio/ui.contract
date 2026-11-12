@@ -1,0 +1,138 @@
+use Icon from "./icons.contract"
+
+fn screensWidth(): number = 240
+fn inspectorWidth(): number = 260
+
+// Shared primitives. Keep feature actions and data in their owning component.
+style Tool
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  width=32
+  height=32
+  padding=6
+  gap=8
+  border-width=0
+  border-radius="radius.control"
+  background-color="transparent"
+  color="ink.secondary"
+  cursor="default"
+  :hover
+    background-color="surface.hover"
+  :active
+    background-color="surface.pressed"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent"
+  :disabled
+    opacity=0.35
+
+style Field
+  width="100%"
+  box-sizing="border-box"
+  height=30
+  border="1px solid transparent"
+  border-radius="radius.control"
+  background-color="surface.field"
+  color="ink.primary"
+  padding-left=8
+  padding-right=8
+  font="type.body"
+
+style TreeRow
+  border-radius="radius.control"
+  :hover
+    background-color="surface.hover"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent"
+
+style PanelSection
+  padding=16
+  gap=12
+  border-bottom="1px solid line.subtle"
+
+style Menu
+  box-sizing="border-box"
+  padding=6
+  width=232
+  max-width="calc(100vw - 16px)"
+  border="1px solid line.strong"
+  border-radius="radius.menu"
+  background-color="surface.panel"
+  color="ink.primary"
+  box-shadow="shadow.menu"
+  font="type.body"
+
+style MenuRow
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  gap=10
+  width="100%"
+  height=32
+  padding="0 8px"
+  border-width=0
+  border-radius="radius.control"
+  background-color="transparent"
+  color="ink.primary"
+  text-align="left"
+  :hover
+    background-color="surface.selected"
+  :focus-visible
+    background-color="surface.selected"
+  :disabled
+    opacity=0.35
+
+component IconButton
+  props
+    icon: string
+    label: string
+    hint: string
+    shortcut: string
+    selected: bool
+    disabled: bool
+    testId: string
+    press: action
+  view
+    button press=press class=Tool aria-label=label title=(hint == "" ? label : hint) aria-keyshortcuts=shortcut aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.selected" : "transparent") color=(selected ? "ink.selected" : "ink.secondary")
+      Icon(name=icon, size=16, angle=0)
+
+component SectionHeading
+  props
+    label: string
+  view
+    text label font="type.body" font-weight=600 color="ink.primary"
+
+component PropertyField
+  props
+    label: string
+    accessibleLabel: string
+    value: string
+    testId: string
+    change: action
+  view
+    column flex=1 min-width=0 gap=6
+      text label font="type.caption" color="ink.secondary"
+      input value=value change=change class=Field aria-label=accessibleLabel testId=testId
+
+component MenuItem
+  props
+    label: string
+    icon: string
+    shortcut: string
+    disabled: bool
+    destructive: bool
+    menu: string
+    testId: string
+    press: action
+  view
+    button id=testId press=press class=MenuRow role="menuitem" popovertarget=menu popovertargetaction="hide" disabled=disabled destructive=destructive testId=testId color=(destructive ? "ink.danger" : "ink.primary")
+      if icon != ""
+        Icon(name=icon, size=16, angle=0)
+      text label flex=1 font="type.body"
+      if shortcut != ""
+        text shortcut color="ink.muted" font="type.caption" aria-hidden=true
+
+component MenuDivider
+  view
+    hr margin="5px 4px" border-width=0 height=1 background-color="line.subtle"

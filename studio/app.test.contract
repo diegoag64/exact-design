@@ -242,11 +242,11 @@ test "frames snap into place as one undo step"
   tap "add-viewport"
   tap "variant-phone"
   clock data
-  tap "canvas" drag 76 76 from 680 52 mouse
+  tap "canvas" drag 71 71 from 680 52 mouse
   clock data
   expect state doc.views.1.x == 900
   expect state doc.views.1.y == 100
-  tap "canvas" drag -73 -73 from 756 128 mouse
+  tap "canvas" drag -68 -68 from 751 123 mouse
   clock data
   expect state doc.views.1.x == 800
   expect state doc.views.1.y == 0
@@ -731,14 +731,14 @@ test "sidebar screen clicks pan smoothly to the screen top without changing zoom
   expect state zoom == 0.85
   expect state cameraX == 64
   clock +140
-  expect state cameraX == 173.20303206997085
+  expect state cameraX == 148.00233236151603
   expect state panning == true
   clock +160
   expect state panning == false
-  expect state cameraX == 194
+  expect state cameraX == 164
   expect state cameraY == 64
   tap "canvas" wheel 100 50
-  expect state px == 94
+  expect state px == 64
   expect state py == 14
   tap "group-screen-1"
   clock data
@@ -746,13 +746,13 @@ test "sidebar screen clicks pan smoothly to the screen top without changing zoom
   clock +80
   tap "canvas" wheel 20 10
   expect state panning == false
-  expect state px == 137.55685131195335
+  expect state px == 107.55685131195335
   clock +400
   expect state panning == false
   tap "toggle-inspector"
   tap "group-screen-1"
   clock +300
-  expect state cameraX == 310
+  expect state cameraX == 294
   expect state cameraY == 64
   expect state zoom == 0.85
 
@@ -764,7 +764,7 @@ test "screen centering respects reduced motion and overlay sidebars"
   tap "view-view-1"
   clock data
   expect state panning == false
-  expect state cameraX == 132
+  expect state cameraX == 134
   expect state cameraY == 64
   expect state zoom == 0.85
 
@@ -801,3 +801,24 @@ test "pan tools remain available while editing an app"
   expect state hand == false
   expect state editing == true
   expect tree has "element-tree"
+
+
+test "context actions select the clicked layer and keep screen operations separate"
+  size 1440x900
+  tap "layer-title"
+  clock data
+  tap "layer-description" contextmenu
+  clock settle
+  expect state doc.selected == "description"
+  tap "menu-delete"
+  clock data
+  expect state doc.layers.length == 5
+  tap "undo"
+  clock data
+  expect state doc.layers.length == 6
+  tap "view-view-1" contextmenu
+  clock settle
+  expect state doc.frameSelected == true
+  tap "menu-variant-phone"
+  clock data
+  expect state doc.views.length == 2

@@ -16,7 +16,7 @@ export function render(args: unknown[], c: Ctx2D, frame: Frame) {
     const vw = Math.max(100,view.width + (frameSelected && resizing ? dx : 0)), vh = Math.max(100,view.height + (frameSelected && resizing ? dy : 0));
     const screen = workspace.screens.find(s=>s.id===view.screenId)!;
     c.save(); c.translate(vx,vy);
-    c.fillStyle = frameSelected ? '#5574ef' : '#808087'; c.font = `${11 / zoom}px system-ui`; c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+    c.fillStyle = frameSelected ? '#0d99ff' : '#808087'; c.font = `${11 / zoom}px system-ui`; c.textBaseline = 'alphabetic'; c.textAlign = 'left';
     c.fillText(`${screen.name} · ${view.name}  ${Math.round(vw)} × ${Math.round(vh)}`, 0, -12 / zoom, vw);
     const original = active && !screen.source ? screen.layers.find(n => n.id === selected) : undefined;
     let n = original && {...original};
@@ -28,7 +28,7 @@ export function render(args: unknown[], c: Ctx2D, frame: Frame) {
     if(n || frameSelected) {
       const x=frameSelected?0:n!.x, y=frameSelected?0:n!.y;
       const w=frameSelected?vw:n!.width, h=frameSelected?vh:n!.height;
-      c.strokeStyle = '#5574ef'; c.lineWidth = 1 / zoom; c.strokeRect(x,y,w,h);
+      c.strokeStyle = '#0d99ff'; c.lineWidth = 1 / zoom; c.strokeRect(x,y,w,h);
       const hx=x+w,hy=y+h;
       c.fillStyle='#ffffff'; c.fillRect(hx-3/zoom,hy-3/zoom,6/zoom,6/zoom); c.strokeRect(hx-3/zoom,hy-3/zoom,6/zoom,6/zoom);
     }

@@ -1,3 +1,6 @@
+use Icon from "./icons.contract"
+use Tool, Field, TreeRow, PanelSection, Menu, IconButton, SectionHeading, MenuItem, MenuDivider, PropertyField, screensWidth, inspectorWidth from "./ui.contract"
+
 routes nav
   editor "/"
     project "/project"
@@ -192,31 +195,6 @@ shape ElementNode
   kind: string
   ancestors: string[]
   hasChildren: bool
-
-style Tool
-  box-sizing="border-box"
-  display="flex"
-  align-items="center"
-  justify-content="center"
-  width=32
-  height=32
-  padding=6
-  border-width=0
-  border-radius=6
-  background-color="transparent"
-  color="ink.secondary"
-
-style Field
-  width="100%"
-  box-sizing="border-box"
-  height=30
-  border-width=0
-  border-radius=5
-  background-color="surface.field"
-  color="ink.primary"
-  padding-left=8
-  padding-right=8
-  font-size=12
 
 shape Viewport
   prefersReducedMotion: bool
@@ -463,8 +441,8 @@ component Studio
   state panProgress = 1
   derive cameraX = panning ? panFromX + (px - panFromX) * panEase(panProgress) : px
   derive cameraY = panning ? panFromY + (py - panFromY) * panEase(panProgress) : py
-  derive canvasWidth = viewport.width - (leftOpen and viewport.width >= 1000 ? 208 : 0) - (rightOpen and viewport.width >= 700 ? 232 : 0)
-  derive canvasCenterX = ((leftOpen and viewport.width < 1000 ? 208 : 0) + canvasWidth - (rightOpen and viewport.width < 700 ? 232 : 0)) / 2
+  derive canvasWidth = viewport.width - (leftOpen and viewport.width >= 1000 ? screensWidth() : 0) - (rightOpen and viewport.width >= 700 ? inspectorWidth() : 0)
+  derive canvasCenterX = ((leftOpen and viewport.width < 1000 ? screensWidth() : 0) + canvasWidth - (rightOpen and viewport.width < 700 ? inspectorWidth() : 0)) / 2
   action advancePan
     let next = viewport.prefersReducedMotion ? 1 : min(1, max(0, (performanceNow() - panStarted) / 280))
     panProgress = next
@@ -495,7 +473,7 @@ component Studio
     cancelPan()
     leftPanel = leftOpen ? "closed" : "open"
     if viewport.width >= 1000
-      px = cameraX + (leftOpen ? 208 : -208)
+      px = cameraX + (leftOpen ? screensWidth() : -screensWidth())
     else
       if not leftOpen and viewport.width < 700
         rightPanel = "closed"
@@ -560,11 +538,27 @@ component Studio
     zoom = max(0.01, zoom - 0.1)
   action fitBounds(x: number, y: number, right: number, bottom: number)
     cancelPan()
-    let available = viewport.width - ((leftOpen and viewport.width >= 1000 ? 208 : 0) + (rightOpen and viewport.width >= 700 ? 232 : 0)) - 96
+    let available = viewport.width - ((leftOpen and viewport.width >= 1000 ? screensWidth() : 0) + (rightOpen and viewport.width >= 700 ? inspectorWidth() : 0)) - 96
     let z = min(1, max(0.01, min(available / max(1, right - x), (viewport.height - 220) / max(1, bottom - y))))
     zoom = z
     px = 48 - x * z
     py = 64 - y * z
+  action fitSelection
+    if not editing and not doc.frameSelected
+      match first(doc.layers.filter(n => n.id == doc.selected))
+        case some(n)
+          fitBounds(scene.frameX + n.x, scene.frameY + n.y, scene.frameX + n.x + n.width, scene.frameY + n.y + n.height)
+        case none
+          resetView()
+    else
+      match first(scene.views.filter(v => v.id == doc.active))
+        case some(v)
+          fitBounds(v.x, v.y, v.x + v.width, v.y + v.height)
+        case none
+          resetView()
+  action canvasMenu(e: PointerEvent)
+    if not editing
+      send changed = edit("hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom)
   action resetView
     fitBounds(scene.minX, scene.minY, scene.maxX, scene.maxY)
   action afterEdit
@@ -629,37 +623,57 @@ component Studio
   action previewClick
     clicks = clicks + 1
   view
-    main hatch="preview-engines" data-canvas-editing=editing navigationKey=`${top(nav).id}` navigationBack="closeLibrary" navigate=follow testId="editor" width="100%" height="100%" display="flex" flex-direction="column" background-color="ink.inverse" color="ink.primary" font-family="system-ui" font-size=12
+    main hatch="preview-engines" data-canvas-editing=editing navigationKey=`${top(nav).id}` navigationBack="closeLibrary" navigate=follow testId="editor" width="100%" height="100%" display="flex" flex-direction="column" background-color="ink.inverse" color="ink.primary" font="type.body"
+      column id="studio-menu" popover="auto" role="menu" aria-label="Canvas actions" class=Menu
+        MenuItem(label="Undo", icon="undo-2", shortcut="", disabled=(editing ? not appCanUndo : not doc.canUndo), destructive=false, menu="studio-menu", testId="menu-undo", press=command("undo", ""))
+        if not editing
+          MenuItem(label="Redo", icon="redo-2", shortcut="", disabled=not doc.canRedo, destructive=false, menu="studio-menu", testId="menu-redo", press=command("redo", ""))
+        MenuDivider()
+        if editing
+          MenuItem(label="Select parent", icon="corner-up-left", shortcut="", disabled=selectingElement, destructive=false, menu="studio-menu", testId="menu-parent", press=selectParent)
+          MenuItem(label="Finish editing", icon="check", shortcut="", disabled=designWriting, destructive=false, menu="studio-menu", testId="menu-finish", press=finishEditing)
+        else
+          if doc.source != ""
+            MenuItem(label="Edit app design", icon="mouse-pointer-2", shortcut="", disabled=designWriting, destructive=false, menu="studio-menu", testId="menu-edit", press=startEditing)
+          if doc.frameSelected
+            MenuItem(label="Duplicate screen", icon="copy", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-duplicate", press=command("duplicate", ""))
+            for preset in ["Phone", "Tablet", "Desktop"] key=preset
+              MenuItem(label=`Add ${preset.toLowerCase()} viewport`, icon=(preset == "Phone" ? "smartphone" : preset == "Tablet" ? "tablet" : "monitor"), shortcut="", disabled=false, destructive=false, menu="studio-menu", testId=`menu-variant-${preset.toLowerCase()}`, press=addViewport(preset))
+          if doc.selected != ""
+            MenuItem(label="Delete", icon="trash-2", shortcut="", disabled=doc.frameSelected and doc.views.length == 1, destructive=true, menu="studio-menu", testId="menu-delete", press=command("delete", ""))
+        MenuDivider()
+        MenuItem(label="Zoom to fit", icon="maximize", shortcut="⇧1", disabled=false, destructive=false, menu="studio-menu", testId="menu-fit", press=resetView)
+        MenuItem(label=(editing or doc.frameSelected ? "Zoom to screen" : "Zoom to selection"), icon="scan", shortcut="⇧2", disabled=false, destructive=false, menu="studio-menu", testId="menu-fit-selection", press=fitSelection)
+        MenuDivider()
+        MenuItem(label="Add screen", icon="plus", shortcut="", disabled=editing, destructive=false, menu="studio-menu", testId="menu-add", press=addScreen)
+        MenuItem(label=(leftOpen ? "Hide layers panel" : "Show layers panel"), icon="panel-left", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-layers", press=toggleLeft)
+        MenuItem(label=(rightOpen ? "Hide inspector" : "Show inspector"), icon="panel-right", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-inspector", press=toggleRight)
       for entry in stack(nav) key=entry.id
         if entry.name == "editor"
           column navigationKey=`${entry.id}` position="absolute" inset=0
             row height=48 flex-shrink=0 align-items="center" padding-left=12 padding-right=12 gap=6 border-bottom-width=1 border-bottom-style="solid" border-bottom-color="line.subtle"
-              button press=toggleLeft class=Tool aria-label=(leftOpen ? "Hide screens" : "Show screens") aria-pressed=leftOpen title="Screens" testId="toggle-screens"
-                image "symbol:icon.panel-left"
-              image "symbol:layers" aria-hidden=true color="ink.primary"
+              IconButton(icon="panel-left", label=(leftOpen ? "Hide screens" : "Show screens"), hint="Screens", shortcut="", selected=leftOpen, disabled=false, testId="toggle-screens", press=toggleLeft)
+              Icon(name="layers", size=16, angle=0)
               if viewport.width >= 700
-                text "Exact Design" font-weight=600 font-size=12
+                text "Exact Design" font-weight=600 font="type.body"
                 text "/" color="ink.muted"
               text (doc.projectName == "" ? doc.name : doc.projectName) testId="document-name" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
               row flex=1
               if doc.status != ""
                 text doc.status color="ink.secondary" testId="save-status"
-              button press=command("save", "") aria-keyshortcuts="Meta+s Control+s" class=Tool aria-label="Save" title="Save" testId="save"
-                image "symbol:download"
+              IconButton(icon="download", label="Save", hint="Save", shortcut="Meta+s Control+s", selected=false, disabled=false, testId="save", press=command("save", ""))
               button press=command("undo", "") aria-keyshortcuts="Meta+z Control+z" class=Tool display=(viewport.width >= 700 ? "flex" : "none") disabled=(editing ? not appCanUndo : not doc.canUndo) aria-label="Undo" title="Undo" testId="undo"
-                image "symbol:back"
+                Icon(name="undo-2", size=16, angle=0)
               button press=command("redo", "") aria-keyshortcuts="Meta+Shift+z Control+Shift+z" class=Tool display=(viewport.width >= 700 ? "flex" : "none") disabled=(editing or not doc.canRedo) aria-label="Redo" title="Redo" testId="redo"
-                image "symbol:forward-chevron"
-              button press=togglePreview disabled=editing class=Tool aria-label="Preview" title="Preview" testId="preview"
-                image "symbol:play"
-              button press=toggleCode disabled=(doc.source != "") height=30 border-width=0 border-radius=6 background-color="surface.action" color="ink.inverse" padding-left=12 padding-right=12 testId="export"
-                text "Export" font-size=12
+                Icon(name="redo-2", size=16, angle=0)
+              IconButton(icon="play", label="Preview", hint="Preview", shortcut="", selected=false, disabled=editing, testId="preview", press=togglePreview)
+              button press=toggleCode disabled=(doc.source != "") height=30 border-width=0 border-radius=6 background-color="surface.action" color="ink.on-action" padding-left=12 padding-right=12 testId="export"
+                text "Export" font="type.body"
               column width=1 height=20 background-color="line.subtle" margin-left=4 margin-right=4
-              button press=toggleRight class=Tool aria-label=(rightOpen ? "Hide inspector" : "Show inspector") aria-pressed=rightOpen title="Inspector" testId="toggle-inspector"
-                image "symbol:icon.panel-right"
+              IconButton(icon="panel-right", label=(rightOpen ? "Hide inspector" : "Show inspector"), hint="Inspector", shortcut="", selected=rightOpen, disabled=false, testId="toggle-inspector", press=toggleRight)
             row flex=1 min-height=0 position="relative"
               if leftOpen
-                column testId="screens-panel" position=(viewport.width >= 1000 ? "relative" : "absolute") left=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=208 flex-shrink=0 border-right-width=1 border-right-style="solid" border-right-color="line.subtle" padding-top=12 gap=8
+                column testId="screens-panel" position=(viewport.width >= 1000 ? "relative" : "absolute") left=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=screensWidth() flex-shrink=0 border-right-width=1 border-right-style="solid" border-right-color="line.subtle" padding-top=12 gap=8
                   if editing
                     row padding-left=16 padding-right=8 height=32 align-items="center"
                       text "Layers" font-weight=600
@@ -667,44 +681,45 @@ component Studio
                       column padding-left=8 padding-right=8 gap=2
                         for element, i in elementTree key=element.id
                           if element.ancestors.filter(id => collapsedElements.includes(id)).length == 0
-                            row id=`layer-row-${element.id}` hover=hoverElement(element.id) align-items="center" padding-left=(min(element.depth, 8) * 10) background-color=(element.selected ? "surface.selected" : "transparent") border-radius=5
+                            row class=TreeRow contextmenu=selectElement(element.id) contextPopover="studio-menu" id=`layer-row-${element.id}` hover=hoverElement(element.id) align-items="center" padding-left=(min(element.depth, 8) * 12) background-color=(element.selected ? "surface.selected" : "transparent") border-radius=5
                               if element.hasChildren
                                 button press=toggleElement(element.id) class=Tool width=20 height=28 padding=3 aria-label=`Toggle ${element.label}` aria-expanded=(not collapsedElements.includes(element.id)) testId=`fold-element-${i}`
-                                  image "symbol:icon.disclosure" width=10 height=10 rotate=(collapsedElements.includes(element.id) ? 0 : 90)
+                                  Icon(name="chevron-right", size=10, angle=(collapsedElements.includes(element.id) ? 0 : 90))
                               else
                                 column width=20 flex-shrink=0
                               button press=selectElement(element.id) testId=`element-${i}` aria-label=(element.label == layerKind(element.kind) ? element.label : `${layerKind(element.kind)}: ${element.label}`) title=element.label aria-pressed=element.selected display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding=0 padding-right=8 border-width=0 background-color="transparent" color=(element.selected ? "ink.selected" : "ink.secondary")
                                 ElementIcon(kind=element.kind)
-                                text element.label font-size=11 text-align="left" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                                text element.label font="type.body" text-align="left" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
                   else
                     button press=projectSettings display="flex" align-items="center" gap=8 margin-left=8 margin-right=8 padding=8 border-width=0 border-radius=6 background-color="surface.field" color="ink.primary" aria-label="Project connection" testId="project-connection"
-                      image "symbol:link" aria-hidden=true
-                      text (doc.projectName == "" ? "Connect project" : doc.projectName) font-size=12 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
-                      image "symbol:adjust" aria-hidden=true color="ink.muted"
+                      Icon(name="link-2", size=16, angle=0)
+                      text (doc.projectName == "" ? "Connect project" : doc.projectName) font="type.body" flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                      Icon(name="settings-2", size=16, angle=0)
                     row padding-left=16 padding-right=8 align-items="center"
                       text "Screens" font-weight=600 flex=1
                       button press=addScreen class=Tool aria-label="Add screen" testId="add-screen"
-                        image "symbol:add"
+                        Icon(name="plus", size=16, angle=0)
                     scroll flex=1 min-height=0
                       column gap=6 padding-left=8 padding-right=8
                         for group in scene.groups key=group.id
                           column gap=2
                             row align-items="center" gap=2 height=32
                               button press=toggleGroup(group.id) testId=`fold-group-${group.id}` class=Tool width=20 height=28 padding=4 aria-label=`Toggle ${group.name}` aria-expanded=(not collapsed.includes(group.id))
-                                image "symbol:icon.disclosure" width=12 height=12 rotate=(collapsed.includes(group.id) ? 0 : 90) aria-hidden=true
+                                Icon(name="chevron-right", size=12, angle=(collapsed.includes(group.id) ? 0 : 90))
                               button press=focusScreen(group.id) testId=`group-${group.id}` aria-label=group.name title="Show screen" display="flex" flex=1 min-width=0 align-items="center" height=32 padding=0 padding-right=8 border-width=0 border-radius=5 background-color="transparent" color="ink.primary"
-                                text group.name font-size=12 font-weight=500 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                                text group.name font="type.body" font-weight=500 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
                             if not collapsed.includes(group.id)
                               for v in group.views key=v.id
-                                button press=focusView(v.id, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" align-items="center" gap=6 height=30 padding-left=22 padding-right=8 border-width=0 border-radius=5 background-color=(doc.active == v.id ? "surface.selected" : "transparent") color=(doc.active == v.id ? "ink.selected" : "ink.secondary")
-                                  text v.name font-size=11 flex=1 text-align="left"
+                                button contextmenu=command("select", v.id) contextPopover="studio-menu" class=TreeRow press=focusView(v.id, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" align-items="center" gap=6 height=30 padding-left=22 padding-right=8 border-width=0 border-radius=5 background-color=(doc.active == v.id and doc.frameSelected ? "surface.selected" : "transparent") color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.secondary")
+                                  Icon(name=(v.name == "Phone" ? "smartphone" : v.name == "Tablet" ? "tablet" : "monitor"), size=14, angle=0)
+                                  text v.name font="type.body" flex=1 text-align="left"
                                   text `${v.width} × ${v.height}` font-size=10
                               for n in group.layers key=n.id
-                                button press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" align-items="center" gap=8 height=30 padding-left=28 padding-right=8 border-width=0 border-radius=5 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.secondary")
-                                  image (n.kind == "text" ? "symbol:compose" : n.kind == "button" ? "symbol:select" : "symbol:stop") aria-hidden=true
-                                  text n.name font-size=12
+                                button contextmenu=command("select", n.id) contextPopover="studio-menu" class=TreeRow press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" align-items="center" gap=8 height=30 padding-left=28 padding-right=8 border-width=0 border-radius=5 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.secondary")
+                                  ElementIcon(kind=n.kind)
+                                  text n.name font="type.body"
 
-              column id="canvas-stage" testId="canvas-stage" wheel=wheel flex=1 min-width=0 min-height=0 position="relative" overflow="clip" background-color="surface.canvas"
+              column id="canvas-stage" outline="none" tabindex=-1 contextmenu=canvasMenu contextPopover="studio-menu" testId="canvas-stage" wheel=wheel flex=1 min-width=0 min-height=0 position="relative" overflow="clip" background-color="surface.canvas"
                 for v in scene.views key=v.id
                   column position="absolute" left=((hand ? cameraX + dx * zoom : cameraX) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragX : 0)) * zoom) top=((hand ? cameraY + dy * zoom : cameraY) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragY : 0)) * zoom) width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragX : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragY : 0)) scale=zoom transform-origin="top left" pointer-events=(editing and not hand and v.source.startsWith(designOrigin + "/") ? "auto" : "none") inert=(not editing or hand or not v.source.startsWith(designOrigin + "/")) background-color="paper" border="none" box-shadow="none" testId=`frame-${v.id}`
                     ScreenView(source=v.previewSource, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
@@ -726,7 +741,7 @@ component Studio
                                       else
                                         for target in targets key=target.property
                                           if spacingProperty == target.property
-                                            input id="spacing-value" value=spacingValue input=editSpacing key=spacingKey blur=cancelSpacing position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" width=72 height=26 padding=4 box-sizing="border-box" border="1px solid spacing.ink" border-radius=5 background-color="surface.panel" color="ink.primary" font-size=11 text-align="center" pointer-events="auto" aria-label=spacingName(box.property) title="Enter to apply · Escape to cancel" testId="spacing-value"
+                                            input id="spacing-value" value=spacingValue input=editSpacing key=spacingKey blur=cancelSpacing position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" width=72 height=26 padding=4 box-sizing="border-box" border="1px solid spacing.ink" border-radius=5 background-color="surface.panel" color="ink.primary" font="type.caption" text-align="center" pointer-events="auto" aria-label=spacingName(box.property) title="Enter to apply · Escape to cancel" testId="spacing-value"
                                           else
                                             button press=openSpacing(target.property, target.value) position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" display="flex" align-items="center" justify-content="center" box-sizing="border-box" min-width=24 height=20 min-height=20 padding=3 border="1px solid spacing.edge" border-radius=4 background-color="surface.panel" color="spacing.ink" font-size=10 font-weight=600 pointer-events="auto" aria-label=`Edit ${spacingName(box.property)}` title=(target.shared ? `${spacingName(box.property)} · Shared style` : spacingName(box.property)) testId=`spacing-${box.property}`
                                               text box.value
@@ -734,85 +749,84 @@ component Studio
                           column display="none"
                     case none
                       column display="none"
-                row display=(panelOverlay ? "none" : "flex") position="absolute" bottom=20 left="50%" translate="-50% 0" padding=6 gap=4 align-items="center" border="1px solid line.subtle" background-color="ink.inverse" border-radius=10 box-shadow="0 2px 12px #00000012"
-                  button press=selectTool aria-keyshortcuts="v" class=Tool background-color=(not hand ? "surface.selected" : "transparent") aria-pressed=(not hand) aria-label="Select" title="Select (V). Hold Alt to ignore snapping." testId="select-tool"
-                    image "symbol:icon.pointer"
-                  button press=handTool aria-keyshortcuts="h" class=Tool background-color=(hand ? "surface.selected" : "transparent") aria-pressed=hand aria-label="Pan" title="Pan (H). Hold Space to pan temporarily." testId="hand-tool"
-                    image "symbol:icon.pan"
+                row display=(panelOverlay ? "none" : "flex") position="absolute" bottom=20 left="50%" translate="-50% 0" padding=6 gap=4 align-items="center" border="1px solid line.subtle" background-color="ink.inverse" border-radius=10 box-shadow="shadow.menu"
+                  IconButton(icon="mouse-pointer-2", label="Select", hint="Select (V)", shortcut="v", selected=not hand, disabled=false, testId="select-tool", press=selectTool)
+                  IconButton(icon="hand", label="Pan", hint="Pan (H) · Hold Space to pan", shortcut="h", selected=hand, disabled=false, testId="hand-tool", press=handTool)
                   if not editing
                     column width=1 height=20 background-color="line.subtle" margin-left=2 margin-right=2
                     button press=addScreen class=Tool aria-label="New screen" title="New screen" testId="new-screen"
-                      image "symbol:document"
+                      Icon(name="frame", size=16, angle=0)
                     button press=command("add", "rectangle") disabled=(doc.source != "") class=Tool aria-label="Rectangle" title="Rectangle" testId="add-rectangle"
-                      image "symbol:stop"
+                      Icon(name="square", size=16, angle=0)
                     button press=command("add", "text") disabled=(doc.source != "") class=Tool aria-label="Text" title="Text" testId="add-text"
-                      image "symbol:compose"
+                      Icon(name="type", size=16, angle=0)
                     button press=command("add", "button") disabled=(doc.source != "") class=Tool aria-label="Button" title="Button" testId="add-button"
-                      image "symbol:add"
+                      Icon(name="plus", size=16, angle=0)
                 row display=(panelOverlay ? "none" : "flex") position="absolute" right=16 bottom=(viewport.width >= 1000 ? 24 : 82) align-items="center" gap=4 background-color="ink.inverse" border-radius=8 padding=2 border="1px solid line.subtle"
-                  button press=zoomOut class=Tool aria-label="Zoom out" title="Zoom out" testId="zoom-out"
-                    image "symbol:minus"
+                  IconButton(icon="minus", label="Zoom out", hint="Zoom out", shortcut="", selected=false, disabled=false, testId="zoom-out", press=zoomOut)
                   button press=resetView class=Tool width=48 aria-label="Fit all screens" title="Fit all screens" testId="zoom"
-                    text `${round(zoom * 100)}%` font-size=11 font-variant-numeric="tabular-nums"
-                  button press=zoomIn class=Tool aria-label="Zoom in" title="Zoom in" testId="zoom-in"
-                    image "symbol:add"
+                    text `${round(zoom * 100)}%` font="type.caption" font-variant-numeric="tabular-nums"
+                  IconButton(icon="plus", label="Zoom in", hint="Zoom in", shortcut="", selected=false, disabled=false, testId="zoom-in", press=zoomIn)
               if rightOpen
-                scroll testId="inspector-panel" position=(viewport.width >= 700 ? "relative" : "absolute") right=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=232 flex-shrink=0 border-left-width=1 border-left-style="solid" border-left-color="line.subtle"
-                  column padding=16 gap=20
-                    if doc.source != "" or editing
-                      button press=toggleEditing disabled=designWriting class=Tool width="100%" background-color=(editing ? "surface.selected" : "surface.field") aria-label=(editing ? "Finish editing app" : "Edit app design") testId="edit-app"
-                        text (editing ? "Done editing" : "Edit app") font-size=12
+                scroll testId="inspector-panel" position=(viewport.width >= 700 ? "relative" : "absolute") right=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=inspectorWidth() flex-shrink=0 border-left-width=1 border-left-style="solid" border-left-color="line.subtle"
+                  column gap=0
+                    row class=PanelSection height=46 box-sizing="border-box" align-items="center"
+                      text "Design" font="type.body" font-weight=600 flex=1
+                      if doc.source != "" or editing
+                        button press=toggleEditing disabled=designWriting class=Tool width="auto" height=26 padding="0 8px" background-color=(editing ? "surface.selected" : "surface.field") color=(editing ? "ink.selected" : "ink.primary") aria-label=(editing ? "Finish editing app" : "Edit app design") testId="edit-app"
+                          Icon(name=(editing ? "check" : "mouse-pointer-2"), size=14, angle=0)
+                          text (editing ? "Done" : "Edit") font="type.body"
                     if designError != ""
-                      text designError role="alert" font-size=12 color="ink.secondary" testId="design-error"
+                      text designError margin=16 role="alert" font="type.body" color="ink.secondary" testId="design-error"
                     if editing
-                      column gap=12
+                      column gap=0
                         match designChanged
                           case some(result)
                             if result.draftCount > 0
-                              column gap=8
+                              column class=PanelSection
                                 row align-items="center" justify-content="space-between"
-                                  text `${result.draftCount} unsaved ${result.draftCount == 1 ? "change" : "changes"}` font-size=11 color="ink.secondary" testId="draft-count"
+                                  text `${result.draftCount} unsaved ${result.draftCount == 1 ? "change" : "changes"}` font="type.caption" color="ink.secondary" testId="draft-count"
                                   button press=discardDesign class=Tool height=26 padding=4 disabled=pending(designChanged) testId="discard-design"
-                                    text "Discard" font-size=11
+                                    text "Discard" font="type.caption"
                                 button press=applyDesign class=Tool background-color="surface.selected" width="100%" disabled=(not result.canApply or pending(designChanged)) testId="apply-design"
-                                  text "Apply to code" font-size=12
+                                  text "Apply to code" font="type.body"
                                 if result.draftError != ""
-                                  text result.draftError role="alert" font-size=11 color="ink.secondary" testId="draft-error"
+                                  text result.draftError role="alert" font="type.caption" color="ink.secondary" testId="draft-error"
                             for selected in result.crumbs.filter(c => c.selected) key=selected.id
-                              column gap=10
+                              column class=PanelSection
                                 for parent in result.crumbs.filter(c => c.depth == selected.depth - 1) key=parent.id
                                   button press=selectElement(parent.id) class=Tool width="100%" height=26 padding=0 gap=6 justify-content="flex-start" aria-label=`Select parent: ${parent.label}` title=`Select parent: ${parent.label}` testId="element-parent" color="ink.secondary"
-                                    image "symbol:icon.disclosure" rotate=-90 width=10 height=10 aria-hidden=true
-                                    text parent.label font-size=11 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                                    Icon(name="chevron-right", size=10, angle=-90)
+                                    text parent.label font="type.caption" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
                                 row align-items="flex-start" gap=8
                                   column padding-top=2 color="ink.secondary"
                                     ElementIcon(kind=selected.kind)
-                                  text selected.label font-size=13 font-weight=600 flex=1 min-width=0 hyphens="auto" testId="selected-element-name"
+                                  text selected.label font="type.heading" font-weight=600 flex=1 min-width=0 hyphens="auto" testId="selected-element-name"
                                 row gap=8 align-items="center"
                                   if selected.label != layerKind(selected.kind)
-                                    text layerKind(selected.kind) font-size=11 color="ink.secondary" testId="selected-element-kind"
+                                    text layerKind(selected.kind) font="type.caption" color="ink.secondary" testId="selected-element-kind"
                                   if result.source != ""
-                                    text result.source font-size=11 color="ink.muted" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" min-width=0 title=result.source testId="design-source"
+                                    text result.source font="type.caption" color="ink.muted" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" min-width=0 title=result.source testId="design-source"
                             if result.source != ""
                               if result.crumbs.length == 0
                                 button press=selectParent class=Tool width="100%" justify-content="flex-start" testId="design-parent"
-                                  text "Select component" font-size=12
+                                  text "Select component" font="type.body"
                             if result.rows.length == 0
-                              text (result.restoring ? result.message : result.applied ? "Applied to source." : result.message) font-size=12 color="ink.secondary" testId="design-message"
+                              text (result.restoring ? result.message : result.applied ? "Applied to source." : result.message) margin=16 font="type.body" color="ink.secondary" testId="design-message"
                             if result.canUndo
                               button press=undoDesign disabled=pending(designChanged) class=Tool width="100%" justify-content="flex-start" testId="undo-app-design"
-                                text "Undo draft change" font-size=12
+                                text "Undo draft change" font="type.body"
                           case none
-                            text "Select an element in a screen." font-size=12
+                            text "Select an element in a screen." font="type.body"
                         if designRows.filter(p => p.shared).length > 0
-                          text "Shared style · updates every use" font-size=11 color="ink.secondary"
+                          text "Shared style · updates every use" margin=16 font="type.caption" color="ink.secondary"
                         for group in ["Layout", "Spacing", "Appearance"] key=group
                           if designRows.filter(p => p.group == group).length > 0
-                            column gap=12
-                              text group font-weight=600 font-size=12
+                            column class=PanelSection
+                              SectionHeading(label=group)
                               for property in designRows.filter(p => p.group == group) key=`${designVersion}-${property.id}`
                                 column gap=6
-                                  text property.name font-size=11 color="ink.secondary"
+                                  text property.name font="type.caption" color="ink.secondary"
                                   if property.options.length > 0
                                     select value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
                                       for choice in property.options key=choice.value
@@ -820,21 +834,21 @@ component Studio
                                   else
                                     input value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
                     if not editing
-                      row align-items="center"
-                        text (doc.frameSelected ? "Screen" : "Design") font-weight=600 flex=1
+                      row class=PanelSection align-items="center"
+                        text (doc.frameSelected ? "Screen" : "Layer") font-weight=600 flex=1
                         if doc.selected != "" and not doc.frameSelected
                           button press=command("delete", "") class=Tool aria-label="Delete selection" testId="delete"
-                            image "symbol:delete"
+                            Icon(name="trash-2", size=16, angle=0)
                       if doc.selected == ""
                         text "Select a screen or layer" color="ink.secondary"
                       if doc.frameSelected
                         for v in scene.views.filter(v => v.id == doc.active) key=v.id
-                          column gap=20
+                          column class=PanelSection
                             column gap=6
-                              text "Name" color="ink.secondary" font-size=11
+                              text "Name" color="ink.secondary" font="type.caption"
                               input value=v.screenName change=prop("name") class=Field aria-label="Screen name" testId="screen-name"
                             column gap=6
-                              text (doc.route != "" ? "Route" : "Preview URL") color="ink.secondary" font-size=11
+                              text (doc.route != "" ? "Route" : "Preview URL") color="ink.secondary" font="type.caption"
                               if doc.route != ""
                                 input value=doc.route change=prop("route") class=Field placeholder="/settings" aria-label="Screen route" testId="screen-route"
                               else
@@ -844,7 +858,7 @@ component Studio
                               row align-items="center"
                                 text "Viewport" font-weight=600 flex=1
                                 button press=command("delete", "") class=Tool aria-label="Delete viewport" title="Delete viewport" testId="delete" disabled=(doc.views.length == 1)
-                                  image "symbol:delete"
+                                  Icon(name="trash-2", size=16, angle=0)
                               select value=v.name change=prop("preset") class=Field aria-label="Viewport preset" testId="viewport-preset"
                                 if v.name == "Custom"
                                   option "Custom" value="Custom" disabled=true
@@ -852,52 +866,42 @@ component Studio
                                 option "Tablet" value="Tablet"
                                 option "Desktop" value="Desktop"
                               row gap=8
-                                column flex=1 min-width=0 gap=6
-                                  text "Width" color="ink.secondary" font-size=11
-                                  input value=`${v.width}` change=prop("width") class=Field aria-label="Viewport width" testId="frame-width"
+                                PropertyField(label="Width", accessibleLabel="Viewport width", value=`${v.width}`, change=prop("width"), testId="frame-width")
                                 column flex=1 min-width=0 gap=6
                                   row align-items="center" justify-content="space-between" height=14
-                                    text "Height" color="ink.secondary" font-size=11
+                                    text "Height" color="ink.secondary" font="type.caption"
                                     if v.canAutoHeight
                                       button press=prop("heightMode", "content") class=Tool height=18 min-height=18 padding=0 color=(v.autoHeight ? "ink.selected" : "ink.secondary") aria-label="Fit screen height to content" aria-pressed=v.autoHeight title="Fit height to content" testId="auto-height"
                                         text "Auto" font-size=10
                                   input value=`${v.height}` change=prop("height") class=Field aria-label="Viewport height" testId="frame-height"
                             column gap=4
                               button press=toggleViewportMenu class=Tool width="100%" justify-content="flex-start" gap=8 aria-expanded=addingViewport aria-label="Add viewport" testId="add-viewport"
-                                image "symbol:add"
-                                text "Add viewport" font-size=12
+                                Icon(name="plus", size=16, angle=0)
+                                text "Add viewport" font="type.body"
                               if addingViewport
                                 for preset in ["Phone", "Tablet", "Desktop"] key=preset
                                   button press=addViewport(preset) class=Tool width="100%" justify-content="flex-start" padding-left=28 aria-label=`Add ${preset} viewport` testId=`variant-${preset.toLowerCase()}`
-                                    text preset font-size=12
+                                    text preset font="type.body"
                             column height=1 background-color="line.subtle"
                             button press=command("duplicate", "") class=Tool width="100%" justify-content="flex-start" gap=8 aria-label="Duplicate screen" testId="duplicate-screen"
-                              image "symbol:document"
-                              text "Duplicate screen" font-size=12
+                              Icon(name="frame", size=16, angle=0)
+                              text "Duplicate screen" font="type.body"
                       for n in doc.layers.filter(n => n.id == doc.selected) key=n.id
-                        column gap=18
+                        column class=PanelSection
                           input value=n.name change=prop("name") class=Field aria-label="Layer name" testId="name"
                           column gap=10
                             text "Layout" font-weight=500
                             row gap=8
-                              column flex=1 min-width=0 gap=5
-                                text "X" color="ink.muted" font-size=11
-                                input value=`${n.x}` change=prop("x") class=Field aria-label="X position" testId="x"
-                              column flex=1 min-width=0 gap=5
-                                text "Y" color="ink.muted" font-size=11
-                                input value=`${n.y}` change=prop("y") class=Field aria-label="Y position" testId="y"
+                              PropertyField(label="X", accessibleLabel="X position", value=`${n.x}`, change=prop("x"), testId="x")
+                              PropertyField(label="Y", accessibleLabel="Y position", value=`${n.y}`, change=prop("y"), testId="y")
                             row gap=8
-                              column flex=1 min-width=0 gap=5
-                                text "W" color="ink.muted" font-size=11
-                                input value=`${n.width}` change=prop("width") class=Field aria-label="Width" testId="width"
-                              column flex=1 min-width=0 gap=5
-                                text "H" color="ink.muted" font-size=11
-                                input value=`${n.height}` change=prop("height") class=Field aria-label="Height" testId="height"
+                              PropertyField(label="W", accessibleLabel="Width", value=`${n.width}`, change=prop("width"), testId="width")
+                              PropertyField(label="H", accessibleLabel="Height", value=`${n.height}`, change=prop("height"), testId="height")
                           row gap=4 background-color="surface.field" border-radius=6 padding=3
                             button press=prop("widthMode", "fixed") class=Tool flex=1 width="auto" height=24 color="ink.primary" background-color=(n.widthMode == "fixed" ? "ink.inverse" : "transparent") aria-label="Fixed width" testId="width-fixed"
-                              text "Fixed" font-size=11
+                              text "Fixed" font="type.caption"
                             button press=prop("widthMode", "fill") class=Tool flex=1 width="auto" height=24 color="ink.primary" background-color=(n.widthMode == "fill" ? "ink.inverse" : "transparent") aria-label="Fill width" testId="width-fill"
-                              text "Fill" font-size=11
+                              text "Fill" font="type.caption"
                           column gap=10
                             text "Fill" font-weight=500
                             row gap=8 align-items="center"
@@ -920,8 +924,8 @@ component Studio
                     button press=copyCode class=Tool width=60 aria-label="Copy Contract" testId="copy-code"
                       text "Copy"
                     button press=toggleCode class=Tool aria-label="Close export" testId="close-export"
-                      image "symbol:close"
-                  textarea value=doc.code readonly=true flex=1 width="100%" min-height=0 font-family="monospace" font-size=12 border-width=0 background-color="surface.field" padding=12 box-sizing="border-box" aria-label="Contract source" testId="code"
+                      Icon(name="x", size=16, angle=0)
+                  textarea value=doc.code readonly=true flex=1 width="100%" min-height=0 font-family="monospace" font="type.body" border-width=0 background-color="surface.field" padding=12 box-sizing="border-box" aria-label="Contract source" testId="code"
             if preview
               column position="absolute" inset=0 background-color="surface.canvas" align-items="center" justify-content="center" gap=20
                 row width="90%" max-width=720 align-items="center"
@@ -929,7 +933,7 @@ component Studio
                   if clicks > 0
                     text `Clicked ${clicks}` testId="preview-clicks"
                   button press=togglePreview disabled=editing class=Tool aria-label="Close preview" testId="close-preview"
-                    image "symbol:close"
+                    Icon(name="x", size=16, angle=0)
                 scroll width="100%" max-width=doc.width height=doc.height max-height="80%" overflow-x="scroll"
                   column position="relative" width=doc.width height=doc.height overflow="hidden" background-color="paper" testId="live-screen"
                     ScreenView(source=doc.previewSource, layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick)
@@ -940,52 +944,52 @@ component Studio
                 text (entry.name == "project" ? "Project" : "Add screen") font-weight=600 flex=1
                 if entry.name == "addScreen" and screenKind == "add"
                   button press=refreshDiscovery disabled=pending(discovered) class=Tool aria-label="Refresh screens" title="Refresh screens" testId="refresh-discovery"
-                    image "symbol:refresh"
+                    Icon(name="undo-2", size=16, angle=0)
                 button id="closeLibrary" press=closeLibrary class=Tool aria-label="Close" testId="close-library"
-                  image "symbol:close"
+                  Icon(name="x", size=16, angle=0)
               if entry.name == "project"
                 column gap=14
                   input value=projectNameValue input=projectNameInput class=Field placeholder="Project name" aria-label="Project name" testId="project-name"
                   input value=projectUrlValue input=projectUrlInput class=Field placeholder="http://127.0.0.1:5174" aria-label="Project URL" testId="project-url"
                 if libraryError != ""
-                  text libraryError role="alert" color="ink.primary" font-size=12 testId="library-error"
+                  text libraryError role="alert" color="ink.primary" font="type.body" testId="library-error"
                 row gap=8 align-items="center"
                   if doc.projectUrl != ""
                     button press=disconnectProject class=Tool width="auto" padding-left=8 padding-right=8 disabled=pending(libraryChanged) testId="disconnect-project"
-                      text "Disconnect" font-size=12
+                      text "Disconnect" font="type.body"
                   row flex=1
-                  button press=saveProject disabled=(projectNameValue.trim() == "" or projectUrlValue.trim() == "" or pending(libraryChanged)) height=32 padding-left=14 padding-right=14 border-width=0 border-radius=6 background-color="surface.action" color="ink.inverse" testId="save-project"
-                    text (doc.projectUrl == "" ? "Connect" : "Save") font-size=12
+                  button press=saveProject disabled=(projectNameValue.trim() == "" or projectUrlValue.trim() == "" or pending(libraryChanged)) height=32 padding-left=14 padding-right=14 border-width=0 border-radius=6 background-color="surface.action" color="ink.on-action" testId="save-project"
+                    text (doc.projectUrl == "" ? "Connect" : "Save") font="type.body"
               else
                 if doc.projectUrl != ""
                   row gap=4 background-color="surface.field" border-radius=6 padding=3
                     button press=chooseKind("add") class=Tool width="auto" flex=1 background-color=(screenKind == "add" ? "surface.panel" : "transparent") color="ink.primary" testId="screen-project"
-                      text "Project" font-size=12
+                      text "Project" font="type.body"
                     button press=chooseKind("blank") class=Tool width="auto" flex=1 background-color=(screenKind == "blank" ? "surface.panel" : "transparent") color="ink.primary" testId="screen-blank"
-                      text "Blank" font-size=12
+                      text "Blank" font="type.body"
                 if screenKind == "add"
                   column gap=6
                     if pending(discovered)
-                      text "Finding screens…" color="ink.secondary" font-size=12 role="status"
+                      text "Finding screens…" color="ink.secondary" font="type.body" role="status"
                     if discovered.owner == doc.projectUrl and not pending(discovered)
                       if discovered.error != ""
-                        text discovered.error color="ink.secondary" font-size=12 role="status" testId="discovery-error"
+                        text discovered.error color="ink.secondary" font="type.body" role="status" testId="discovery-error"
                       else
                         if discovered.routes.length == 0
-                          text "No screens found. Enter a route below." color="ink.secondary" font-size=12 testId="discovery-empty"
+                          text "No screens found. Enter a route below." color="ink.secondary" font="type.body" testId="discovery-empty"
                         else
                           scroll max-height=176
                             column gap=2
                               for screen, i in discovered.routes key=screen.route
                                 button press=chooseScreen(screen.name, screen.route) disabled=screen.added testId=`discovered-${i}` aria-label=`${screen.name}, ${screen.route}` display="flex" align-items="center" gap=8 padding=8 border-width=0 border-radius=6 background-color=(screenPath == screen.route and screenName == screen.name ? "surface.selected" : "transparent") color="ink.primary"
                                   column flex=1 min-width=0 gap=4 align-items="flex-start"
-                                    text screen.name font-size=12
-                                    text screen.route font-size=11 color="ink.secondary" text-align="left" width="100%" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" title=screen.route
+                                    text screen.name font="type.body"
+                                    text screen.route font="type.caption" color="ink.secondary" text-align="left" width="100%" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" title=screen.route
                                   if screen.added
-                                    text "Added" font-size=11 color="ink.secondary"
+                                    text "Added" font="type.caption" color="ink.secondary"
                                   else
                                     if screen.dynamic
-                                      text "Set path" font-size=11 color="ink.secondary"
+                                      text "Set path" font="type.caption" color="ink.secondary"
                 column gap=14
                   input value=screenName input=screenNameInput class=Field placeholder="Screen name" aria-label="Screen name" testId="new-screen-name"
                   if screenKind == "add"
@@ -993,17 +997,17 @@ component Studio
                   row gap=4
                     for preset in ["Phone", "Tablet", "Desktop"] key=preset
                       button press=choosePreset(preset) class=Tool flex=1 width="auto" color="ink.primary" background-color=(screenPreset == preset ? "surface.selected" : "transparent") testId=`new-preset-${preset}`
-                        text preset font-size=12
+                        text preset font="type.body"
                 if libraryError != ""
-                  text libraryError role="alert" color="ink.primary" font-size=12 testId="library-error"
-                button press=saveScreen disabled=(screenName.trim() == "" or pending(libraryChanged)) height=32 border-width=0 border-radius=6 background-color="surface.action" color="ink.inverse" testId="create-screen"
-                  text "Add screen" font-size=12
+                  text libraryError role="alert" color="ink.primary" font="type.body" testId="library-error"
+                button press=saveScreen disabled=(screenName.trim() == "" or pending(libraryChanged)) height=32 border-width=0 border-radius=6 background-color="surface.action" color="ink.on-action" testId="create-screen"
+                  text "Add screen" font="type.body"
 
 component ElementIcon
   props
     kind: string
   view
-    image (kind == "text" or kind == "span" ? "symbol:icon.layer-text" : kind == "button" ? "symbol:icon.layer-button" : kind == "row" ? "symbol:icon.layer-row" : kind == "column" ? "symbol:icon.layer-column" : "symbol:stop") width=12 height=12 flex-shrink=0 aria-hidden=true
+    Icon(name=(kind == "text" or kind == "span" ? "type" : kind == "button" ? "rectangle-horizontal" : kind == "row" ? "columns-2" : kind == "column" ? "rows-2" : kind == "grid" ? "grid-2x2" : kind == "image" or kind == "img" ? "image" : kind == "input" ? "text-cursor-input" : kind == "screen" or kind == "main" ? "frame" : "square"), size=14, angle=0)
 
 component ScreenView
   props

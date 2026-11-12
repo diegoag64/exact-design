@@ -1,30 +1,33 @@
 tamber editor
 
 theme
-  surface.panel = light-dark(#ffffff, #242426)
-  surface.field = light-dark(#f5f5f6, #303034)
-  surface.canvas = light-dark(#ededee, #1c1c1e)
-  surface.action = light-dark(#292a2d, #e8e8eb)
-  surface.selected = light-dark(#edf0ff, #333c60)
+  accent = #0d99ff scheme=fixed
+  AccentColor = accent
+  surface.panel = light-dark(#ffffff, #2c2c2c)
+  surface.field = light-dark(#f5f5f5, #383838)
+  surface.canvas = light-dark(#e5e5e5, #1e1e1e)
+  surface.hover = light-dark(#f0f0f0, #383838)
+  surface.pressed = light-dark(#e5e5e5, #444444)
+  surface.action = light-dark(#0877c9, #0d99ff)
+  surface.selected = light-dark(#e5f4ff, #164b70)
   surface.scrim = #00000040 scheme=fixed
-  line.subtle = light-dark(#e8e8eb, #38383c)
-  ink.primary = light-dark(#35363b, #ededf0)
-  ink.secondary = light-dark(#707178, #b2b2ba)
-  ink.muted = light-dark(#73747b, #95959f)
-  ink.selected = light-dark(#354fb8, #b4c1ff)
-  ink.inverse = light-dark(#ffffff, #242426)
+  line.subtle = light-dark(#e6e6e6, #3e3e3e)
+  line.strong = light-dark(#d4d4d4, #505050)
+  ink.primary = light-dark(#242424, #f5f5f5)
+  ink.secondary = light-dark(#595959, #bfbfbf)
+  ink.muted = light-dark(#6c6c6c, #a5a5a5)
+  ink.selected = light-dark(#075c9a, #e5f4ff)
+  ink.inverse = light-dark(#ffffff, #2c2c2c)
+  ink.on-action = #ffffff scheme=fixed
+  ink.danger = light-dark(#bd2828, #ff9b9b)
   paper = #ffffff scheme=fixed
   spacing.wash = #d946ef14 scheme=fixed
   spacing.edge = #c026d34d scheme=fixed
   spacing.ink = light-dark(#a21caf, #efabf5)
-
-icons
-  icon.layer-row = icon(svg "icons/layer-row.svg")
-  icon.layer-column = icon(svg "icons/layer-column.svg")
-  icon.layer-button = icon(svg "icons/layer-button.svg")
-  icon.layer-text = icon(svg "icons/layer-text.svg")
-  icon.panel-left = icon(sf "sidebar.left", svg "icons/panel-left.svg")
-  icon.panel-right = icon(sf "sidebar.right", svg "icons/panel-right.svg")
-  icon.pointer = icon(sf "cursorarrow", svg "icons/pointer.svg")
-  icon.pan = icon(sf "arrow.up.and.down.and.arrow.left.and.right", svg "icons/pan.svg")
-  icon.disclosure = icon(sf "chevron.right", svg "icons/disclosure.svg")
+  radius.control: length = 4px
+  radius.panel: length = 8px
+  radius.menu: length = 10px
+  shadow.menu: box-shadow = 0px 8px 32px #00000030
+  type.body = 12px/1.4 system-ui
+  type.caption = 11px/1.4 system-ui
+  type.heading = 13px/1.4 system-ui
