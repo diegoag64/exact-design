@@ -27,7 +27,7 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
   let suite:any,page:any;const errors:string[]=[];
   try{
     await Promise.all([start(editor,'selection-editor',editorPort),start(app,'selection-app',appPort)]);
-    suite=await suiteBrowser();page=await suite.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',(e:Error)=>errors.push(e.message));
+    suite=await suiteBrowser();page=await suite.newPage({viewport:{width:1440,height:1000},colorScheme:'dark'});page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.goto('http://127.0.0.1:'+editorPort,{waitUntil:'load'});
     await page.getByRole('button',{name:'Project connection',exact:true}).click();
     await page.getByRole('textbox',{name:'Project name',exact:true}).fill('Morrow');await page.getByRole('textbox',{name:'Project URL',exact:true}).fill('http://127.0.0.1:'+appPort);await page.getByRole('button',{name:'Connect',exact:true}).click();
@@ -35,6 +35,20 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
     await page.getByRole('button',{name:'Add viewport',exact:true}).click();await page.getByRole('button',{name:'Add Tablet viewport',exact:true}).click();
     await page.getByRole('button',{name:'Edit app design',exact:true}).click();await page.getByRole('button',{name:'Finish editing app',exact:true}).waitFor();
     const frame=await(await page.locator('iframe[title="Live app preview"]').last().elementHandle()).contentFrame();await frame.waitForFunction(()=>document.getElementById('exact-inspect'),undefined,{polling:50});
+    // Inspected app documents relay their context menu and middle drag to the studio.
+    const title=frame.locator('#exact-root').getByText('Room for your thoughts.',{exact:true});
+    // Exact's inspection shield intentionally receives the physical pointer.
+    await title.click({button:'right',force:true});
+    const menu=page.getByRole('menu',{name:'Canvas actions'});await menu.waitFor();
+    expect(await menu.getByRole('menuitem',{name:'Finish editing',exact:true}).isVisible()).toBe(true);
+    expect(await menu.getByRole('menuitem',{name:'Delete',exact:true}).count()).toBe(0);
+    await page.keyboard.press('Escape');expect(await menu.isVisible()).toBe(false);
+    const camera=()=>page.evaluate(()=>Object.fromEntries(exact.state[0].filter(s=>['px','py'].includes(s.n.devName)).map(s=>[s.n.devName,s()])));
+    const beforeDrag=await camera(),titleBox=await title.boundingBox();
+    await page.mouse.move(titleBox.x+10,titleBox.y+10);await page.mouse.down({button:'middle'});await page.mouse.move(titleBox.x+30,titleBox.y+30,{steps:4});await page.mouse.up({button:'middle'});
+    await page.waitForFunction(x=>Math.abs(exact.state[0].find(s=>s.n.devName==='px')()-x-20)<0.5,beforeDrag.px,{polling:50,timeout:5000});
+    const afterDrag=await camera();expect(afterDrag.px-beforeDrag.px).toBeCloseTo(20,0);expect(afterDrag.py-beforeDrag.py).toBeCloseTo(20,0);
+    await page.screenshot({path:resolve(root,'.exact/studio-design-system.png')});
     for(let i=0;i<6;i++)await page.getByRole('button',{name:'Zoom in',exact:true}).click();
     const snapshot=()=>page.evaluate(()=>{
       const stage=document.getElementById('canvas-stage'),canvas=document.querySelector('[aria-label="Design canvas"]'),pan=document.querySelector('button[aria-label="Pan"]');

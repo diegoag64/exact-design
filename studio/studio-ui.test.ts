@@ -1,0 +1,64 @@
+import {test,expect} from 'bun:test';
+import {mkdtemp,mkdir,readdir,cp,readFile,writeFile,rm} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {suiteBrowser} from '../.exact-sdk/scripts/agent-launch.mjs';
+
+test('studio icons, context menus and canvas gestures share the desktop interaction model',async()=>{
+  const root=resolve(import.meta.dir,'..');await mkdir(resolve(root,'.exact'),{recursive:true});
+  const temp=await mkdtemp(resolve(root,'.exact/studio-ui-'));
+  for(const e of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(e.isFile()&&!e.name.includes('.test.')&&!e.name.endsWith('.d.ts')&&/\.(ts|contract|json|tamber)$/.test(e.name))await cp(resolve(root,'studio',e.name),resolve(temp,e.name));
+  for(const name of ['assets','modules'])await cp(resolve(root,'studio',name),resolve(temp,name),{recursive:true});
+  const manifest=JSON.parse(await readFile(resolve(temp,'app.json'),'utf8'));delete manifest.commands;delete manifest.server;await writeFile(resolve(temp,'app.json'),JSON.stringify(manifest));
+  const probe=Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response()});const port=probe.port;probe.stop(true);
+  await writeFile(resolve(temp,'launch.mjs'),`import {run} from ${JSON.stringify(resolve(root,'.exact-sdk/scripts/app-cli.mjs'))};process.exit(await run({dir:${JSON.stringify(temp)},name:'studio-ui',exact2:${JSON.stringify(resolve(root,'.exact-sdk'))},args:['web','--port','${port}']}));`);
+  const child=Bun.spawn([process.execPath,resolve(temp,'launch.mjs')],{cwd:root,env:{...process.env,PATH:'/Users/diegoarias/.cargo/bin:'+process.env.PATH,EXACT_FEEDBACK:'0'},stdout:Bun.file(resolve(temp,'server.log')),stderr:Bun.file(resolve(temp,'errors.log'))});
+  let suite:any,page:any;const errors:string[]=[];
+  try{
+    const end=Date.now()+25000;for(;;){try{if((await fetch('http://127.0.0.1:'+port)).ok)break;}catch{}if(Date.now()>end)throw Error(await Bun.file(resolve(temp,'errors.log')).text());await new Promise(r=>setTimeout(r,100));}
+    suite=await suiteBrowser();page=await suite.newPage({viewport:{width:1440,height:1000},colorScheme:'dark'});page.on('pageerror',(e:Error)=>errors.push(e.message));
+    await page.goto('http://127.0.0.1:'+port,{waitUntil:'load'});
+    const pan=page.getByRole('button',{name:'Pan',exact:true});await pan.waitFor();
+    const camera=()=>page.evaluate(()=>Object.fromEntries(exact.state[0].filter(s=>['px','py','zoom'].includes(s.n.devName)).map(s=>[s.n.devName,s()])));
+    for(const colorScheme of ['dark','light'] as const){
+      await page.emulateMedia({colorScheme});
+      const icons=await page.locator('button[aria-label="Pan"],button[aria-label="Select"],button[aria-label="Save"]').evaluateAll(buttons=>buttons.map(button=>{
+        const svg=button.querySelector('svg'),path=svg.querySelector('path'),s=svg.getBoundingClientRect(),b=button.getBoundingClientRect();
+        return {color:getComputedStyle(button).color,stroke:getComputedStyle(path).stroke,d:path.getAttribute('d'),dx:s.x+s.width/2-b.x-b.width/2,dy:s.y+s.height/2-b.y-b.height/2};
+      }));
+      expect(icons.length).toBe(3);for(const icon of icons){expect(icon.stroke).toBe(icon.color);expect(icon.stroke).not.toBe('rgb(0, 0, 0)');expect(icon.d.length).toBeGreaterThan(10);expect(icon.dx).toBeCloseTo(0,1);expect(icon.dy).toBeCloseTo(0,1);}
+    }
+    const before=await camera();await page.keyboard.down('Space');await page.waitForFunction(()=>document.querySelector('button[aria-label="Pan"]').getAttribute('aria-pressed')==='true');
+    await page.mouse.move(800,700);await page.mouse.down();await page.mouse.move(900,740,{steps:4});await page.keyboard.up('Space');
+    expect(await pan.getAttribute('aria-pressed')).toBe('true');await page.mouse.up();
+    await page.waitForFunction(()=>document.querySelector('button[aria-label="Select"]').getAttribute('aria-pressed')==='true');
+    const after=await camera();expect(after.px-before.px).toBe(100);expect(after.py-before.py).toBe(40);
+    await page.mouse.move(800,700);await page.mouse.down({button:'middle'});await page.mouse.move(830,750,{steps:4});await page.mouse.up({button:'middle'});
+    const middle=await camera();expect(middle.px-after.px).toBe(30);expect(middle.py-after.py).toBe(50);expect(middle.zoom).toBe(before.zoom);
+    const heading=page.getByRole('button',{name:'Heading',exact:true});await heading.click({button:'right'});
+    const menu=page.getByRole('menu',{name:'Canvas actions'});await menu.waitFor();
+    await page.waitForFunction(()=>document.activeElement?.getAttribute('role')==='menuitem');
+    await page.keyboard.press('End');expect(await page.evaluate(()=>document.activeElement.id)).toBe('menu-inspector');
+    await page.keyboard.press('Home');expect(await page.evaluate(()=>document.activeElement.id)).toBe('menu-delete');
+    await page.keyboard.press('ArrowDown');expect(await page.evaluate(()=>document.activeElement.id)).toBe('menu-fit');
+    await page.keyboard.press('Escape');expect(await menu.isVisible()).toBe(false);expect(await heading.evaluate(el=>el===document.activeElement)).toBe(true);
+    // Menu actions address the right-clicked row, not the previous selection.
+    await page.getByRole('button',{name:'Description',exact:true}).click({button:'right'});await page.getByRole('menuitem',{name:'Delete',exact:true}).click();
+    await page.waitForFunction(()=>!Array.from(document.querySelectorAll('button')).some(b=>b.getAttribute('aria-label')==='Description'));
+    await page.getByRole('button',{name:'Undo',exact:true}).click();await page.getByRole('button',{name:'Description',exact:true}).waitFor();
+    // The menu stays inside the window even at the canvas's bottom right.
+    await page.mouse.click(1170,990,{button:'right'});await menu.waitFor();const rect=await menu.boundingBox();expect(rect.x).toBeGreaterThanOrEqual(0);expect(rect.y).toBeGreaterThanOrEqual(0);expect(rect.x+rect.width).toBeLessThanOrEqual(1440);expect(rect.y+rect.height).toBeLessThanOrEqual(1000);
+    await page.mouse.click(800,800);expect(await menu.isVisible()).toBe(false);
+    await heading.click();const text=page.getByRole('textbox',{name:'Text content',exact:true});await text.focus();await page.keyboard.press('Space');expect(await pan.getAttribute('aria-pressed')).toBe('false');
+    await text.press('Escape');await page.mouse.click(800,800);await page.keyboard.press('Shift+Digit1');expect((await camera()).zoom).not.toBe(before.zoom);
+    // Global canvas shortcuts must leave Preview and project sheets alone.
+    await page.getByRole('button',{name:'Preview',exact:true}).click();
+    await page.evaluate(()=>document.activeElement?.blur());await page.keyboard.down('Space');
+    expect(await page.locator('button[aria-label="Pan"]').getAttribute('aria-pressed')).toBe('false');await page.keyboard.up('Space');
+    await page.getByRole('button',{name:'Close preview',exact:true}).click();
+    await page.getByRole('button',{name:'New screen',exact:true}).click();
+    await page.evaluate(()=>document.activeElement?.blur());await page.keyboard.down('Space');
+    expect(await page.locator('button[aria-label="Pan"]').getAttribute('aria-pressed')).toBe('false');await page.keyboard.up('Space');
+    await page.getByRole('button',{name:'Close',exact:true}).click();
+    expect(errors).toEqual([]);
+  }finally{await page?.context().close();await suite?.browser.close();child.kill('SIGTERM');await child.exited;await rm(temp,{recursive:true,force:true});}
+},60000);

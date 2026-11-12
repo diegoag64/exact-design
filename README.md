@@ -1,5 +1,7 @@
 # Exact Design
 
+The [studio design system](docs/studio-design-system.md) defines the shared controls, Lucide icons, semantic theme tokens, context menus, and canvas interaction conventions.
+
 A visual editor for Exact interfaces. Arrange screens and linked viewport variants on one canvas, adjust their layers, render running Exact apps, and export editable screen layouts as Contract source.
 
 ## Run the editor
