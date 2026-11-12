@@ -158,7 +158,7 @@ const sources: Sources = {
       return {owner,routes:[],error:'Discovery is unavailable. Run bun run dev, or enter a route below.'};
     }
   },
-  library: async ([op,name,value,preset,timestamp], _store, storage) => {
+  library: async ([op,name,value,preset,show,timestamp], _store, storage) => {
     await persistence.load(storage.fs);
     await history.load(storage.fs);
     const before=JSON.stringify(editor.document);
@@ -169,7 +169,7 @@ const sources: Sources = {
       else if(op==='setup') {
         const url=projectUrl(value),found=await discoverProject(url,discoveryCache?.owner===url?discoveryCache.revision:0);
         if(found.error&&!found.routes.length) return reply(false,found.error);
-        if(!editor.setupProject(name,url,found.routes.map(r=>({name:r.name,route:r.route})),preset||'Core')) return reply(false,'That project lists no screens to add.');
+        if(!editor.setupProject(name,url,found.routes.map(r=>({name:r.name,route:r.route})),preset||'Core',show.split(','))) return reply(false,'That project lists no screens to add.');
       }
       else if(op==='add-all') {
         const found=await discoverProject(editor.document.project.url,discoveryCache?.owner===editor.document.project.url?discoveryCache.revision:0);

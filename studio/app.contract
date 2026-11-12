@@ -559,16 +559,16 @@ component Studio
     screenPath = route
     libraryChanged = none
   action saveProject
-    send libraryChanged = library("connect", projectNameValue, projectUrlValue, "", time.epochAtZero + performanceNow())
+    send libraryChanged = library("connect", projectNameValue, projectUrlValue, "", "", time.epochAtZero + performanceNow())
   action disconnectProject
-    send libraryChanged = library("disconnect", "", "", "", time.epochAtZero + performanceNow())
+    send libraryChanged = library("disconnect", "", "", "", "", time.epochAtZero + performanceNow())
   action addAllScreens
     startTidy()
-    send libraryChanged = library("add-all", "", "", screenPreset, time.epochAtZero + performanceNow())
+    send libraryChanged = library("add-all", "", "", screenPreset, "", time.epochAtZero + performanceNow())
   action saveScreen
     if doc.deviceSets.filter(s => s.name == screenPreset).length > 0
       startTidy()
-    send libraryChanged = library(screenKind, screenName, screenPath, screenPreset, time.epochAtZero + performanceNow())
+    send libraryChanged = library(screenKind, screenName, screenPath, screenPreset, "", time.epochAtZero + performanceNow())
   state hoveredRow = ""
   action hoverRow(id: string, on: bool)
     if on or hoveredRow == id
@@ -640,11 +640,12 @@ component Studio
   task bootTimeout when booting
     after(15000, finishBoot)
   derive addableScreens = discovered.routes.filter(r => not r.added and not r.dynamic).length
-  // A setup link (`/?connect=<app url>&name=<name>&viewports=<set or device>`) connects that project and adds
-  // each of its screens once per browser; reloading the link leaves later edits alone.
+  // A setup link (`/?connect=<app url>&name=<name>&viewports=<set or device>&show=<screens>`) connects that project and adds
+  // each of its screens once per browser; reloading the link leaves later edits alone. `show` lists the screens,
+  // by name or route, that start visible; the others are added hidden so their previews do not load.
   derive setupUrl = top(nav).name == "editor" ? searchParam(top(nav), "connect") : ""
   derive setupName = searchParam(top(nav), "name") == "" ? "project" : searchParam(top(nav), "name")
-  derive setupKey = `${setupUrl} ${searchParam(top(nav), "name")} ${searchParam(top(nav), "viewports")}`
+  derive setupKey = `${setupUrl} ${searchParam(top(nav), "name")} ${searchParam(top(nav), "viewports")}${searchParam(top(nav), "show") == "" ? "" : " " + searchParam(top(nav), "show")}`
   state appliedSetup = "" persist
   state setupRunning = false
   state setupError = ""
@@ -654,7 +655,7 @@ component Studio
     setupError = ""
     setupRunning = true
     startTidy()
-    send libraryChanged = library("setup", searchParam(top(nav), "name"), setupUrl, searchParam(top(nav), "viewports"), time.epochAtZero + performanceNow())
+    send libraryChanged = library("setup", searchParam(top(nav), "name"), setupUrl, searchParam(top(nav), "viewports"), searchParam(top(nav), "show"), time.epochAtZero + performanceNow())
   action dismissSetupError
     setupError = ""
     setupDismissed = true

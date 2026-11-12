@@ -22,7 +22,7 @@ For a connection that also adds the screens, open a setup link:
 http://127.0.0.1:5173/?connect=http://127.0.0.1:5174&name=Ember&viewports=Core
 ```
 
-Replace the app URL and name with your own. Set `viewports` to a device preset or a set: `Core`, `Apple%20devices`, or `Every%20size`. Each browser applies a link once. If setup fails, start the app and click **Retry**.
+Replace the app URL and name with your own. Set `viewports` to a device preset or a set: `Core`, `Apple%20devices`, or `Every%20size`. To load fewer previews at first, add `show` with a comma-separated list of screen names or routes, such as `&show=Today,/welcome`. The link still adds every screen, but only the listed ones start visible; show the others from the Screens panel. Each browser applies a link once. If setup fails, start the app and click **Retry**.
 
 If a preview is blank, use `127.0.0.1` for the editor URL and restart the app with `EXACT_TOOL_PORT` matching the editor port. Keep the app server running.
 

@@ -169,14 +169,25 @@ export class WorkspaceEditor {
     const before=this.document,depth=this.past.length;
     try { work(); } finally { if(this.document!==before&&this.past.length>depth){ this.past.length=depth; this.past.push(before); } }
   }
-  /** Connect a project and add each of its routes the library lacks, replacing an untouched starter screen; one undo step. */
-  setupProject(name: string, url: string, routes: NewScreen[], choice: string) {
+  /** Connect a project and add each of its routes the library lacks, replacing an untouched starter screen; one undo step.
+   *  A non-empty `show` (screen names or routes) leaves only the matching project screens visible; with no match, visibility is unchanged. */
+  setupProject(name: string, url: string, routes: NewScreen[], choice: string, show: string[] = []) {
     const pristine=this.isPristine(),starter=this.document.screens[0]?.id;
     this.batch(()=>{
       if(this.document.project.url!==projectUrl(url)) this.connectProject(name||'Project',url);
       const have=new Set(this.document.screens.map(s=>s.route)),missing=routes.filter(r=>!hasRouteParameters(r.route)&&!have.has(screenRoute(r.route)));
       if(missing.length) this.addScreens(missing,choice,true);
       if(pristine&&missing.length) this.change(d=>{d.views=d.views.filter(v=>v.screenId!==starter);d.screens=d.screens.filter(s=>s.id!==starter);});
+      const wanted=new Set(show.map(entry=>entry.trim().toLowerCase()).filter(Boolean)),listed=(s:Screen)=>wanted.has(s.name.toLowerCase())||wanted.has(s.route);
+      if(wanted.size&&this.document.screens.some(s=>s.route&&listed(s))) this.change(d=>{
+        for(const s of d.screens) {
+          if(!s.route) continue;
+          if(!listed(s)) {s.hidden=true;continue;}
+          delete s.hidden;
+          if(d.views.every(v=>v.screenId!==s.id||v.hidden)) for(const v of d.views) if(v.screenId===s.id) delete v.hidden;
+        }
+      });
+      if(!this.isShown(this.active)){const first=this.shownFrames[0]?.id;if(first){this.active=first;this.selected=first;}}
     });
     this.reconcile();
     return this.document.screens.filter(s=>s.route).length;
