@@ -7,7 +7,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 ### Changed
 
 - Shortened the root README and separated usage and development documentation.
-- Added repository-wide agent instructions and a changelog maintenance convention.
+- Added repository-wide agent instructions, PR title and description requirements, a PR template, and a changelog maintenance convention.
 
 ## 2026-11-12 development
 
