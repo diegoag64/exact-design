@@ -1,15 +1,17 @@
+import {propertyCatalog,defaultProperties,computedValue} from './property-catalog';
+import {attributeRange,elementInsertion} from './source-properties';
 import {propertyName,propertyGroup,compoundFields,compoundValue} from './inspector-fields';
 import {readFile} from 'node:fs/promises';
 import { projectUrl } from '../studio/project';
 import {relative,isAbsolute,resolve} from 'node:path';
-import {layoutProperties,layoutOptions,layoutValue,sourceLiteral,digest,type LayoutSite} from './layout-source';
+import {layoutProperties,layoutOptions,layoutValue,sourceLiteral,digest,ownFile,type LayoutSite} from './layout-source';
 import {ElementBridge,bridgeFor,type ElementNode} from './element-bridge';
 import {spacingProperties,spacingRows} from '../studio/spacing';
 import {emptySpacing} from '../studio/spacing';
 import {PreviewChannel} from './preview-channel';
 import {DesignDraft,applyDesignDraft,bindingTargets,bindingKey,previewValue,type DesignBinding,type DesignPatch} from './design-drafts';
 
-const properties=new Set(['color','background-color','font-size','font-weight','line-height','letter-spacing','border-radius','opacity','font-family','text-content']);
+const properties=new Set([...Object.keys(propertyCatalog),'color','background-color','font-size','font-weight','line-height','letter-spacing','border-radius','opacity','font-family','text-content']);
 type Row={name:string;editable?:any};
 export function editableRows(selection:any) {
   if(!selection || selection.readOnly) return [];
@@ -56,6 +58,8 @@ export class DesignSession {
   selectionRevision=0;
   preview=new PreviewChannel();
   drafts=new DesignDraft();
+  overrides=new Set<string>();
+  extraProperties=new Map<string,Set<string>>();
   draftError='';
   sourceMap:any=null;
   handoff:DesignPatch[]=[];
@@ -107,7 +111,7 @@ export class DesignSession {
     const r=await this.call({client:this.client,after:this.cursor,...(this.epoch?{epoch:this.epoch}:{}),wait:false},'/__tamber/events');
     if(this.epoch && this.epoch!==r.epoch) throw new Error('The app server restarted. Finish editing and reconnect.');
     this.epoch=r.epoch; this.cursor=r.seq;
-    if(r.missed || JSON.stringify(this.files)!==JSON.stringify(r.files)) {this.selection=null;this.version++;}
+    if(r.missed || JSON.stringify(this.files)!==JSON.stringify(r.files)) {this.selection=null;this.overrides.clear();this.version++;}
     this.files=r.files;
     if(this.pendingSelection&&Date.now()>this.pendingSelection.until)this.pendingSelection=null;
     const selections=[...this.deferredSelections,...(r.events??[]).map((event:any)=>({event,until:Date.now()+1500,plan:''}))];
@@ -181,14 +185,56 @@ export class DesignSession {
         }catch{/* No local literal: do not invent a writable binding. */}
       }
     }
-    return {...event,rows};
+    return this.withDefaults({...event,rows});
+  }
+  async withDefaults(event:any){
+    const at=event.source;if(!at?.file||!this.app||event.readOnly)return event;
+    const file=relative(this.app,resolve(this.app,at.file)),sha256=this.files[file];if(!sha256)return event;
+    let source:string;try{const own=await ownFile(this.app,file);source=await readFile(own.path,'utf8');}catch{return event;}
+    if(digest(source)!==sha256)return event;
+    const address={file,line:at.line,col:at.col,sha256,property:'',shared:false};
+    if(elementInsertion(source,address)===null)return event;
+    const rows=[...event.rows],attributes=new Set<string>(rows.map(r=>r.attr??r.editable?.row).filter(Boolean));
+    const key=`${file}:${at.line}:${at.col}`;
+    const requested=new Set([...defaultProperties(this.picked?.node.kind??'container',attributes),...this.extraProperties.get(key)??[],...this.drafts.snapshot().filter(p=>p.binding.file===file&&p.binding.line===at.line&&p.binding.col===at.col&&p.binding.mode==='insert').map(p=>p.binding.property)]);
+    // Source-backed expressions become explicit override candidates. Opening an
+    // inspector never rewrites them or freezes the app's responsive behavior.
+    for(const row of rows){
+      if(!row.attr||!properties.has(row.attr)&&!layoutProperties.has(row.attr)||row.state||row.source==='initial'||row.source==='inherited'||editableRows({rows:[row]}).length)continue;
+      if(!row.at||row.origin!=='own'||row.attr==='text-content')continue;
+      const binding={file,line:row.at.line,col:row.at.col,sha256,property:row.attr,shared:false,mode:'replace' as const};
+      const range=attributeRange(source,binding);if(!range)continue;
+      row.editable={rung:'layout',row:row.attr,file,at:{line:binding.line,col:binding.col},sha256,text:computedValue(row.attr,rows),mode:'replace',expression:range.raw};
+    }
+    const offered=new Set(editableRows({rows}).map(r=>r.editable.row));
+    for(const property of requested){
+      if(offered.has(property)||!Object.hasOwn(propertyCatalog,property))continue;
+      // Existing own declarations must be replaced at their source address,
+      // never duplicated. An inherited/shared declaration can be overridden.
+      if(rows.some(r=>r.attr===property&&r.origin==='own'&&r.at))continue;
+      rows.push({name:property,source:'initial',editable:{rung:'layout',row:property,file,at:{line:at.line,col:at.col},sha256,text:computedValue(property,rows),mode:'insert'}});
+    }
+    return {...event,rows,canAddProperties:true};
+  }
+  async addProperty(version:number,property:string){
+    if(version!==this.version||!this.selection?.canAddProperties||!Object.hasOwn(propertyCatalog,property))throw new Error('Select a property for the current element.');
+    const at=this.selection.source,key=`${at.file}:${at.line}:${at.col}`;
+    const extras=this.extraProperties.get(key)??new Set<string>();extras.add(property);this.extraProperties.set(key,extras);
+    this.selection=await this.withDefaults(this.selection);
+    const index=this.currentRows().findIndex(r=>r.editable.row===property);
+    return this.edit(version,index,propertyCatalog[property]);
+  }
+  async override(version:number,index:number){
+    if(version!==this.version||!this.selection)throw new Error('The selection changed.');
+    const row=this.currentRows()[index];if(!row||row.editable.mode!=='replace')throw new Error('This property does not need an override.');
+    this.overrides.add(bindingKey(this.binding(row)));return this.edit(version,index,row.editable.text);
   }
   binding(row:Row):DesignBinding {
     const e=row.editable,at=e.site??e.at??(row as any).at;
     const file=e.site?.file??e.file??at?.file;
     if(!file||!at?.line||!at?.col)throw new Error('This property has no writable source binding.');
     const name=this.app?relative(this.app,resolve(this.app,file)):file;
-    return {file:name,line:at.line,col:at.col,sha256:e.sha256??at.sha256??this.files[name],property:e.row,shared:e.rung==='style'||e.site?.shared===true};
+    return {file:name,line:at.line,col:at.col,sha256:e.sha256??at.sha256??this.files[name],property:e.row,shared:e.rung==='style'||e.site?.shared===true,...(e.mode?{mode:e.mode,expression:e.expression}: {})};
   }
   currentRows(){return editableRows(this.selection).map(row=>{
     let patch;try{patch=this.drafts.patches.get(bindingKey(this.binding(row)));}catch{}
@@ -210,23 +256,24 @@ export class DesignSession {
     if(frame)this.bridge?.measure?.(frame.frame,spacingId);
     return {source:s?.source?`${s.source.file}:${s.source.line}`:'',component:s?.source?.component??'',version:this.version,selectionRevision:this.selectionRevision,
       spacingId,spacingPlan,spacingFrame:frame?.frame??'',
-      spacingInputs:spacingRows(rows.map((r,i)=>({id:String(i),property:r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true}))),
+      spacingInputs:spacingRows(rows.filter(r=>r.editable.mode!=='replace'||this.overrides.has(bindingKey(this.binding(r)))||this.drafts.patches.has(bindingKey(this.binding(r)))).map((r,i)=>({id:String(i),property:r.editable.row,value:r.editable.text,shared:r.editable.rung==='style'||r.editable.site?.shared===true}))),
       draftCount:this.drafts.count,draftState:this.drafts.serialize(),draftError:this.draftError||(this.drafts.conflict(this.files)?'The source changed. Discard this draft before editing the new source.':''),canApply:this.drafts.count>0&&!this.drafts.conflict(this.files)&&!this.draftError,
       instances:frame&&this.picked?frame.nodes.filter(n=>n.site===this.picked!.node.site).length:1,bridgeOrigin:this.bridge?.origin??'',tree,crumbs,selectedLabel:this.picked?.node.label??'',restoring:!!this.restoring,selecting:!!this.pendingSelection,
       message:this.pendingSelection?'Selecting element…':this.restoring?'Updating selection…':s?.readOnly || (s && !rows.length?'No editable properties.':'Select an element in a screen.'),
-      rows:this.inspectorRows(rows),canUndo:this.drafts.past.length>0,applied:this.applied};
+      availableProperties:this.selection?.canAddProperties?Object.keys(propertyCatalog).filter(p=>!rows.some(r=>r.editable.row===p)).map(value=>({value,label:propertyName[value]??value})):[],rows:this.inspectorRows(rows),canUndo:this.drafts.past.length>0,applied:this.applied};
   }
   inspectorRows(rows:Row[]){
+    const position=rows.find(r=>r.editable.row==='position')?.editable.text??'static';
     const result=rows.map((r:Row,i:number)=>{
-      const e=r.editable,property=e.row,binding=this.binding(r),fields=compoundFields(property,e.text);
-      return {id:String(i),property,name:propertyName[property]??property.replaceAll('-',' '),value:e.text,shared:binding.shared,group:propertyGroup(property),binding:`${binding.file}:${binding.line}:${binding.col}`,reason:'',readonly:false,fields,linked:fields.length>0&&fields.every(f=>f.value===fields[0].value),options:layoutOptions(property).map(value=>({value,label:optionLabels[value]??value}))};
+      const e=r.editable,property=e.row,binding=this.binding(r),fields=compoundFields(property,e.text),key=bindingKey(binding),positionLocked=['left','top','right','bottom'].includes(property)&&position==='static',locked=e.mode==='replace'&&!this.overrides.has(key)&&!this.drafts.patches.has(key);
+      return {id:String(i),property,name:propertyName[property]??property.replaceAll('-',' '),value:property==='opacity'?`${Math.round(Number(e.text)*10000)/100}%`:e.text,shared:binding.shared,group:propertyGroup(property),binding:`${binding.file}:${binding.line}:${binding.col}#${property}`,reason:positionLocked?'Choose Relative or Absolute':locked?'Controlled by code':e.mode==='replace'?'Static override':'',readonly:locked||positionLocked,canOverride:locked&&!positionLocked,added:e.mode==='insert',fields,linked:fields.length>0&&fields.every(f=>f.value===fields[0].value),options:layoutOptions(property).map(value=>({value,label:optionLabels[value]??value}))};
     });
     const seen=new Set(result.map(r=>r.property));
     for(const r of this.selection?.rows??[]){
       const property=r.attr??String(r.name).replaceAll('_','-');
       if(seen.has(property)||!(layoutProperties.has(property)||properties.has(property))||r.source==='initial'||r.source==='inherited')continue;
       seen.add(property);
-      result.push({id:'readonly-'+property,property,name:propertyName[property]??property.replaceAll('-',' '),value:String(r.token?.text??r.value??''),shared:false,group:propertyGroup(property),binding:r.at?`${r.at.file}:${r.at.line}:${r.at.col}`:'',reason:r.source==='dynamic'?(property==='text-content'?'Bound to app data · edit its source':'Responsive or data-driven expression'):r.origin==='tag'?'Defined by the element type':r.editable?.reason??'Controlled in source',readonly:true,fields:[],linked:false,options:[]});
+      result.push({id:'readonly-'+property,property,name:propertyName[property]??property.replaceAll('-',' '),value:String(r.token?.text??r.value??''),shared:false,group:propertyGroup(property),binding:r.at?`${r.at.file}:${r.at.line}:${r.at.col}`:'',reason:r.source==='dynamic'?(property==='text-content'?'Bound to app data · edit its source':'Responsive or data-driven expression'):r.origin==='tag'?'Defined by the element type':r.editable?.reason??'Controlled in source',readonly:true,canOverride:false,added:false,fields:[],linked:false,options:[]});
     }
     return result;
   }
@@ -244,7 +291,9 @@ export class DesignSession {
       if(version!==this.version || !this.selection) throw new Error('The source or selection changed. Select the element again.');
       const row=editableRows(this.selection)[index];
       if(!row) throw new Error('This property is no longer editable.');
-      const binding=this.binding(row),key=bindingKey(binding),next=previewValue(binding.property,value);
+      const binding=this.binding(row),key=bindingKey(binding);
+      if(binding.mode==='replace'&&!this.overrides.has(key)&&!this.drafts.patches.has(key))throw new Error('Choose Override before replacing a code-controlled value.');
+      const next=previewValue(binding.property,value);
       const frame=this.picked&&this.bridge?.frames.get(this.picked.frame);
       let targets;
       if(this.app&&frame){
@@ -252,7 +301,7 @@ export class DesignSession {
         if(this.sourceMap?.digest===frame.plan)targets=bindingTargets(this.sourceMap,this.app,binding);
         if(!targets?.length)throw new Error('This build has no matching preview source map. Reconnect after it rebuilds.');
       }else if(binding.shared)throw new Error('Shared style drafts require a local Exact source map.');
-      this.drafts.stage({key,binding,original:row.editable.text,value:next.author,preview:{key,site:this.picked?.node.site??0,plan:frame?.plan??'',property:binding.property,value:next.css,scope:binding.shared?'style':'site',targets},operation:this.app||row.editable.rung==='layout'?null:rowOperation(row,next.author)},this.files);
+      this.drafts.stage({key,binding,original:binding.mode==='insert'?'[not set]':binding.mode==='replace'?binding.expression??row.editable.text:row.editable.text,value:next.author,preview:{key,site:this.picked?.node.site??0,plan:frame?.plan??'',property:binding.property,value:next.css,scope:binding.shared?'style':'site',targets},operation:this.app||row.editable.rung==='layout'?null:rowOperation(row,next.author)},this.files);
       this.draftError='';this.version++;this.applied=false;
       return this.view();
     } finally {this.busy=false;}
@@ -315,7 +364,7 @@ export function designEvents(id:string,request:Request){
   if(!entry)return new Response('The editing session ended.',{status:404});
   entry.seen=Date.now();return entry.session.preview.subscribe(request);
 }
-const optionLabels:Record<string,string>={row:'Row',column:'Column','row-reverse':'Row reversed','column-reverse':'Column reversed',stretch:'Stretch','flex-start':'Start',center:'Center','flex-end':'End',baseline:'Baseline','space-between':'Space between','space-around':'Space around','space-evenly':'Space evenly',nowrap:'No wrap',wrap:'Wrap','wrap-reverse':'Wrap reversed'};
+const optionLabels:Record<string,string>={static:'Auto layout',relative:'Relative',absolute:'Absolute',fixed:'Fixed',sticky:'Sticky',block:'Block',flex:'Flex',grid:'Grid',none:'None',inline:'Inline','inline-flex':'Inline flex',solid:'Solid',dashed:'Dashed',dotted:'Dotted',inset:'Inset',row:'Row',column:'Column','row-reverse':'Row reversed','column-reverse':'Column reversed',stretch:'Stretch','flex-start':'Start',center:'Center','flex-end':'End',baseline:'Baseline','space-between':'Space between','space-around':'Space around','space-evenly':'Space evenly',nowrap:'No wrap',wrap:'Wrap','wrap-reverse':'Wrap reversed'};
 export async function designRequest(body:any) {
   for(const [id,entry] of sessions) if(Date.now()-entry.seen>120000) {sessions.delete(id);void entry.session.close().catch(()=>{});}
   if(body.op==='open') {
@@ -343,6 +392,8 @@ export async function designRequest(body:any) {
     if(s.ended){await s.close();sessions.delete(body.session);return {...view,session:''};}
     return view;
   }
+  if(body.op==='add-property')return s.addProperty(Number(body.version),String(body.row));
+  if(body.op==='override')return s.override(Number(body.version),Number(body.row));
   if(body.op==='field')return s.editField(Number(body.version),String(body.row),String(body.value));
   if(body.op==='edit') return s.edit(Number(body.version),Number(body.row),body.value);
   if(body.op==='apply')return s.apply();

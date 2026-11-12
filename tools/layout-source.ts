@@ -3,12 +3,20 @@ import {readFile,realpath,mkdir,cp,symlink,rename,rm,mkdtemp,readdir,lstat,stat,
 import {resolve,relative,sep,dirname} from 'node:path';
 
 const enums:Record<string,string[]>={
+  position:['static','relative','absolute','fixed','sticky'],
+  display:['block','flex','grid','inline','inline-flex','none'],
+  'align-self':['auto','stretch','flex-start','center','flex-end','baseline'],
+  'text-align':['left','center','right','justify'],
+  'border-style':['none','solid','dashed','dotted','inset'],
+  overflow:['visible','hidden','clip','auto','scroll'],
+  'object-fit':['fill','contain','cover','none','scale-down'],
+  'box-sizing':['border-box','content-box'],
   'flex-direction':['row','column','row-reverse','column-reverse'],
   'align-items':['stretch','flex-start','center','flex-end','baseline'],
   'justify-content':['flex-start','center','flex-end','space-between','space-around','space-evenly'],
   'flex-wrap':['nowrap','wrap','wrap-reverse'],
 };
-const lengths=new Set(['width','height','min-width','max-width','min-height','max-height','gap','row-gap','column-gap','padding','padding-top','padding-right','padding-bottom','padding-left','margin','margin-top','margin-right','margin-bottom','margin-left','border-radius','border-top-left-radius','border-top-right-radius','border-bottom-right-radius','border-bottom-left-radius','font-size','letter-spacing']);
+const lengths=new Set(['width','height','min-width','max-width','min-height','max-height','gap','row-gap','column-gap','padding','padding-top','padding-right','padding-bottom','padding-left','margin','margin-top','margin-right','margin-bottom','margin-left','border-radius','border-top-left-radius','border-top-right-radius','border-bottom-right-radius','border-bottom-left-radius','font-size','letter-spacing','left','top','right','bottom','flex-basis','border-width','border-top-width','border-right-width','border-bottom-width','border-left-width']);
 export const layoutProperties=new Set([...lengths,...Object.keys(enums)]);
 export const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
 export type LayoutSite={file:string;line:number;col:number;sha256:string;attr:string;shared:boolean};
@@ -29,12 +37,13 @@ export function layoutValue(attr:string,text:string):string {
   const value=text.trim();
   if(enums[attr]) {if(!enums[attr].includes(value)) throw new Error('Choose one of the available layout options.');return JSON.stringify(value);}
   if(!lengths.has(attr)) throw new Error('This layout property is not supported.');
-  const parts=value.split(/\s+/),isShorthand=attr==='padding'||attr==='margin'||attr==='gap'||attr==='border-radius',limit=attr==='gap'?2:isShorthand?4:1;
+  if(['width','height','min-width','max-width','min-height','max-height','flex-basis'].includes(attr)&&['auto','none','min-content','max-content','fit-content'].includes(value))return JSON.stringify(value);
+  const parts=value.split(/\s+/),isShorthand=attr==='padding'||attr==='margin'||attr==='gap'||attr==='border-radius'||attr==='border-width',limit=attr==='gap'?2:isShorthand?4:1;
   if(!value || parts.length>limit) throw new Error(attr==='gap'?'Use one or two gap values.':isShorthand?'Use one to four spacing values.':'Enter one size.');
   for(const part of parts) {
-    if(part==='auto' && (attr.includes('width')||attr.includes('height')||attr.startsWith('margin'))) continue;
+    if(part==='auto' && (attr.includes('width')||attr.includes('height')||attr.startsWith('margin')||['left','right','top','bottom','flex-basis'].includes(attr))) continue;
     if(!/^-?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem|em|%|vh|vw)?$/.test(part)) throw new Error('Use a number, CSS length, or percentage.');
-    const n=parseFloat(part);if(Math.abs(n)>10000 || (n<0&&!attr.startsWith('margin')&&attr!=='letter-spacing')) throw new Error('Use a non-negative value up to 10000.');
+    const n=parseFloat(part);if(Math.abs(n)>10000 || (n<0&&!attr.startsWith('margin')&&attr!=='letter-spacing'&&!['left','top','right','bottom'].includes(attr))) throw new Error('Use a non-negative value up to 10000.');
   }
   if(parts.length===1 && /^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(value)) return String(Number(value));
   return JSON.stringify(parts.map(p=>parts.length>1 && /^-?[\d.]+$/.test(p)?p+'px':p).join(' '));
