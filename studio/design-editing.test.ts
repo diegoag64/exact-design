@@ -108,7 +108,7 @@ test('design inspector edits text, linked spacing and corners as drafts, with pe
     await page.setViewportSize({width:1440,height:1000});await page.emulateMedia({colorScheme:'dark'});
 
     await page.getByRole('button',{name:'Close timeline',exact:true}).click();
-    await page.locator('button[title="card-1"]').first().click();
+    await page.locator('button[data-tip="card-1"]').first().click();
     await page.waitForFunction(()=>document.querySelector('[data-testid="design-source"]')?.textContent==='app.contract:150',undefined,{polling:50});
     await page.getByRole('textbox',{name:'Border radius all',exact:true}).waitFor({timeout:6000});
     await commit('Padding all','12');

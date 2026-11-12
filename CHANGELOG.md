@@ -6,6 +6,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Added
 
+- Tooltips for every icon button. They appear quickly on hover or keyboard focus, show the keyboard shortcut, and explain what the button does.
 - **Reduce preview effects** beside the zoom controls. Canvas previews omit backdrop blur at every zoom and skip CSS animations, which keeps the GPU nearly idle while the canvas is still. Full-screen Preview is unchanged, and the setting is remembered.
 
 ### Fixed

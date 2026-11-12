@@ -280,7 +280,7 @@ component IconButton
     testId: string
     press: action
   view
-    button press=press class=Tool aria-label=label title=(hint == "" ? label : hint) aria-keyshortcuts=shortcut aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.selected" : "transparent") color=(selected ? "ink.selected" : "ink.secondary")
+    button press=press class=Tool aria-label=label data-tip=(hint == "" ? label : hint) aria-keyshortcuts=shortcut aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.selected" : "transparent") color=(selected ? "ink.selected" : "ink.secondary")
       Icon(name=icon, size=16, angle=0)
 
 // Floating toolbar tool: the active tool is filled with the accent, as in Figma.
@@ -295,7 +295,7 @@ component ToolbarButton
     testId: string
     press: action
   view
-    button press=press class=Tool aria-label=label title=(hint == "" ? label : hint) aria-keyshortcuts=shortcut aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.action" : "transparent") color=(selected ? "ink.on-action" : "ink.primary")
+    button press=press class=Tool aria-label=label data-tip=(hint == "" ? label : hint) aria-keyshortcuts=shortcut aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.action" : "transparent") color=(selected ? "ink.on-action" : "ink.primary")
       Icon(name=icon, size=16, angle=0)
 
 // 24px icon action for section titles and field rows.
@@ -303,12 +303,13 @@ component SmallButton
   props
     icon: string
     label: string
+    hint: string
     selected: bool
     disabled: bool
     testId: string
     press: action
   view
-    button press=press class=SmallTool aria-label=label title=label aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.selected" : "transparent") color=(selected ? "ink.selected" : "ink.secondary")
+    button press=press class=SmallTool aria-label=label data-tip=(hint == "" ? label : hint) aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.selected" : "transparent") color=(selected ? "ink.selected" : "ink.secondary")
       Icon(name=icon, size=14, angle=0)
 
 component SectionHeading
@@ -343,7 +344,7 @@ component InlineField
             Icon(name=icon, size=14, angle=0)
           else
             text prefix font="type.caption"
-      input value=value change=change class=Field flex=1 background-color="transparent" padding-left=(prefix == "" and icon == "" ? 8 : 0) aria-label=accessibleLabel title=(hint == "" ? accessibleLabel : hint) testId=testId disabled=disabled
+      input value=value change=change class=Field flex=1 background-color="transparent" padding-left=(prefix == "" and icon == "" ? 8 : 0) aria-label=accessibleLabel data-tip=(hint == "" ? accessibleLabel : hint) testId=testId disabled=disabled
 
 component PropertyField
   props

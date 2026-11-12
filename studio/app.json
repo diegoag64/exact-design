@@ -33,6 +33,7 @@
   },
   "data": [
     "canvas-editing",
-    "preview-effects"
+    "preview-effects",
+    "tip"
   ]
 }

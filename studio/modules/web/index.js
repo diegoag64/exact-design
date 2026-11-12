@@ -2,6 +2,7 @@
 // The data runtime survives changes to the visible canvas and Preview frames.
 import {installCanvasNavigation} from './canvas-navigation.js';
 import {installMenus} from './menus.js';
+import {installTooltips} from './tooltips.js';
 const hosts=new WeakMap();
 const FRAME='#canvas-stage > [data-testid^="frame-"]',DETAIL='exact-design:preview-detail';
 // Below this zoom a backdrop blur spans a few screen pixels, but the GPU still
@@ -10,7 +11,7 @@ const LOW_DETAIL_BELOW=0.15,FULL_DETAIL_ABOVE=0.18;
 class PreviewEngines {
   frames=new Map();
   constructor(root){
-    this.root=root;this.stopNavigation=installCanvasNavigation(root);this.stopMenus=installMenus(root);
+    this.root=root;this.stopNavigation=installCanvasNavigation(root);this.stopMenus=installMenus(root);this.stopTooltips=installTooltips(root);
     // Exact owns the transforms. This browser-only hint keeps each live preview
     // composited while its camera scale changes, without flattening the world.
     this.paintStyle=document.createElement('style');
@@ -53,7 +54,7 @@ class PreviewEngines {
     for(const frame of this.root.querySelectorAll(`${FRAME} iframe`))this.detail(frame);
   }
   detail(frame){frame.contentWindow?.postMessage({kind:DETAIL,...this.sent},'*');}
-  close(){this.stopNavigation();this.stopMenus();this.observer.disconnect();this.zoom.disconnect();this.root.removeEventListener('load',this.loaded,true);this.paintStyle.remove();for(const frame of this.frames.values())frame.remove();this.frames.clear();}
+  close(){this.stopNavigation();this.stopMenus();this.stopTooltips();this.observer.disconnect();this.zoom.disconnect();this.root.removeEventListener('load',this.loaded,true);this.paintStyle.remove();for(const frame of this.frames.values())frame.remove();this.frames.clear();}
 }
 export function element(context){
   if(context.hatch==='preview-engines'&&!hosts.has(context.element))hosts.set(context.element,new PreviewEngines(context.element));
