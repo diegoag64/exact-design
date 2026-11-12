@@ -1,5 +1,5 @@
 use Icon from "./icons.contract"
-use Tool, Field, TreeRow, PanelSection, Menu, IconButton, SectionHeading, MenuItem, MenuDivider, PropertyField, screensWidth, inspectorWidth, InspectorValue from "./ui.contract"
+use Tool, SmallTool, Field, FieldShell, TreeRow, PanelSection, SectionHead, FloatingBar, Segmented, Segment, RowButton, PrimaryButton, SecondaryButton, Dialog, Menu, IconButton, SmallButton, ToolbarButton, SectionHeading, FieldLabel, InlineField, MenuItem, MenuDivider, Divider, Kbd, PropertyField, screensWidth, inspectorWidth from "./ui.contract"
 
 routes nav
   editor "/"
@@ -15,9 +15,15 @@ shape SnapTarget
 
 fn propertyIcon(property: string, value: string): string = property == "flex-direction" ? (value.startsWith("row") ? "columns-2" : "rows-2") : property == "align-items" ? (value == "flex-start" ? "align-vertical-justify-start" : value == "center" ? "align-vertical-justify-center" : value == "flex-end" ? "align-vertical-justify-end" : value == "stretch" ? "move-vertical" : "align-vertical-justify-end") : value == "flex-start" ? "align-horizontal-justify-start" : value == "center" ? "align-horizontal-justify-center" : value == "flex-end" ? "align-horizontal-justify-end" : "between-horizontal-start"
 
+fn deviceIcon(name: string): string = name == "Phone" ? "smartphone" : name == "Tablet" ? "tablet" : "monitor"
+fn propertyPrefix(property: string): string = property == "left" ? "X" : property == "top" ? "Y" : property == "width" ? "W" : property == "height" ? "H" : ""
+fn propertyGlyph(property: string): string = property == "rotate" ? "rotate-cw" : property == "opacity" ? "blend" : property == "border-radius" ? "radius" : property == "font-size" ? "a-large-small" : property == "line-height" ? "baseline" : property == "letter-spacing" ? "whole-word" : property == "z-index" ? "layers" : property == "border-width" ? "minus" : property == "gap" or property == "row-gap" or property == "column-gap" ? "between-horizontal-start" : ""
+fn compoundIcon(property: string): string = property == "padding" ? "square-dashed" : property == "margin" ? "scan" : property == "border-radius" ? "radius" : "between-horizontal-start"
+fn fieldPrefix(label: string): string = label == "Top" ? "T" : label == "Right" ? "R" : label == "Bottom" ? "B" : label == "Left" ? "L" : label == "Top left" ? "TL" : label == "Top right" ? "TR" : label == "Bottom right" ? "BR" : label == "Bottom left" ? "BL" : label == "Row" ? "↕" : label == "Column" ? "↔" : label
+fn swatchable(property: string, value: string): bool = (property == "color" or property.endsWith("-color")) and (value.startsWith("#") or value.startsWith("rgb") or value.startsWith("hsl"))
 fn magnitude(n: number): number = max(n, -n)
 fn panEase(t: number): number = 1 - (1 - t) * (1 - t) * (1 - t)
-fn layerKind(kind: string): string = kind == "text" or kind == "span" ? "Text" : kind == "button" ? "Button" : kind == "row" ? "Row" : kind == "column" ? "Column" : kind == "scroll" ? "Scroll" : kind == "grid" ? "Grid" : kind == "image" or kind == "img" ? "Image" : kind == "screen" or kind == "main" ? "Screen" : kind == "input" ? "Input" : "Container"
+fn layerKind(kind: string): string = kind == "text" or kind == "span" ? "Text" : kind == "button" ? "Button" : kind == "row" ? "Row" : kind == "column" ? "Column" : kind == "scroll" ? "Scroll" : kind == "grid" ? "Grid" : kind == "image" or kind == "img" ? "Image" : kind == "screen" or kind == "main" ? "Screen" : kind == "input" ? "Input" : kind == "rectangle" ? "Rectangle" : "Container"
 fn spacingName(property: string): string = property == "padding-top" ? "Top padding" : property == "padding-right" ? "Right padding" : property == "padding-bottom" ? "Bottom padding" : property == "padding-left" ? "Left padding" : property == "row-gap" ? "Vertical gap" : "Horizontal gap"
 
 fn snappedDelta(targets: SnapTarget[], origin: number, delta: number, zoom: number): number = match first(sortBy(targets, t => magnitude(t.value - origin - delta))) { case some(t) => magnitude(t.value - origin - delta) <= 8 / zoom ? t.value - origin : delta, case none => delta }
@@ -220,6 +226,7 @@ shape DesignReply
   availableProperties: LayoutOption[]
   canUndo: bool
   applied: bool
+  draftFiles: DraftFile[]
   bridgeOrigin: string
   tree: ElementNode[]
   crumbs: ElementNode[]
@@ -230,6 +237,26 @@ shape DesignReply
   spacingPlan: string
   spacingFrame: string
   spacingInputs: SpacingInput[]
+
+shape DraftChange
+  key: string
+  location: string
+  line: number
+  property: string
+  name: string
+  icon: string
+  element: string
+  before: string
+  after: string
+  added: bool
+  replaced: bool
+  shared: bool
+  swatchBefore: string
+  swatchAfter: string
+
+shape DraftFile
+  file: string
+  changes: DraftChange[]
 
 shape ElementNode
   id: string
@@ -264,6 +291,15 @@ component Studio
   resource discovered = discover(doc.projectUrl, doc.groups.map(g => g.route), discoveryRevision) as shape Discovery else empty()
   resource history = history(doc.projectUrl) as shape History else empty()
   state timelineOpen = false persist
+  state statusSeen = ""
+  action dismissStatus
+    statusSeen = doc.status
+  action resetStatus
+    statusSeen = ""
+  task statusFade when doc.status == "Saved" and statusSeen != "Saved"
+    after(2400, dismissStatus)
+  task statusReset when doc.status == "" and statusSeen != ""
+    after(1, resetStatus)
   state historySelected = ""
   action toggleTimeline
     timelineOpen = not timelineOpen
@@ -326,6 +362,7 @@ component Studio
     rightPanel = "open"
     send designChanged = design("open", "", doc.source, 0, doc.active, "", time.epochAtZero + performanceNow())
   action finishEditing
+    reviewOpen = false
     spacingProperty = ""
     hoveredElement = ""
     designWriting = true
@@ -390,6 +427,12 @@ component Studio
   action applyDesign
     designWriting = true
     send designChanged = design("apply", designSession, "", 0, "", "", time.epochAtZero + performanceNow())
+  state reviewOpen = false
+  action toggleReview
+    reviewOpen = not reviewOpen
+  action revertDesign(key: string)
+    designWriting = true
+    send designChanged = design("revert", designSession, "", 0, key, "", time.epochAtZero + performanceNow())
   action discardDesign
     designWriting = true
     send designChanged = design("discard", designSession, "", 0, "", "", time.epochAtZero + performanceNow())
@@ -400,8 +443,10 @@ component Studio
   action afterDesign
     match designChanged
       case some(r)
-        if ["open", "close", "edit", "field", "spacing", "override", "add-property", "undo", "apply", "discard"].includes(r.operation)
+        if ["open", "close", "edit", "field", "spacing", "override", "add-property", "undo", "revert", "apply", "discard"].includes(r.operation)
           designWriting = false
+        if r.ok and r.draftCount == 0
+          reviewOpen = false
         if r.error != ""
           designError = r.error
         if r.ok
@@ -442,6 +487,8 @@ component Studio
   action closeLibrary
     nav = back(nav)
   action projectSettings
+    if editing
+      finishEditing()
     projectNameChanged = false
     projectUrlChanged = false
     libraryChanged = none
@@ -702,24 +749,24 @@ component Studio
   action previewClick
     clicks = clicks + 1
   view
-    main hatch="preview-engines" data-canvas-editing=editing navigationKey=`${top(nav).id}` navigationBack="closeLibrary" navigate=follow testId="editor" width="100%" height="100%" display="flex" flex-direction="column" background-color="ink.inverse" color="ink.primary" font="type.body"
+    main hatch="preview-engines" data-canvas-editing=editing navigationKey=`${top(nav).id}` navigationBack="closeLibrary" navigate=follow testId="editor" width="100%" height="100%" display="flex" flex-direction="column" background-color="surface.canvas" color="ink.primary" font="type.body"
       column id="studio-menu" popover="auto" role="menu" aria-label="Canvas actions" class=Menu
-        MenuItem(label="Undo", icon="undo-2", shortcut="", disabled=(editing ? not appCanUndo : not doc.canUndo), destructive=false, menu="studio-menu", testId="menu-undo", press=command("undo", ""))
+        MenuItem(label="Undo", icon="undo-2", shortcut="⌘Z", disabled=(editing ? not appCanUndo : not doc.canUndo), destructive=false, menu="studio-menu", testId="menu-undo", press=command("undo", ""))
         if not editing
-          MenuItem(label="Redo", icon="redo-2", shortcut="", disabled=not doc.canRedo, destructive=false, menu="studio-menu", testId="menu-redo", press=command("redo", ""))
+          MenuItem(label="Redo", icon="redo-2", shortcut="⇧⌘Z", disabled=not doc.canRedo, destructive=false, menu="studio-menu", testId="menu-redo", press=command("redo", ""))
         MenuDivider()
         if editing
           MenuItem(label="Select parent", icon="corner-up-left", shortcut="", disabled=selectingElement, destructive=false, menu="studio-menu", testId="menu-parent", press=selectParent)
-          MenuItem(label="Finish editing", icon="check", shortcut="", disabled=designWriting, destructive=false, menu="studio-menu", testId="menu-finish", press=finishEditing)
+          MenuItem(label="Finish editing", icon="check", shortcut="Esc", disabled=designWriting, destructive=false, menu="studio-menu", testId="menu-finish", press=finishEditing)
         else
           if doc.source != ""
             MenuItem(label="Edit app design", icon="mouse-pointer-2", shortcut="", disabled=designWriting, destructive=false, menu="studio-menu", testId="menu-edit", press=startEditing)
           if doc.frameSelected
             MenuItem(label="Duplicate screen", icon="copy", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-duplicate", press=command("duplicate", ""))
             for preset in ["Phone", "Tablet", "Desktop"] key=preset
-              MenuItem(label=`Add ${preset.toLowerCase()} viewport`, icon=(preset == "Phone" ? "smartphone" : preset == "Tablet" ? "tablet" : "monitor"), shortcut="", disabled=false, destructive=false, menu="studio-menu", testId=`menu-variant-${preset.toLowerCase()}`, press=addViewport(preset))
+              MenuItem(label=`Add ${preset.toLowerCase()} viewport`, icon=deviceIcon(preset), shortcut="", disabled=false, destructive=false, menu="studio-menu", testId=`menu-variant-${preset.toLowerCase()}`, press=addViewport(preset))
           if doc.selected != ""
-            MenuItem(label="Delete", icon="trash-2", shortcut="", disabled=doc.frameSelected and doc.views.length == 1, destructive=true, menu="studio-menu", testId="menu-delete", press=command("delete", ""))
+            MenuItem(label="Delete", icon="trash-2", shortcut="⌫", disabled=doc.frameSelected and doc.views.length == 1, destructive=true, menu="studio-menu", testId="menu-delete", press=command("delete", ""))
         MenuDivider()
         MenuItem(label="Zoom to fit", icon="maximize", shortcut="⇧1", disabled=false, destructive=false, menu="studio-menu", testId="menu-fit", press=resetView)
         MenuItem(label=(editing or doc.frameSelected ? "Zoom to screen" : "Zoom to selection"), icon="scan", shortcut="⇧2", disabled=false, destructive=false, menu="studio-menu", testId="menu-fit-selection", press=fitSelection)
@@ -730,74 +777,56 @@ component Studio
       for entry in stack(nav) key=entry.id
         if entry.name == "editor"
           column navigationKey=`${entry.id}` position="absolute" inset=0
-            row height=48 flex-shrink=0 align-items="center" padding-left=12 padding-right=12 gap=6 border-bottom-width=1 border-bottom-style="solid" border-bottom-color="line.subtle"
-              IconButton(icon="panel-left", label=(leftOpen ? "Hide screens" : "Show screens"), hint="Screens", shortcut="", selected=leftOpen, disabled=false, testId="toggle-screens", press=toggleLeft)
-              Icon(name="layers", size=16, angle=0)
-              if viewport.width >= 700
-                text "Exact Design" font-weight=600 font="type.body"
-                text "/" color="ink.muted"
-              text (doc.projectName == "" ? doc.name : doc.projectName) testId="document-name" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
-              row flex=1
-              if doc.status != ""
-                text doc.status color="ink.secondary" testId="save-status"
-              IconButton(icon="rows-2", label="Timeline", hint="Design timeline", shortcut="", selected=timelineOpen, disabled=false, testId="toggle-timeline", press=toggleTimeline)
-              IconButton(icon="download", label="Save", hint="Save", shortcut="Meta+s Control+s", selected=false, disabled=false, testId="save", press=command("save", ""))
-              button press=command("undo", "") aria-keyshortcuts="Meta+z Control+z" class=Tool display=(viewport.width >= 700 ? "flex" : "none") disabled=(editing ? not appCanUndo : not doc.canUndo) aria-label="Undo" title="Undo" testId="undo"
-                Icon(name="undo-2", size=16, angle=0)
-              button press=command("redo", "") aria-keyshortcuts="Meta+Shift+z Control+Shift+z" class=Tool display=(viewport.width >= 700 ? "flex" : "none") disabled=(editing or not doc.canRedo) aria-label="Redo" title="Redo" testId="redo"
-                Icon(name="redo-2", size=16, angle=0)
-              IconButton(icon="play", label="Preview", hint="Preview", shortcut="", selected=false, disabled=editing, testId="preview", press=togglePreview)
-              button press=toggleCode disabled=(doc.source != "") height=30 border-width=0 border-radius=6 background-color="surface.action" color="ink.on-action" padding-left=12 padding-right=12 testId="export"
-                text "Export" font="type.body"
-              column width=1 height=20 background-color="line.subtle" margin-left=4 margin-right=4
-              IconButton(icon="panel-right", label=(rightOpen ? "Hide inspector" : "Show inspector"), hint="Inspector", shortcut="", selected=rightOpen, disabled=false, testId="toggle-inspector", press=toggleRight)
             row flex=1 min-height=0 position="relative"
               if leftOpen
-                column testId="screens-panel" position=(viewport.width >= 1000 ? "relative" : "absolute") left=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=screensWidth() flex-shrink=0 border-right-width=1 border-right-style="solid" border-right-color="line.subtle" padding-top=12 gap=8
+                column testId="screens-panel" position=(viewport.width >= 1000 ? "relative" : "absolute") left=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=screensWidth() flex-shrink=0 box-sizing="border-box" border-right="1px solid line.subtle"
+                  FileHeader(name=(doc.projectName == "" ? doc.name : doc.projectName), subtitle=(doc.projectUrl == "" ? "No project connected" : doc.projectUrl), compact=false, open=true, disabled=false, connect=projectSettings, toggle=toggleLeft)
                   if editing
-                    row padding-left=16 padding-right=8 height=32 align-items="center"
-                      text "Layers" font-weight=600
+                    row height=40 flex-shrink=0 box-sizing="border-box" align-items="center" gap=8 padding="0 12px 0 16px"
+                      SectionHeading(label="Layers")
+                      text `${elementTree.length}` font="type.caption" color="ink.muted" font-variant-numeric="tabular-nums" title="Rendered elements in this viewport"
                     scroll flex=1 min-height=0 testId="element-tree"
-                      column padding-left=8 padding-right=8 gap=2
+                      column padding="0 8px 12px" gap=1
                         for element, i in elementTree key=element.id
                           if element.ancestors.filter(id => collapsedElements.includes(id)).length == 0
-                            row class=TreeRow contextmenu=selectElement(element.id) contextPopover="studio-menu" id=`layer-row-${element.id}` hover=hoverElement(element.id) align-items="center" padding-left=(min(element.depth, 8) * 12) background-color=(element.selected ? "surface.selected" : "transparent") border-radius=5
+                            row class=TreeRow contextmenu=selectElement(element.id) contextPopover="studio-menu" id=`layer-row-${element.id}` hover=hoverElement(element.id) height=28 flex-shrink=0 align-items="center" padding-left=(4 + min(element.depth, 8) * 12) background-color=(element.selected ? "surface.selected" : "transparent")
                               if element.hasChildren
-                                button press=toggleElement(element.id) class=Tool width=20 height=28 padding=3 aria-label=`Toggle ${element.label}` aria-expanded=(not collapsedElements.includes(element.id)) testId=`fold-element-${i}`
-                                  Icon(name="chevron-right", size=10, angle=(collapsedElements.includes(element.id) ? 0 : 90))
+                                button press=toggleElement(element.id) class=SmallTool width=16 height=28 padding=0 color="ink.muted" aria-label=`Toggle ${element.label}` aria-expanded=(not collapsedElements.includes(element.id)) testId=`fold-element-${i}`
+                                  Icon(name="chevron-right", size=12, angle=(collapsedElements.includes(element.id) ? 0 : 90))
                               else
-                                column width=20 flex-shrink=0
-                              button press=selectElement(element.id) testId=`element-${i}` aria-label=(element.label == layerKind(element.kind) ? element.label : `${layerKind(element.kind)}: ${element.label}`) title=element.label aria-pressed=element.selected display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding=0 padding-right=8 border-width=0 background-color="transparent" color=(element.selected ? "ink.selected" : "ink.secondary")
-                                ElementIcon(kind=element.kind)
-                                text element.label font="type.body" text-align="left" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                                column width=16 flex-shrink=0
+                              button press=selectElement(element.id) testId=`element-${i}` aria-label=(element.label == layerKind(element.kind) ? element.label : `${layerKind(element.kind)}: ${element.label}`) title=element.label aria-pressed=element.selected display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 8px 0 4px" border-width=0 background-color="transparent" color=(element.selected ? "ink.selected" : "ink.primary")
+                                column color=(element.selected ? "ink.selected" : "ink.muted") flex-shrink=0
+                                  ElementIcon(kind=element.kind)
+                                text element.label font="type.body" font-weight=(element.selected ? 500 : 400) text-align="left" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
                   else
-                    button press=projectSettings display="flex" align-items="center" gap=8 margin-left=8 margin-right=8 padding=8 border-width=0 border-radius=6 background-color="surface.field" color="ink.primary" aria-label="Project connection" testId="project-connection"
-                      Icon(name="link-2", size=16, angle=0)
-                      text (doc.projectName == "" ? "Connect project" : doc.projectName) font="type.body" flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
-                      Icon(name="settings-2", size=16, angle=0)
-                    row padding-left=16 padding-right=8 align-items="center"
-                      text "Screens" font-weight=600 flex=1
-                      button press=addScreen class=Tool aria-label="Add screen" testId="add-screen"
-                        Icon(name="plus", size=16, angle=0)
+                    row height=40 flex-shrink=0 box-sizing="border-box" align-items="center" gap=4 padding="0 12px 0 16px"
+                      SectionHeading(label="Screens")
+                      SmallButton(icon="plus", label="Add screen", selected=false, disabled=false, testId="add-screen", press=addScreen)
                     scroll flex=1 min-height=0
-                      column gap=6 padding-left=8 padding-right=8
+                      column padding="0 8px 12px" gap=1
+                        if scene.groups.length == 0
+                          text "No screens yet. Add one to start." padding="8px" font="type.caption" color="ink.muted"
                         for group in scene.groups key=group.id
-                          column gap=2
-                            row align-items="center" gap=2 height=32
-                              button press=toggleGroup(group.id) testId=`fold-group-${group.id}` class=Tool width=20 height=28 padding=4 aria-label=`Toggle ${group.name}` aria-expanded=(not collapsed.includes(group.id))
-                                Icon(name="chevron-right", size=12, angle=(collapsed.includes(group.id) ? 0 : 90))
-                              button press=focusScreen(group.id) testId=`group-${group.id}` aria-label=group.name title="Show screen" display="flex" flex=1 min-width=0 align-items="center" height=32 padding=0 padding-right=8 border-width=0 border-radius=5 background-color="transparent" color="ink.primary"
-                                text group.name font="type.body" font-weight=500 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
-                            if not collapsed.includes(group.id)
-                              for v in group.views key=v.id
-                                button contextmenu=command("select", v.id) contextPopover="studio-menu" class=TreeRow press=focusView(v.id, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" align-items="center" gap=6 height=30 padding-left=22 padding-right=8 border-width=0 border-radius=5 background-color=(doc.active == v.id and doc.frameSelected ? "surface.selected" : "transparent") color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.secondary")
-                                  Icon(name=(v.name == "Phone" ? "smartphone" : v.name == "Tablet" ? "tablet" : "monitor"), size=14, angle=0)
-                                  text v.name font="type.body" flex=1 text-align="left"
-                                  text `${v.width} × ${v.height}` font-size=10
-                              for n in group.layers key=n.id
-                                button contextmenu=command("select", n.id) contextPopover="studio-menu" class=TreeRow press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" align-items="center" gap=8 height=30 padding-left=28 padding-right=8 border-width=0 border-radius=5 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.secondary")
+                          row class=TreeRow height=28 flex-shrink=0 align-items="center" padding-left=4
+                            button press=toggleGroup(group.id) testId=`fold-group-${group.id}` class=SmallTool width=16 height=28 padding=0 color="ink.muted" aria-label=`Toggle ${group.name}` aria-expanded=(not collapsed.includes(group.id))
+                              Icon(name="chevron-right", size=12, angle=(collapsed.includes(group.id) ? 0 : 90))
+                            button press=focusScreen(group.id) testId=`group-${group.id}` aria-label=group.name title="Show screen" display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 8px 0 4px" border-width=0 background-color="transparent" color="ink.primary"
+                              column color="ink.muted" flex-shrink=0
+                                Icon(name=(group.source == "" ? "frame" : "globe"), size=14, angle=0)
+                              text group.name font="type.body" font-weight=500 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                          if not collapsed.includes(group.id)
+                            for v in group.views key=v.id
+                              button contextmenu=command("select", v.id) contextPopover="studio-menu" class=TreeRow press=focusView(v.id, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" flex-shrink=0 align-items="center" gap=6 height=28 padding="0 8px 0 30px" border-width=0 background-color=(doc.active == v.id and doc.frameSelected ? "surface.selected" : "transparent") color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.primary")
+                                column color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.muted") flex-shrink=0
+                                  Icon(name=deviceIcon(v.name), size=14, angle=0)
+                                text v.name font="type.body" flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                                text `${v.width} × ${v.height}` font="type.caption" color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.muted") font-variant-numeric="tabular-nums"
+                            for n in group.layers key=n.id
+                              button contextmenu=command("select", n.id) contextPopover="studio-menu" class=TreeRow press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" flex-shrink=0 align-items="center" gap=6 height=28 padding="0 8px 0 44px" border-width=0 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.primary")
+                                column color=(doc.selected == n.id ? "ink.selected" : "ink.muted") flex-shrink=0
                                   ElementIcon(kind=n.kind)
-                                  text n.name font="type.body"
+                                text n.name font="type.body" flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
 
               column id="canvas-stage" outline="none" tabindex=-1 contextmenu=canvasMenu contextPopover="studio-menu" testId="canvas-stage" wheel=wheel flex=1 min-width=0 min-height=0 position="relative" overflow="clip" background-color="surface.canvas"
                 for v in scene.views key=v.id
@@ -829,340 +858,607 @@ component Studio
                           column display="none"
                     case none
                       column display="none"
-                row display=(panelOverlay ? "none" : "flex") position="absolute" bottom=20 left="50%" translate="-50% 0" padding=6 gap=4 align-items="center" border="1px solid line.subtle" background-color="ink.inverse" border-radius=10 box-shadow="shadow.menu"
-                  IconButton(icon="mouse-pointer-2", label="Select", hint="Select (V)", shortcut="v", selected=not hand, disabled=false, testId="select-tool", press=selectTool)
-                  IconButton(icon="hand", label="Pan", hint="Pan (H) · Hold Space to pan", shortcut="h", selected=hand, disabled=false, testId="hand-tool", press=handTool)
+                row position="absolute" top=12 left=(leftOpen and viewport.width < 1000 ? screensWidth() + 12 : 12) right=(rightOpen and viewport.width < 700 ? inspectorWidth() + 12 : 12) z-index=2 flex-wrap="wrap" gap=8 align-items="flex-start" pointer-events="none"
+                  if not leftOpen
+                    column class=FloatingBar align-items="stretch" width=(viewport.width >= 700 ? "232px" : "auto") max-width="100%" min-width=0 flex-shrink=1 padding=0 pointer-events="auto"
+                      FileHeader(name=(doc.projectName == "" ? doc.name : doc.projectName), subtitle="", compact=true, open=false, disabled=false, connect=projectSettings, toggle=toggleLeft)
+                  if not rightOpen
+                    column class=FloatingBar align-items="stretch" margin-left="auto" max-width="100%" flex-shrink=0 padding=0 pointer-events="auto"
+                      ActionBar(compact=true, narrow=(viewport.width < 700), minimal=(leftOpen and viewport.width < 700), canUndo=(editing ? appCanUndo : doc.canUndo), canRedo=(not editing and doc.canRedo), canExport=(doc.source == ""), canPreview=not editing, open=false, undo=command("undo", ""), redo=command("redo", ""), save=command("save", ""), preview=togglePreview, exportCode=toggleCode, toggle=toggleRight)
+                if doc.status != "" and doc.status != statusSeen
+                  row class=FloatingBar position="absolute" bottom=68 left="50%" translate="-50% 0" height=32 padding="0 12px" gap=8 max-width="calc(100% - 32px)" min-width=0 z-index=2 role="status" color=(doc.status == "Saved" ? "ink.secondary" : "ink.danger")
+                    Icon(name=(doc.status == "Saved" ? "check" : "circle-alert"), size=14, angle=0)
+                    text doc.status testId="save-status" font="type.body" color="ink.primary" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" min-width=0
+                row class=FloatingBar display=(panelOverlay ? "none" : "flex") position="absolute" bottom=16 left="50%" translate="-50% 0" z-index=2
+                  ToolbarButton(icon="mouse-pointer-2", label="Select", hint="Select (V)", shortcut="v", selected=not hand, disabled=false, testId="select-tool", press=selectTool)
+                  ToolbarButton(icon="hand", label="Pan", hint="Pan (H) · Hold Space to pan", shortcut="h", selected=hand, disabled=false, testId="hand-tool", press=handTool)
                   if not editing
-                    column width=1 height=20 background-color="line.subtle" margin-left=2 margin-right=2
-                    button press=addScreen class=Tool aria-label="New screen" title="New screen" testId="new-screen"
-                      Icon(name="frame", size=16, angle=0)
-                    button press=command("add", "rectangle") disabled=(doc.source != "") class=Tool aria-label="Rectangle" title="Rectangle" testId="add-rectangle"
-                      Icon(name="square", size=16, angle=0)
-                    button press=command("add", "text") disabled=(doc.source != "") class=Tool aria-label="Text" title="Text" testId="add-text"
-                      Icon(name="type", size=16, angle=0)
-                    button press=command("add", "button") disabled=(doc.source != "") class=Tool aria-label="Button" title="Button" testId="add-button"
-                      Icon(name="plus", size=16, angle=0)
-                row display=(panelOverlay ? "none" : "flex") position="absolute" right=16 bottom=(viewport.width >= 1000 ? 24 : 82) align-items="center" gap=4 background-color="ink.inverse" border-radius=8 padding=2 border="1px solid line.subtle"
-                  IconButton(icon="minus", label="Zoom out", hint="Zoom out", shortcut="", selected=false, disabled=false, testId="zoom-out", press=zoomOut)
-                  button press=resetView class=Tool width=48 aria-label="Fit all screens" title="Fit all screens" testId="zoom"
+                    Divider()
+                    ToolbarButton(icon="frame", label="New screen", hint="New screen", shortcut="", selected=false, disabled=false, testId="new-screen", press=addScreen)
+                    ToolbarButton(icon="square", label="Rectangle", hint="Rectangle", shortcut="", selected=false, disabled=(doc.source != ""), testId="add-rectangle", press=command("add", "rectangle"))
+                    ToolbarButton(icon="type", label="Text", hint="Text", shortcut="", selected=false, disabled=(doc.source != ""), testId="add-text", press=command("add", "text"))
+                    ToolbarButton(icon="rectangle-horizontal", label="Button", hint="Button", shortcut="", selected=false, disabled=(doc.source != ""), testId="add-button", press=command("add", "button"))
+                  Divider()
+                  ToolbarButton(icon="history", label="Timeline", hint="Design timeline", shortcut="", selected=timelineOpen, disabled=false, testId="toggle-timeline", press=toggleTimeline)
+                row class=FloatingBar display=(panelOverlay ? "none" : "flex") position="absolute" right=16 bottom=(viewport.width >= 1000 ? 16 : 72) z-index=2
+                  SmallButton(icon="minus", label="Zoom out", selected=false, disabled=false, testId="zoom-out", press=zoomOut)
+                  button press=resetView class=SmallTool width=48 aria-label="Fit all screens" title="Fit all screens (⇧1)" testId="zoom" color="ink.primary"
                     text `${round(zoom * 100)}%` font="type.caption" font-variant-numeric="tabular-nums"
-                  IconButton(icon="plus", label="Zoom in", hint="Zoom in", shortcut="", selected=false, disabled=false, testId="zoom-in", press=zoomIn)
+                  SmallButton(icon="plus", label="Zoom in", selected=false, disabled=false, testId="zoom-in", press=zoomIn)
               if rightOpen
-                scroll testId="inspector-panel" position=(viewport.width >= 700 ? "relative" : "absolute") right=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=inspectorWidth() flex-shrink=0 border-left-width=1 border-left-style="solid" border-left-color="line.subtle"
+                scroll testId="inspector-panel" position=(viewport.width >= 700 ? "relative" : "absolute") right=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=inspectorWidth() flex-shrink=0 box-sizing="border-box" border-left="1px solid line.subtle"
                   column gap=0
-                    row class=PanelSection height=46 box-sizing="border-box" align-items="center"
+                    ActionBar(compact=false, narrow=(viewport.width < 700), minimal=false, canUndo=(editing ? appCanUndo : doc.canUndo), canRedo=(not editing and doc.canRedo), canExport=(doc.source == ""), canPreview=not editing, open=true, undo=command("undo", ""), redo=command("redo", ""), save=command("save", ""), preview=togglePreview, exportCode=toggleCode, toggle=toggleRight)
+                    row height=40 flex-shrink=0 box-sizing="border-box" align-items="center" gap=8 padding="0 12px 0 16px" border-bottom="1px solid line.subtle"
                       text "Design" font="type.body" font-weight=600 flex=1
                       if doc.source != "" or editing
-                        button press=toggleEditing disabled=designWriting class=Tool width="auto" height=26 padding="0 8px" background-color=(editing ? "surface.selected" : "surface.field") color=(editing ? "ink.selected" : "ink.primary") aria-label=(editing ? "Finish editing app" : "Edit app design") testId="edit-app"
-                          Icon(name=(editing ? "check" : "mouse-pointer-2"), size=14, angle=0)
-                          text (editing ? "Done" : "Edit") font="type.body"
+                        if editing
+                          button press=toggleEditing disabled=designWriting class=PrimaryButton height=24 padding="0 8px" aria-label="Finish editing app" title="Finish editing (Esc)" testId="edit-app"
+                            Icon(name="check", size=14, angle=0)
+                            text "Done" font="type.caption" font-weight=500
+                        else
+                          button press=toggleEditing disabled=designWriting class=SecondaryButton height=24 padding="0 8px" aria-label="Edit app design" title="Select and edit elements in this app" testId="edit-app"
+                            Icon(name="mouse-pointer-2", size=14, angle=0)
+                            text "Edit app" font="type.caption" font-weight=500
                     if designError != ""
-                      text designError margin=16 role="alert" font="type.body" color="ink.secondary" testId="design-error"
+                      row margin="12px 12px 0 16px" padding="8px 10px" gap=8 align-items="flex-start" border-radius="radius.control" background-color="surface.field" color="ink.danger"
+                        Icon(name="circle-alert", size=14, angle=0)
+                        text designError role="alert" flex=1 min-width=0 font="type.caption" color="ink.primary" testId="design-error"
                     if editing
                       column gap=0
                         match designChanged
                           case some(result)
                             if result.draftCount > 0
-                              column class=PanelSection
-                                row align-items="center" justify-content="space-between"
-                                  text `${result.draftCount} unsaved ${result.draftCount == 1 ? "change" : "changes"}` font="type.caption" color="ink.secondary" testId="draft-count"
-                                  button press=discardDesign class=Tool height=26 padding=4 disabled=designWriting testId="discard-design"
-                                    text "Discard" font="type.caption"
-                                button press=applyDesign class=Tool background-color="surface.selected" width="100%" disabled=(not result.canApply or designWriting) testId="apply-design"
-                                  text "Apply to code" font="type.body"
+                              column class=PanelSection background-color="surface.notice" gap=10
+                                row align-items="center" gap=8
+                                  row width=20 height=20 flex-shrink=0 border-radius=10 align-items="center" justify-content="center" background-color="surface.action" color="ink.on-action" aria-hidden=true
+                                    text `${result.draftCount}` font-size=10 font-weight=700 font-variant-numeric="tabular-nums"
+                                  column flex=1 min-width=0 gap=0
+                                    text `${result.draftCount} unsaved ${result.draftCount == 1 ? "change" : "changes"}` font="type.body" font-weight=600 testId="draft-count"
+                                    text "Not written to code yet" font="type.caption" color="ink.secondary"
+                                  if result.canUndo
+                                    SmallButton(icon="undo-2", label="Undo draft change", selected=false, disabled=designWriting, testId="undo-app-design", press=undoDesign)
+                                  SmallButton(icon="trash-2", label="Discard all changes", selected=false, disabled=designWriting, testId="discard-design", press=discardDesign)
+                                row gap=8
+                                  button press=toggleReview class=SecondaryButton flex=1 background-color="surface.panel" aria-label="Review changes" title="Review every change before writing code" testId="review-design"
+                                    Icon(name="git-compare", size=14, angle=0)
+                                    text "Review"
+                                  button press=applyDesign class=PrimaryButton flex=1 disabled=(not result.canApply or designWriting) aria-label="Apply to code" title="Validate and write these changes to source" testId="apply-design"
+                                    Icon(name="code-2", size=14, angle=0)
+                                    text "Apply"
                                 if result.draftError != ""
-                                  text result.draftError role="alert" font="type.caption" color="ink.secondary" testId="draft-error"
+                                  row gap=6 align-items="flex-start" color="ink.danger"
+                                    Icon(name="circle-alert", size=14, angle=0)
+                                    text result.draftError role="alert" flex=1 min-width=0 font="type.caption" color="ink.primary" testId="draft-error"
                             for selected in result.crumbs.filter(c => c.selected) key=selected.id
-                              column class=PanelSection
+                              column class=PanelSection gap=8
                                 for parent in result.crumbs.filter(c => c.depth == selected.depth - 1) key=parent.id
-                                  button press=selectElement(parent.id) class=Tool width="100%" height=26 padding=0 gap=6 justify-content="flex-start" aria-label=`Select parent: ${parent.label}` title=`Select parent: ${parent.label}` testId="element-parent" color="ink.secondary"
-                                    Icon(name="chevron-right", size=10, angle=-90)
-                                    text parent.label font="type.caption" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
-                                row align-items="flex-start" gap=8
-                                  column padding-top=2 color="ink.secondary"
+                                  button press=selectElement(parent.id) class=RowButton height=24 padding="0 4px" margin-left=-4 width="calc(100% + 4px)" gap=6 color="ink.secondary" aria-label=`Select parent: ${parent.label}` title=`Select parent: ${parent.label}` testId="element-parent"
+                                    Icon(name="corner-up-left", size=12, angle=0)
+                                    text parent.label font="type.caption" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                                row align-items="center" gap=10
+                                  row width=32 height=32 flex-shrink=0 border-radius=6 align-items="center" justify-content="center" background-color="surface.field" color="ink.secondary"
                                     ElementIcon(kind=selected.kind)
-                                  text selected.label font="type.heading" font-weight=600 flex=1 min-width=0 hyphens="auto" testId="selected-element-name"
-                                row gap=8 align-items="center"
-                                  if selected.label != layerKind(selected.kind)
-                                    text layerKind(selected.kind) font="type.caption" color="ink.secondary" testId="selected-element-kind"
-                                  if result.source != ""
-                                    text result.source font="type.caption" color="ink.muted" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" min-width=0 title=result.source testId="design-source"
+                                  column flex=1 min-width=0 gap=0
+                                    text selected.label font="type.heading" font-weight=600 min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" title=selected.label testId="selected-element-name"
+                                    text layerKind(selected.kind) font="type.caption" color="ink.secondary" testId=(selected.label != layerKind(selected.kind) ? "selected-element-kind" : "selected-element-type")
+                                if result.source != ""
+                                  row gap=6 align-items="center" color="ink.muted" min-width=0 title=result.source
+                                    Icon(name="file-code", size=12, angle=0)
+                                    text result.source font="type.mono" color="ink.muted" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" min-width=0 testId="design-source"
                                 if result.instances > 1
-                                  row gap=6 align-items="center" color="ink.secondary" title="These elements share one source template. Editing it updates every instance."
-                                    Icon(name="layers", size=14, angle=0)
+                                  row gap=6 align-items="center" align-self="flex-start" padding="2px 8px" border-radius=10 background-color="surface.notice" color="ink.selected" title="These elements share one source template. Editing it updates every instance."
+                                    Icon(name="component", size=12, angle=0)
                                     text `Shared template · ${result.instances} instances` font="type.caption"
                             if result.source != ""
                               if result.crumbs.length == 0
-                                button press=selectParent class=Tool width="100%" justify-content="flex-start" testId="design-parent"
-                                  text "Select component" font="type.body"
+                                column class=PanelSection
+                                  button press=selectParent class=RowButton testId="design-parent"
+                                    Icon(name="square-mouse-pointer", size=14, angle=0)
+                                    text "Select component"
                             if result.rows.length == 0
-                              text (result.restoring ? result.message : result.applied ? "Applied to source." : result.message) margin=16 font="type.body" color="ink.secondary" testId="design-message"
-                            if result.canUndo
-                              button press=undoDesign disabled=designWriting class=Tool width="100%" justify-content="flex-start" testId="undo-app-design"
-                                text "Undo draft change" font="type.body"
+                              column padding="24px 16px" gap=10 align-items="center"
+                                row width=40 height=40 border-radius=10 align-items="center" justify-content="center" background-color="surface.field" color="ink.muted"
+                                  Icon(name=(result.applied ? "check" : "mouse-pointer-click"), size=18, angle=0)
+                                text (result.restoring ? result.message : result.applied ? "Applied to source." : result.message) font="type.body" color="ink.secondary" text-align="center" testId="design-message"
+                            if result.canUndo and result.draftCount == 0
+                              column class=PanelSection
+                                button press=undoDesign disabled=designWriting class=RowButton testId="undo-app-design"
+                                  Icon(name="undo-2", size=14, angle=0)
+                                  text "Undo draft change"
                           case none
-                            text "Select an element in a screen." font="type.body"
+                            column padding="24px 16px" gap=10 align-items="center"
+                              row width=40 height=40 border-radius=10 align-items="center" justify-content="center" background-color="surface.field" color="ink.muted"
+                                Icon(name="mouse-pointer-click", size=18, angle=0)
+                              text "Select an element in a screen." font="type.body" color="ink.secondary"
                         for group in ["Position", "Layout", "Spacing", "Text", "Typography", "Appearance", "Fill", "Stroke", "Effects"] key=group
                           if designRows.filter(p => p.group == group).length > 0
-                            column class=PanelSection
-                              button press=toggleDesignSection(group) class=Tool width="100%" height=24 padding=0 justify-content="space-between" aria-label=`${collapsedDesignSections.includes(group) ? "Expand" : "Collapse"} ${group}` aria-expanded=not collapsedDesignSections.includes(group)
-                                text group font="type.body" font-weight=600 color="ink.primary"
-                                Icon(name="chevron-right", size=12, angle=(collapsedDesignSections.includes(group) ? 0 : 90))
+                            column class=PanelSection gap=(collapsedDesignSections.includes(group) ? 0 : 10) padding-bottom=(collapsedDesignSections.includes(group) ? 12 : 16)
+                              button press=toggleDesignSection(group) class=RowButton height=24 padding=0 margin-left=0 gap=4 background-color="transparent" aria-label=`${collapsedDesignSections.includes(group) ? "Expand" : "Collapse"} ${group}` aria-expanded=not collapsedDesignSections.includes(group)
+                                SectionHeading(label=group)
+                                column color="ink.muted" width=24 height=24 align-items="center" justify-content="center"
+                                  Icon(name="chevron-down", size=14, angle=(collapsedDesignSections.includes(group) ? -90 : 0))
                               if not collapsedDesignSections.includes(group)
-                                row flex-wrap="wrap" gap=12 align-items="flex-start"
+                                row flex-wrap="wrap" row-gap=10 column-gap=8 align-items="flex-start"
                                   for property in designRows.filter(p => p.group == group) key=`${property.binding}-${property.id}`
-                                    column gap=6 min-width=0 width=((group == "Typography" and property.property != "font-family" and property.property != "color") or (group == "Layout" and (property.property.includes("width") or property.property.includes("height"))) or (group == "Position" and property.property != "position") or (group == "Appearance" and property.fields.length == 0) or (group == "Stroke" and property.property != "border-color") ? "calc(50% - 6px)" : "100%")
-                                      row align-items="center" gap=6
-                                        text property.name font="type.caption" color="ink.secondary" flex=1 title=`${property.property} · ${property.added ? "Editing adds a local property" : property.binding}`
-                                        if property.shared
-                                          column color="ink.selected" title=`Shared style · ${property.binding} · updates every use` aria-label="Shared source style"
-                                            Icon(name="layers", size=14, angle=0)
-                                        if property.fields.length > 0 and not property.readonly
-                                          button press=toggleFieldLink(property.id, property.binding, firstField(property.fields), not property.linked or independentFields.includes(property.binding)) class=Tool width=24 height=24 padding=4 aria-label=`${property.linked and not independentFields.includes(property.binding) ? "Unlink" : "Link"} ${property.name}` aria-pressed=(property.linked and not independentFields.includes(property.binding)) title=(property.linked and not independentFields.includes(property.binding) ? "Linked · one value changes all" : "Independent values · link using the first value") color=(property.linked and not independentFields.includes(property.binding) ? "ink.selected" : "ink.muted") disabled=designWriting
-                                            Icon(name="link-2", size=14, angle=0)
+                                    column gap=4 min-width=0 width=((group == "Typography" and property.property != "font-family" and property.property != "color") or (group == "Layout" and (property.property.includes("width") or property.property.includes("height"))) or (group == "Position" and property.property != "position") or (group == "Appearance" and property.fields.length == 0) or (group == "Stroke" and property.property != "border-color") ? "calc(50% - 4px)" : "100%")
+                                      if not (propertyPrefix(property.property) != "" and not property.readonly and property.fields.length == 0 and property.options.length == 0)
+                                        row align-items="center" gap=2 height=20
+                                          text property.name font="type.caption" color="ink.secondary" flex=1 min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" title=`${property.property} · ${property.added ? "Editing adds a local property" : property.binding}`
+                                          if property.shared
+                                            column color="ink.selected" width=20 height=20 align-items="center" justify-content="center" title=`Shared style · ${property.binding} · updates every use` aria-label="Shared source style"
+                                              Icon(name="component", size=12, angle=0)
+                                          if property.fields.length > 0 and not property.readonly
+                                            button press=toggleFieldLink(property.id, property.binding, firstField(property.fields), not property.linked or independentFields.includes(property.binding)) class=SmallTool width=20 height=20 padding=3 aria-label=`${property.linked and not independentFields.includes(property.binding) ? "Unlink" : "Link"} ${property.name}` aria-pressed=(property.linked and not independentFields.includes(property.binding)) title=(property.linked and not independentFields.includes(property.binding) ? "Linked · one value changes all" : "Independent values · link using the first value") color=(property.linked and not independentFields.includes(property.binding) ? "ink.selected" : "ink.muted") disabled=designWriting
+                                              Icon(name=(property.linked and not independentFields.includes(property.binding) ? "link-2" : "link-2-off"), size=14, angle=0)
                                       if property.readonly
                                         column gap=4
-                                          input value=property.value readonly=true class=Field aria-label=property.name title=property.reason color="ink.muted"
-                                          row align-items="center" gap=4
-                                            text property.reason font="type.caption" color="ink.muted" flex=1
+                                          row class=FieldShell
+                                            row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" pointer-events="none" aria-hidden=true
+                                              Icon(name="lock", size=12, angle=0)
+                                            input value=property.value readonly=true class=Field flex=1 background-color="transparent" padding-left=0 aria-label=property.name title=property.reason color="ink.muted"
+                                          row align-items="center" gap=4 min-height=20
+                                            text property.reason font="type.caption" color="ink.muted" flex=1 min-width=0
                                             if property.canOverride
-                                              button press=overrideProperty(property.id) class=Tool width="auto" height=24 padding="0 6px" aria-label=`Override ${property.name}` title="Replace the source expression with a static value when you edit this field" color="ink.selected"
+                                              button press=overrideProperty(property.id) class=SmallTool width="auto" height=20 padding="0 6px" gap=4 aria-label=`Override ${property.name}` title="Replace the source expression with a static value when you edit this field" color="ink.selected"
+                                                Icon(name="pencil", size=12, angle=0)
                                                 text "Override" font="type.caption"
                                       else if property.fields.length > 0
                                         if property.linked and not independentFields.includes(property.binding)
-                                          row align-items="center" class=InspectorValue
-                                            text (property.property == "gap" ? "Both" : "All") width=36 font="type.caption" color="ink.muted" text-align="center"
-                                            input value=firstField(property.fields) change=editDesignField(property.id, "all") class=Field background-color="transparent" flex=1 min-width=0 aria-label=`${property.name} all` disabled=designWriting
+                                          InlineField(prefix="", icon=compoundIcon(property.property), value=firstField(property.fields), accessibleLabel=`${property.name} all`, hint=(property.property == "gap" ? "Both axes" : "All sides"), testId=`design-field-${property.id}-all`, disabled=designWriting, change=editDesignField(property.id, "all"))
                                         else
                                           row flex-wrap="wrap" gap=8
                                             for field in property.fields key=field.id
-                                              column width="calc(50% - 4px)" gap=4
-                                                text field.label font="type.caption" color="ink.muted"
-                                                input value=field.value change=editDesignField(property.id, field.id) class=Field aria-label=`${property.name} ${field.label}` disabled=designWriting
+                                              column width="calc(50% - 4px)"
+                                                InlineField(prefix=fieldPrefix(field.label), icon="", value=field.value, accessibleLabel=`${property.name} ${field.label}`, hint=field.label, testId=`design-field-${property.id}-${field.id}`, disabled=designWriting, change=editDesignField(property.id, field.id))
                                       else if property.property == "text-content"
-                                        textarea value=property.value change=editDesign(property.id) class=Field height=88 padding=8 resize="vertical" aria-label="Text content" disabled=designWriting
+                                        textarea value=property.value change=editDesign(property.id) class=Field height=72 padding=8 resize="vertical" aria-label="Text content" disabled=designWriting
                                       else if property.property == "flex-direction" or property.property == "align-items" or property.property == "justify-content"
-                                        row background-color="surface.field" border-radius="radius.control" padding=2 gap=2
+                                        row class=Segmented
                                           for choice in property.options key=choice.value
-                                            button press=editDesign(property.id, choice.value) class=Tool width="auto" flex=1 height=28 padding=4 aria-label=`${property.name}: ${choice.label}` title=choice.label aria-pressed=(property.value == choice.value) background-color=(property.value == choice.value ? "surface.selected" : "transparent") color=(property.value == choice.value ? "ink.selected" : "ink.secondary") disabled=designWriting
-                                              Icon(name=propertyIcon(property.property, choice.value), size=16, angle=(choice.value.includes("reverse") ? 180 : 0))
+                                            button press=editDesign(property.id, choice.value) class=Segment aria-label=`${property.name}: ${choice.label}` title=choice.label aria-pressed=(property.value == choice.value) disabled=designWriting
+                                              Icon(name=propertyIcon(property.property, choice.value), size=14, angle=(choice.value.includes("reverse") ? 180 : 0))
                                       else if property.options.length > 0
                                         select value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
                                           for choice in property.options key=choice.value
                                             option choice.label value=choice.value
                                       else
-                                        input value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting title=property.binding
+                                        row class=FieldShell
+                                          if swatchable(property.property, property.value)
+                                            column width=14 height=14 flex-shrink=0 margin="0 6px 0 7px" box-sizing="border-box" border-radius=3 border="1px solid line.strong" background-color=property.value pointer-events="none" aria-hidden=true
+                                          else if propertyPrefix(property.property) != "" or propertyGlyph(property.property) != ""
+                                            row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" pointer-events="none" aria-hidden=true
+                                              if propertyGlyph(property.property) != ""
+                                                Icon(name=propertyGlyph(property.property), size=14, angle=0)
+                                              else
+                                                text propertyPrefix(property.property) font="type.caption"
+                                          input value=property.value change=editDesign(property.id) class=Field flex=1 background-color="transparent" padding-left=(swatchable(property.property, property.value) or propertyPrefix(property.property) != "" or propertyGlyph(property.property) != "" ? 0 : 8)  aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting title=property.binding
                         match designChanged
                           case some(result)
                             if result.source != "" and result.availableProperties.length > 0
-                              column class=PanelSection
-                                select value="" change=addDesignProperty class=Field aria-label="Add property" disabled=designWriting
-                                  option "Add property…" value=""
-                                  for property in result.availableProperties key=property.value
-                                    option property.label value=property.value
+                              column class=PanelSection border-bottom="none"
+                                row class=FieldShell
+                                  row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.secondary" pointer-events="none" aria-hidden=true
+                                    Icon(name="plus", size=14, angle=0)
+                                  select value="" change=addDesignProperty class=Field flex=1 background-color="transparent" padding-left=0 aria-label="Add property" disabled=designWriting
+                                    option "Add property…" value=""
+                                    for property in result.availableProperties key=property.value
+                                      option property.label value=property.value
                           case none
                             column display="none"
                     if not editing
-                      row class=PanelSection align-items="center"
-                        text (doc.frameSelected ? "Screen" : "Layer") font-weight=600 flex=1
-                        if doc.selected != "" and not doc.frameSelected
-                          button press=command("delete", "") class=Tool aria-label="Delete selection" testId="delete"
-                            Icon(name="trash-2", size=16, angle=0)
                       if doc.selected == ""
-                        text "Select a screen or layer" color="ink.secondary"
+                        column padding="32px 20px" gap=10 align-items="center" testId="inspector-empty"
+                          row width=40 height=40 border-radius=10 align-items="center" justify-content="center" background-color="surface.field" color="ink.muted"
+                            Icon(name="mouse-pointer-click", size=18, angle=0)
+                          text "Nothing selected" font="type.body" font-weight=600
+                          text "Select a screen or layer on the canvas to see its properties." font="type.caption" color="ink.secondary" text-align="center" max-width=180
+                          row gap=12 padding-top=6 align-items="center" font="type.caption" color="ink.muted"
+                            row gap=4 align-items="center"
+                              Kbd(label="V")
+                              text "Select"
+                            row gap=4 align-items="center"
+                              Kbd(label="H")
+                              text "Pan"
+                            row gap=4 align-items="center"
+                              Kbd(label="⇧1")
+                              text "Fit"
                       if doc.frameSelected
                         for v in scene.views.filter(v => v.id == doc.active) key=v.id
                           column class=PanelSection
-                            column gap=6
-                              text "Name" color="ink.secondary" font="type.caption"
+                            row class=SectionHead
+                              SectionHeading(label="Screen")
+                              SmallButton(icon="copy", label="Duplicate screen", selected=false, disabled=false, testId="duplicate-screen", press=command("duplicate", ""))
+                            column gap=4
+                              FieldLabel(label="Name")
                               input value=v.screenName change=prop("name") class=Field aria-label="Screen name" testId="screen-name"
-                            column gap=6
-                              text (doc.route != "" ? "Route" : "Preview URL") color="ink.secondary" font="type.caption"
+                            column gap=4
+                              FieldLabel(label=(doc.route != "" ? "Route" : "Preview URL"))
                               if doc.route != ""
-                                input value=doc.route change=prop("route") class=Field placeholder="/settings" aria-label="Screen route" testId="screen-route"
+                                InlineField(prefix="", icon="route", value=doc.route, accessibleLabel="Screen route", hint="Route in the connected project", testId="screen-route", disabled=false, change=prop("route"))
                               else
-                                input value=v.source change=prop("source") class=Field placeholder="https://…" aria-label="Preview URL" testId="preview-url"
-                            column height=1 background-color="line.subtle"
-                            column gap=12
-                              row align-items="center"
-                                text "Viewport" font-weight=600 flex=1
-                                button press=command("delete", "") class=Tool aria-label="Delete viewport" title="Delete viewport" testId="delete" disabled=(doc.views.length == 1)
-                                  Icon(name="trash-2", size=16, angle=0)
-                              select value=v.name change=prop("preset") class=Field aria-label="Viewport preset" testId="viewport-preset"
+                                row class=FieldShell
+                                  row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" pointer-events="none" aria-hidden=true
+                                    Icon(name="globe", size=14, angle=0)
+                                  input value=v.source change=prop("source") class=Field flex=1 background-color="transparent" padding-left=0 placeholder="https://…" aria-label="Preview URL" testId="preview-url"
+                          column class=PanelSection
+                            row class=SectionHead
+                              SectionHeading(label="Viewport")
+                              SmallButton(icon="plus", label="Add viewport", selected=addingViewport, disabled=false, testId="add-viewport", press=toggleViewportMenu)
+                              SmallButton(icon="trash-2", label="Delete viewport", selected=false, disabled=(doc.views.length == 1), testId="delete", press=command("delete", ""))
+                            if addingViewport
+                              column gap=2 padding=4 border-radius="radius.control" background-color="surface.field"
+                                for preset in ["Phone", "Tablet", "Desktop"] key=preset
+                                  button press=addViewport(preset) class=RowButton height=26 aria-label=`Add ${preset} viewport` testId=`variant-${preset.toLowerCase()}`
+                                    column color="ink.muted"
+                                      Icon(name=deviceIcon(preset), size=14, angle=0)
+                                    text `Add ${preset.toLowerCase()} viewport`
+                            row class=FieldShell
+                              row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" pointer-events="none" aria-hidden=true
+                                Icon(name=deviceIcon(v.name), size=14, angle=0)
+                              select value=v.name change=prop("preset") class=Field flex=1 background-color="transparent" padding-left=0 aria-label="Viewport preset" testId="viewport-preset"
                                 if v.name == "Custom"
                                   option "Custom" value="Custom" disabled=true
                                 option "Phone" value="Phone"
                                 option "Tablet" value="Tablet"
                                 option "Desktop" value="Desktop"
-                              row gap=8
-                                PropertyField(label="Width", accessibleLabel="Viewport width", value=`${v.width}`, change=prop("width"), testId="frame-width")
-                                column flex=1 min-width=0 gap=6
-                                  row align-items="center" justify-content="space-between" height=14
-                                    text "Height" color="ink.secondary" font="type.caption"
-                                    if v.canAutoHeight
-                                      button press=prop("heightMode", "content") class=Tool height=18 min-height=18 padding=0 color=(v.autoHeight ? "ink.selected" : "ink.secondary") aria-label="Fit screen height to content" aria-pressed=v.autoHeight title="Fit height to content" testId="auto-height"
-                                        text "Auto" font-size=10
-                                  input value=`${v.height}` change=prop("height") class=Field aria-label="Viewport height" testId="frame-height"
-                            column gap=4
-                              button press=toggleViewportMenu class=Tool width="100%" justify-content="flex-start" gap=8 aria-expanded=addingViewport aria-label="Add viewport" testId="add-viewport"
-                                Icon(name="plus", size=16, angle=0)
-                                text "Add viewport" font="type.body"
-                              if addingViewport
-                                for preset in ["Phone", "Tablet", "Desktop"] key=preset
-                                  button press=addViewport(preset) class=Tool width="100%" justify-content="flex-start" padding-left=28 aria-label=`Add ${preset} viewport` testId=`variant-${preset.toLowerCase()}`
-                                    text preset font="type.body"
-                            column height=1 background-color="line.subtle"
-                            button press=command("duplicate", "") class=Tool width="100%" justify-content="flex-start" gap=8 aria-label="Duplicate screen" testId="duplicate-screen"
-                              Icon(name="frame", size=16, angle=0)
-                              text "Duplicate screen" font="type.body"
+                            row gap=8 align-items="center"
+                              PropertyField(label="W", accessibleLabel="Viewport width", value=`${v.width}`, change=prop("width"), testId="frame-width")
+                              PropertyField(label="H", accessibleLabel="Viewport height", value=`${v.height}`, change=prop("height"), testId="frame-height")
+                              if v.canAutoHeight
+                                button press=prop("heightMode", "content") class=SmallTool width=28 height=28 aria-label="Fit screen height to content" aria-pressed=v.autoHeight title=(v.autoHeight ? "Height fits content · enter a height to fix it" : "Fit height to content") background-color=(v.autoHeight ? "surface.selected" : "surface.field") color=(v.autoHeight ? "ink.selected" : "ink.secondary") testId="auto-height"
+                                  Icon(name="fold-vertical", size=14, angle=0)
                       for n in doc.layers.filter(n => n.id == doc.selected) key=n.id
                         column class=PanelSection
+                          row class=SectionHead gap=8
+                            column color="ink.secondary"
+                              ElementIcon(kind=n.kind)
+                            SectionHeading(label=layerKind(n.kind))
+                            SmallButton(icon="trash-2", label="Delete selection", selected=false, disabled=false, testId="delete", press=command("delete", ""))
                           input value=n.name change=prop("name") class=Field aria-label="Layer name" testId="name"
-                          column gap=10
-                            text "Layout" font-weight=500
+                        column class=PanelSection
+                          row class=SectionHead
+                            SectionHeading(label="Position")
+                          row gap=8
+                            PropertyField(label="X", accessibleLabel="X position", value=`${n.x}`, change=prop("x"), testId="x")
+                            PropertyField(label="Y", accessibleLabel="Y position", value=`${n.y}`, change=prop("y"), testId="y")
+                        column class=PanelSection
+                          row class=SectionHead
+                            SectionHeading(label="Layout")
+                          row gap=8
+                            PropertyField(label="W", accessibleLabel="Width", value=`${n.width}`, change=prop("width"), testId="width")
+                            PropertyField(label="H", accessibleLabel="Height", value=`${n.height}`, change=prop("height"), testId="height")
+                          row class=Segmented
+                            button press=prop("widthMode", "fixed") class=Segment aria-pressed=(n.widthMode == "fixed") aria-label="Fixed width" title="Keep this width in every viewport" testId="width-fixed"
+                              Icon(name="move-horizontal", size=14, angle=0)
+                              text "Fixed"
+                            button press=prop("widthMode", "fill") class=Segment aria-pressed=(n.widthMode == "fill") aria-label="Fill width" title="Stretch with the viewport" testId="width-fill"
+                              Icon(name="stretch-horizontal", size=14, angle=0)
+                              text "Fill"
+                        column class=PanelSection
+                          row class=SectionHead
+                            SectionHeading(label="Fill")
+                          row class=FieldShell
+                            column width=14 height=14 flex-shrink=0 margin="0 6px 0 7px" box-sizing="border-box" border-radius=3 border="1px solid line.strong" background-color=n.fill pointer-events="none" aria-hidden=true
+                            input value=n.fill change=prop("fill") class=Field flex=1 background-color="transparent" padding-left=0 aria-label="Fill color" testId="fill"
+                        if n.kind != "text"
+                          column class=PanelSection
+                            row class=SectionHead
+                              SectionHeading(label="Appearance")
                             row gap=8
-                              PropertyField(label="X", accessibleLabel="X position", value=`${n.x}`, change=prop("x"), testId="x")
-                              PropertyField(label="Y", accessibleLabel="Y position", value=`${n.y}`, change=prop("y"), testId="y")
+                              InlineField(prefix="", icon="radius", value=`${n.radius}`, accessibleLabel="Border radius", hint="Border radius", testId="radius", disabled=false, change=prop("radius"))
+                              column flex=1
+                        if n.kind != "rectangle"
+                          column class=PanelSection
+                            row class=SectionHead
+                              SectionHeading(label="Text")
+                            input value=n.text change=prop("text") class=Field aria-label="Text content" testId="text-content"
                             row gap=8
-                              PropertyField(label="W", accessibleLabel="Width", value=`${n.width}`, change=prop("width"), testId="width")
-                              PropertyField(label="H", accessibleLabel="Height", value=`${n.height}`, change=prop("height"), testId="height")
-                          row gap=4 background-color="surface.field" border-radius=6 padding=3
-                            button press=prop("widthMode", "fixed") class=Tool flex=1 width="auto" height=24 color="ink.primary" background-color=(n.widthMode == "fixed" ? "ink.inverse" : "transparent") aria-label="Fixed width" testId="width-fixed"
-                              text "Fixed" font="type.caption"
-                            button press=prop("widthMode", "fill") class=Tool flex=1 width="auto" height=24 color="ink.primary" background-color=(n.widthMode == "fill" ? "ink.inverse" : "transparent") aria-label="Fill width" testId="width-fill"
-                              text "Fill" font="type.caption"
-                          column gap=10
-                            text "Fill" font-weight=500
-                            row gap=8 align-items="center"
-                              column width=24 height=24 border-radius=4 background-color=n.fill
-                              input value=n.fill change=prop("fill") class=Field flex=1 min-width=0 aria-label="Fill color" testId="fill"
-                          if n.kind != "text"
-                            column gap=8
-                              text "Border radius" font-weight=500
-                              input value=`${n.radius}` change=prop("radius") class=Field aria-label="Border radius" testId="radius"
-                          if n.kind != "rectangle"
-                            column gap=10
-                              text "Text" font-weight=500
-                              input value=n.text change=prop("text") class=Field aria-label="Text content" testId="text-content"
-                              input value=`${n.fontSize}` change=prop("fontSize") class=Field aria-label="Font size" testId="font-size"
-            if codeOpen
-              column position="absolute" inset=0 background-color="surface.scrim" align-items="center" justify-content="center"
-                column width=680 max-width="90%" height=520 max-height="85%" padding=20 gap=16 border-radius=12 background-color="ink.inverse"
-                  row align-items="center" gap=12
-                    text "Contract" font-weight=600 flex=1
-                    button press=copyCode class=Tool width=60 aria-label="Copy Contract" testId="copy-code"
-                      text "Copy"
-                    button press=toggleCode class=Tool aria-label="Close export" testId="close-export"
-                      Icon(name="x", size=16, angle=0)
-                  textarea value=doc.code readonly=true flex=1 width="100%" min-height=0 font-family="monospace" font="type.body" border-width=0 background-color="surface.field" padding=12 box-sizing="border-box" aria-label="Contract source" testId="code"
+                              InlineField(prefix="", icon="a-large-small", value=`${n.fontSize}`, accessibleLabel="Font size", hint="Font size", testId="font-size", disabled=false, change=prop("fontSize"))
+                              column flex=1
             if timelineOpen
-              column height=(historySelected == "" ? 96 : 240) flex-shrink=0 background-color="surface.panel" border-top="1px solid line.subtle" testId="design-timeline"
-                row height=32 flex-shrink=0 align-items="center" padding-left=16 padding-right=8 gap=8
+              column height=(historySelected == "" ? 104 : 248) flex-shrink=0 background-color="surface.panel" border-top="1px solid line.subtle" testId="design-timeline"
+                row height=40 flex-shrink=0 box-sizing="border-box" align-items="center" padding="0 8px 0 16px" gap=8
+                  column color="ink.secondary"
+                    Icon(name="history", size=14, angle=0)
                   text "Timeline" font="type.body" font-weight=600
-                  text `${history.entries.length} ${history.entries.length == 1 ? "change" : "changes"}` font="type.caption" color="ink.muted"
+                  text `${history.entries.length} ${history.entries.length == 1 ? "change" : "changes"}` font="type.caption" color="ink.secondary" padding="1px 8px" border-radius=10 background-color="surface.field"
                   row flex=1
                   IconButton(icon="x", label="Close timeline", hint="Close timeline", shortcut="", selected=false, disabled=false, testId="close-timeline", press=toggleTimeline)
                 if history.error != ""
-                  text history.error role="alert" padding=8 color="ink.danger"
+                  row padding="8px 16px" gap=8 align-items="center" color="ink.danger"
+                    Icon(name="circle-alert", size=14, angle=0)
+                    text history.error role="alert" color="ink.primary"
                 else if history.entries.length == 0
-                  text "Your design changes will appear here." padding="8px 16px" color="ink.muted" font="type.caption"
+                  row padding="8px 16px" gap=8 align-items="center" color="ink.muted"
+                    Icon(name="info", size=14, angle=0)
+                    text "Your design changes will appear here." font="type.caption"
                 else
-                  row overflow-x="auto" height=56 flex-shrink=0 align-items="center" padding-left=12 padding-right=12 gap=4 aria-label="Design history"
+                  row overflow-x="auto" height=56 flex-shrink=0 align-items="center" padding="0 16px" gap=0 aria-label="Design history"
                     for point in history.entries key=point.id
-                      button press=inspectHistory(point.id) class=Tool width="auto" min-width=40 height=36 flex-shrink=0 padding="0 10px" gap=6 aria-label=`Change ${point.number}: ${point.label}` aria-pressed=(historySelected == point.id) title=`${point.label} · ${point.target} · ${point.timeLabel}` background-color=(historySelected == point.id ? "surface.selected" : "surface.field") color=(historySelected == point.id ? "ink.selected" : "ink.secondary")
-                        Icon(name=point.icon, size=16, angle=0)
-                        text `${point.number}` font="type.caption"
+                      button press=inspectHistory(point.id) class=Segment flex="none" width="auto" min-width=44 height=30 flex-shrink=0 padding="0 10px" gap=6 border-radius=15 border="1px solid line.subtle" aria-label=`Change ${point.number}: ${point.label}` aria-pressed=(historySelected == point.id) title=`${point.label} · ${point.target} · ${point.timeLabel}` background-color=(historySelected == point.id ? "surface.selected" : "surface.field") color=(historySelected == point.id ? "ink.selected" : "ink.secondary")
+                        Icon(name=point.icon, size=14, angle=0)
+                        text `${point.number}` font="type.caption" font-variant-numeric="tabular-nums"
                       if point.number < history.entries.length
                         column width=12 height=1 background-color="line.strong" flex-shrink=0
                   for point in history.entries.filter(p => p.id == historySelected) key=point.id
-                    column flex=1 min-height=0 overflow-y="auto" padding="8px 16px" gap=8 border-top="1px solid line.subtle" testId="timeline-detail"
+                    column flex=1 min-height=0 overflow-y="auto" padding="10px 16px 12px" gap=8 border-top="1px solid line.subtle" testId="timeline-detail"
                       row gap=8 align-items="center" flex-wrap="wrap"
+                        column color="ink.secondary"
+                          Icon(name=point.icon, size=14, angle=0)
                         text point.label font-weight=600
                         text point.target color="ink.secondary"
                         text `${point.actor == "ai" ? "AI" : "You"} · ${point.timeLabel}` title=point.time color="ink.muted" font="type.caption"
                       for change in point.changes key=change.id
-                        row gap=12 align-items="flex-start" flex-wrap="wrap"
-                          text change.property width=120 font="type.caption" color="ink.secondary" title=change.target
-                          text change.before max-width=320 overflow-x="auto" white-space="pre-wrap" font="type.caption" color="ink.muted"
-                          text "→" color="ink.muted"
-                          text change.after max-width=320 overflow-x="auto" white-space="pre-wrap" font="type.caption"
-                          text change.target max-width=280 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" title=change.target font="type.caption" color="ink.muted"
+                        row gap=8 align-items="center" flex-wrap="wrap" min-height=24
+                          text change.property width=120 font="type.caption" color="ink.secondary" title=change.target overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                          text change.before max-width=320 overflow-x="auto" white-space="pre-wrap" font="type.mono" padding="1px 6px" border-radius=4 background-color="surface.diff-remove" color="ink.diff-remove"
+                          column color="ink.muted"
+                            Icon(name="arrow-right", size=12, angle=0)
+                          text change.after max-width=320 overflow-x="auto" white-space="pre-wrap" font="type.mono" padding="1px 6px" border-radius=4 background-color="surface.diff-add" color="ink.diff-add"
+                          text change.target max-width=280 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" title=change.target font="type.mono" color="ink.muted"
+            if codeOpen
+              column position="absolute" inset=0 z-index=10 background-color="surface.scrim" align-items="center" justify-content="center" padding=24 box-sizing="border-box"
+                column class=Dialog width=680 height=540 max-height="85%"
+                  DialogHeader(icon="code-2", title="Contract source", subtitle=`Generated from ${doc.screenName} · paste into your app`, close=toggleCode, closeLabel="Close export", closeId="close-export")
+                  column flex=1 min-height=0 padding=16 gap=12
+                    textarea value=doc.code readonly=true flex=1 width="100%" min-height=0 font="type.mono" border="1px solid line.subtle" border-radius="radius.panel" background-color="surface.field" color="ink.primary" padding=12 box-sizing="border-box" resize="none" aria-label="Contract source" testId="code"
+                  row padding="12px 16px" gap=8 align-items="center" border-top="1px solid line.subtle"
+                    text "Buttons are exported without actions; connect them in your app." font="type.caption" color="ink.muted" flex=1 min-width=0
+                    button press=copyCode class=PrimaryButton aria-label="Copy Contract" testId="copy-code"
+                      Icon(name="copy", size=14, angle=0)
+                      text "Copy"
+            if reviewOpen and editing
+              match designChanged
+                case some(result)
+                  column position="absolute" inset=0 z-index=10 background-color="surface.scrim" align-items="center" justify-content="center" padding=24 box-sizing="border-box" testId="review-scrim"
+                    column class=Dialog width=640 max-height="85%" aria-label="Review changes" testId="review-dialog"
+                      DialogHeader(icon="git-compare", title="Review changes", subtitle=`${result.draftCount} ${result.draftCount == 1 ? "change" : "changes"} in ${result.draftFiles.length} ${result.draftFiles.length == 1 ? "file" : "files"} · nothing is written until you apply`, close=toggleReview, closeLabel="Close review", closeId="close-review")
+                      scroll flex=1 min-height=0
+                        column padding=16 gap=12
+                          if result.draftFiles.length == 0
+                            text "There are no pending changes." font="type.body" color="ink.secondary" padding=8
+                          for file, f in result.draftFiles key=file.file
+                            column border="1px solid line.subtle" border-radius="radius.panel" overflow="hidden" flex-shrink=0
+                              row height=36 box-sizing="border-box" padding="0 12px" gap=8 align-items="center" background-color="surface.field"
+                                column color="ink.secondary"
+                                  Icon(name="file-code", size=14, angle=0)
+                                text file.file font="type.mono" color="ink.primary" flex=1 min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" title=file.file
+                                text `${file.changes.length} ${file.changes.length == 1 ? "change" : "changes"}` font="type.caption" color="ink.muted"
+                              for change, c in file.changes key=change.key
+                                row padding="12px 8px 12px 12px" gap=12 align-items="flex-start" border-top="1px solid line.subtle" testId=`review-change-${f}-${c}`
+                                  row width=28 height=28 flex-shrink=0 border-radius=6 align-items="center" justify-content="center" background-color="surface.field" color="ink.secondary"
+                                    Icon(name=change.icon, size=14, angle=0)
+                                  column flex=1 min-width=0 gap=6
+                                    row gap=6 align-items="center" min-height=20 flex-wrap="wrap"
+                                      text change.name font="type.body" font-weight=600
+                                      if change.element != ""
+                                        text `on ${change.element}` font="type.body" color="ink.secondary" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+                                      if change.added
+                                        text "New" font="type.caption" padding="0 6px" border-radius=8 background-color="surface.diff-add" color="ink.diff-add" title="Adds a property that was not set in source"
+                                      if change.replaced
+                                        text "Replaces expression" font="type.caption" padding="0 6px" border-radius=8 background-color="surface.notice" color="ink.selected" title="Replaces a responsive or data-driven expression with a static value"
+                                      if change.shared
+                                        text "Shared style" font="type.caption" padding="0 6px" border-radius=8 background-color="surface.notice" color="ink.selected" title="Updates every element that uses this style"
+                                      row flex=1
+                                      text `L${change.line}` font="type.mono" color="ink.muted" title=change.location
+                                    column border="1px solid line.subtle" border-radius=6 overflow="hidden"
+                                      if not change.added
+                                        row gap=8 padding="4px 8px" align-items="center" background-color="surface.diff-remove" color="ink.diff-remove"
+                                          text "−" font="type.mono" width=10 flex-shrink=0 aria-hidden=true
+                                          if change.swatchBefore != ""
+                                            column width=12 height=12 flex-shrink=0 border-radius=3 border="1px solid line.strong" box-sizing="border-box" background-color=change.swatchBefore aria-hidden=true
+                                          text `${change.property}=${change.before}` font="type.mono" flex=1 min-width=0 white-space="pre-wrap" aria-label=`Before: ${change.before}`
+                                      row gap=8 padding="4px 8px" align-items="center" background-color="surface.diff-add" color="ink.diff-add"
+                                        text "+" font="type.mono" width=10 flex-shrink=0 aria-hidden=true
+                                        if change.swatchAfter != ""
+                                          column width=12 height=12 flex-shrink=0 border-radius=3 border="1px solid line.strong" box-sizing="border-box" background-color=change.swatchAfter aria-hidden=true
+                                        text `${change.property}=${change.after}` font="type.mono" flex=1 min-width=0 white-space="pre-wrap" aria-label=`After: ${change.after}`
+                                  SmallButton(icon="rotate-ccw", label=`Revert ${change.name}`, selected=false, disabled=designWriting, testId=`review-revert-${f}-${c}`, press=revertDesign(change.key))
+                      if result.draftError != ""
+                        row padding="8px 16px" gap=8 align-items="flex-start" color="ink.danger" border-top="1px solid line.subtle"
+                          Icon(name="circle-alert", size=14, angle=0)
+                          text result.draftError role="alert" flex=1 font="type.caption" color="ink.primary"
+                      row padding="12px 16px" gap=8 align-items="center" border-top="1px solid line.subtle"
+                        button press=discardDesign class=SecondaryButton color="ink.danger" disabled=designWriting testId="review-discard"
+                          Icon(name="trash-2", size=14, angle=0)
+                          text "Discard all"
+                        row flex=1
+                        button press=toggleReview class=SecondaryButton testId="review-cancel"
+                          text "Keep editing"
+                        button press=applyDesign class=PrimaryButton disabled=(not result.canApply or designWriting) aria-label=`Apply ${result.draftCount} ${result.draftCount == 1 ? "change" : "changes"} to code` testId="review-apply"
+                          Icon(name="code-2", size=14, angle=0)
+                          text `Apply ${result.draftCount} ${result.draftCount == 1 ? "change" : "changes"}`
+                case none
+                  column display="none"
             if preview
-              column position="absolute" inset=0 background-color="surface.canvas" align-items="center" justify-content="center" gap=20
-                row width="90%" max-width=720 align-items="center"
-                  text doc.screenName flex=1
+              column position="absolute" inset=0 z-index=10 background-color="surface.canvas" align-items="center" justify-content="center" gap=16 padding=24 box-sizing="border-box"
+                row width="90%" max-width=720 align-items="center" gap=8
+                  column color="ink.secondary"
+                    Icon(name="play", size=14, angle=0)
+                  text doc.screenName font-weight=600 flex=1
                   if clicks > 0
-                    text `Clicked ${clicks}` testId="preview-clicks"
-                  button press=togglePreview disabled=editing class=Tool aria-label="Close preview" testId="close-preview"
-                    Icon(name="x", size=16, angle=0)
-                scroll width="100%" max-width=doc.width height=doc.height max-height="80%" overflow-x="scroll"
+                    text `Clicked ${clicks}` font="type.caption" color="ink.secondary" padding="2px 8px" border-radius=10 background-color="surface.field" testId="preview-clicks"
+                  IconButton(icon="x", label="Close preview", hint="Close preview", shortcut="", selected=false, disabled=editing, testId="close-preview", press=togglePreview)
+                scroll width="100%" max-width=doc.width height=doc.height max-height="80%" overflow-x="scroll" border-radius="radius.panel" box-shadow="shadow.menu"
                   column position="relative" width=doc.width height=doc.height overflow="hidden" background-color="paper" testId="live-screen"
                     ScreenView(source=doc.previewSource, layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick)
         if entry.name == "project" or entry.name == "addScreen"
           column navigationKey=`${entry.id}` navigationPresentation="fullscreen" position="absolute" inset=0 background-color="surface.scrim" align-items="center" justify-content="center" padding=20 box-sizing="border-box"
-            column width=400 max-width="100%" max-height="100%" background-color="surface.panel" border-radius=12 padding=20 gap=20 box-sizing="border-box"
-              row align-items="center" gap=12
-                text (entry.name == "project" ? "Project" : "Add screen") font-weight=600 flex=1
+            column class=Dialog width=420
+              row height=56 flex-shrink=0 box-sizing="border-box" align-items="center" gap=10 padding="0 12px 0 16px" border-bottom="1px solid line.subtle"
+                row width=28 height=28 flex-shrink=0 border-radius=6 align-items="center" justify-content="center" background-color="surface.field" color="ink.secondary"
+                  Icon(name=(entry.name == "project" ? "link-2" : "frame"), size=14, angle=0)
+                column flex=1 min-width=0
+                  text (entry.name == "project" ? "Project" : "Add screen") font="type.heading" font-weight=600
+                  text (entry.name == "project" ? "Connect a running Exact app" : (screenKind == "add" ? "Choose a route from your project" : "Start from an editable blank screen")) font="type.caption" color="ink.secondary"
                 if entry.name == "addScreen" and screenKind == "add"
-                  button press=refreshDiscovery disabled=pending(discovered) class=Tool aria-label="Refresh screens" title="Refresh screens" testId="refresh-discovery"
-                    Icon(name="undo-2", size=16, angle=0)
-                button id="closeLibrary" press=closeLibrary class=Tool aria-label="Close" testId="close-library"
+                  IconButton(icon="refresh-cw", label="Refresh screens", hint="Refresh screens", shortcut="", selected=false, disabled=pending(discovered), testId="refresh-discovery", press=refreshDiscovery)
+                button id="closeLibrary" press=closeLibrary class=Tool aria-label="Close" title="Close" testId="close-library"
                   Icon(name="x", size=16, angle=0)
-              if entry.name == "project"
-                column gap=14
-                  input value=projectNameValue input=projectNameInput class=Field placeholder="Project name" aria-label="Project name" testId="project-name"
-                  input value=projectUrlValue input=projectUrlInput class=Field placeholder="http://127.0.0.1:5174" aria-label="Project URL" testId="project-url"
-                if libraryError != ""
-                  text libraryError role="alert" color="ink.primary" font="type.body" testId="library-error"
-                row gap=8 align-items="center"
+              column padding=16 gap=16 overflow-y="auto" min-height=0
+                if entry.name == "project"
+                  column gap=4
+                    FieldLabel(label="Name")
+                    input value=projectNameValue input=projectNameInput class=Field placeholder="My app" aria-label="Project name" testId="project-name"
+                  column gap=4
+                    FieldLabel(label="Dev server URL")
+                    row class=FieldShell
+                      row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" pointer-events="none" aria-hidden=true
+                        Icon(name="globe", size=14, angle=0)
+                      input value=projectUrlValue input=projectUrlInput class=Field flex=1 background-color="transparent" padding-left=0 placeholder="http://127.0.0.1:5174" aria-label="Project URL" testId="project-url"
+                    text "Start the app with EXACT_TOOL_PORT set to this editor's port." font="type.caption" color="ink.muted"
+                  if libraryError != ""
+                    row gap=8 align-items="flex-start" color="ink.danger"
+                      Icon(name="circle-alert", size=14, angle=0)
+                      text libraryError role="alert" color="ink.primary" font="type.caption" flex=1 testId="library-error"
+                else
                   if doc.projectUrl != ""
-                    button press=disconnectProject class=Tool width="auto" padding-left=8 padding-right=8 disabled=pending(libraryChanged) testId="disconnect-project"
-                      text "Disconnect" font="type.body"
-                  row flex=1
-                  button press=saveProject disabled=(projectNameValue.trim() == "" or projectUrlValue.trim() == "" or pending(libraryChanged)) height=32 padding-left=14 padding-right=14 border-width=0 border-radius=6 background-color="surface.action" color="ink.on-action" testId="save-project"
-                    text (doc.projectUrl == "" ? "Connect" : "Save") font="type.body"
-              else
-                if doc.projectUrl != ""
-                  row gap=4 background-color="surface.field" border-radius=6 padding=3
-                    button press=chooseKind("add") class=Tool width="auto" flex=1 background-color=(screenKind == "add" ? "surface.panel" : "transparent") color="ink.primary" testId="screen-project"
-                      text "Project" font="type.body"
-                    button press=chooseKind("blank") class=Tool width="auto" flex=1 background-color=(screenKind == "blank" ? "surface.panel" : "transparent") color="ink.primary" testId="screen-blank"
-                      text "Blank" font="type.body"
-                if screenKind == "add"
-                  column gap=6
-                    if pending(discovered)
-                      text "Finding screens…" color="ink.secondary" font="type.body" role="status"
-                    if discovered.owner == doc.projectUrl and not pending(discovered)
-                      if discovered.error != ""
-                        text discovered.error color="ink.secondary" font="type.body" role="status" testId="discovery-error"
-                      else
-                        if discovered.routes.length == 0
-                          text "No screens found. Enter a route below." color="ink.secondary" font="type.body" testId="discovery-empty"
-                        else
-                          scroll max-height=176
-                            column gap=2
-                              for screen, i in discovered.routes key=screen.route
-                                button press=chooseScreen(screen.name, screen.route) disabled=screen.added testId=`discovered-${i}` aria-label=`${screen.name}, ${screen.route}` display="flex" align-items="center" gap=8 padding=8 border-width=0 border-radius=6 background-color=(screenPath == screen.route and screenName == screen.name ? "surface.selected" : "transparent") color="ink.primary"
-                                  column flex=1 min-width=0 gap=4 align-items="flex-start"
-                                    text screen.name font="type.body"
-                                    text screen.route font="type.caption" color="ink.secondary" text-align="left" width="100%" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" title=screen.route
-                                  if screen.added
-                                    text "Added" font="type.caption" color="ink.secondary"
-                                  else
-                                    if screen.dynamic
-                                      text "Set path" font="type.caption" color="ink.secondary"
-                column gap=14
-                  input value=screenName input=screenNameInput class=Field placeholder="Screen name" aria-label="Screen name" testId="new-screen-name"
+                    row class=Segmented
+                      button press=chooseKind("add") class=Segment aria-pressed=(screenKind == "add") testId="screen-project"
+                        Icon(name="route", size=14, angle=0)
+                        text "Project" font="type.body"
+                      button press=chooseKind("blank") class=Segment aria-pressed=(screenKind == "blank") testId="screen-blank"
+                        Icon(name="square-dashed", size=14, angle=0)
+                        text "Blank" font="type.body"
                   if screenKind == "add"
-                    input value=screenPath input=screenPathInput class=Field placeholder="/settings" aria-label="Route" testId="new-screen-route"
-                  row gap=4
-                    for preset in ["Phone", "Tablet", "Desktop"] key=preset
-                      button press=choosePreset(preset) class=Tool flex=1 width="auto" color="ink.primary" background-color=(screenPreset == preset ? "surface.selected" : "transparent") testId=`new-preset-${preset}`
-                        text preset font="type.body"
-                if libraryError != ""
-                  text libraryError role="alert" color="ink.primary" font="type.body" testId="library-error"
-                button press=saveScreen disabled=(screenName.trim() == "" or pending(libraryChanged)) height=32 border-width=0 border-radius=6 background-color="surface.action" color="ink.on-action" testId="create-screen"
-                  text "Add screen" font="type.body"
+                    column gap=4
+                      FieldLabel(label="Available screens")
+                      if pending(discovered)
+                        row gap=8 align-items="center" padding="10px 8px" color="ink.secondary" role="status"
+                          Icon(name="refresh-cw", size=14, angle=0)
+                          text "Finding screens…" font="type.body"
+                      if discovered.owner == doc.projectUrl and not pending(discovered)
+                        if discovered.error != ""
+                          row gap=8 align-items="flex-start" padding="10px 8px" color="ink.secondary"
+                            Icon(name="circle-alert", size=14, angle=0)
+                            text discovered.error font="type.caption" flex=1 role="status" testId="discovery-error"
+                        else
+                          if discovered.routes.length == 0
+                            row gap=8 align-items="center" padding="10px 8px" color="ink.secondary"
+                              Icon(name="info", size=14, angle=0)
+                              text "No screens found. Enter a route below." font="type.caption" testId="discovery-empty"
+                          else
+                            scroll max-height=184 border="1px solid line.subtle" border-radius="radius.panel"
+                              column gap=1 padding=4
+                                for screen, i in discovered.routes key=screen.route
+                                  button press=chooseScreen(screen.name, screen.route) disabled=screen.added class=TreeRow testId=`discovered-${i}` aria-label=`${screen.name}, ${screen.route}` display="flex" align-items="center" gap=10 height=40 flex-shrink=0 padding="0 8px" border-width=0 background-color=(screenPath == screen.route and screenName == screen.name ? "surface.selected" : "transparent") color=(screenPath == screen.route and screenName == screen.name ? "ink.selected" : "ink.primary") opacity=(screen.added ? 0.55 : 1)
+                                    column color="ink.muted" flex-shrink=0
+                                      Icon(name=(screen.added ? "check" : "route"), size=14, angle=0)
+                                    column flex=1 min-width=0 gap=0 align-items="flex-start"
+                                      text screen.name font="type.body" font-weight=500
+                                      text screen.route font="type.mono" color="ink.secondary" text-align="left" width="100%" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" title=screen.route
+                                    if screen.added
+                                      text "Added" font="type.caption" color="ink.secondary" padding="1px 6px" border-radius=8 background-color="surface.field"
+                                    else
+                                      if screen.dynamic
+                                        text "Set path" font="type.caption" color="ink.selected" padding="1px 6px" border-radius=8 background-color="surface.notice"
+                  column gap=4
+                    FieldLabel(label="Screen name")
+                    input value=screenName input=screenNameInput class=Field placeholder="Settings" aria-label="Screen name" testId="new-screen-name"
+                  if screenKind == "add"
+                    column gap=4
+                      FieldLabel(label="Route")
+                      row class=FieldShell
+                        row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" pointer-events="none" aria-hidden=true
+                          Icon(name="route", size=14, angle=0)
+                        input value=screenPath input=screenPathInput class=Field flex=1 background-color="transparent" padding-left=0 placeholder="/settings" aria-label="Route" testId="new-screen-route"
+                  column gap=4
+                    FieldLabel(label="First viewport")
+                    row class=Segmented
+                      for preset in ["Phone", "Tablet", "Desktop"] key=preset
+                        button press=choosePreset(preset) class=Segment aria-pressed=(screenPreset == preset) testId=`new-preset-${preset}`
+                          Icon(name=deviceIcon(preset), size=14, angle=0)
+                          text preset font="type.body"
+                  if libraryError != ""
+                    row gap=8 align-items="flex-start" color="ink.danger"
+                      Icon(name="circle-alert", size=14, angle=0)
+                      text libraryError role="alert" color="ink.primary" font="type.caption" flex=1 testId="library-error"
+              row padding="12px 16px" gap=8 align-items="center" border-top="1px solid line.subtle"
+                if entry.name == "project"
+                  if doc.projectUrl != ""
+                    button press=disconnectProject class=SecondaryButton color="ink.danger" disabled=pending(libraryChanged) testId="disconnect-project"
+                      Icon(name="unplug", size=14, angle=0)
+                      text "Disconnect"
+                  row flex=1
+                  button press=saveProject disabled=(projectNameValue.trim() == "" or projectUrlValue.trim() == "" or pending(libraryChanged)) class=PrimaryButton testId="save-project"
+                    text (doc.projectUrl == "" ? "Connect" : "Save")
+                else
+                  row flex=1
+                  button press=saveScreen disabled=(screenName.trim() == "" or pending(libraryChanged)) class=PrimaryButton testId="create-screen"
+                    Icon(name="plus", size=14, angle=0)
+                    text "Add screen"
+
+component FileHeader
+  props
+    name: string
+    subtitle: string
+    compact: bool
+    open: bool
+    disabled: bool
+    connect: action
+    toggle: action
+  view
+    row height=(compact ? 40 : 48) flex-shrink=0 box-sizing="border-box" align-items="center" gap=2 padding=(compact ? "0 4px" : "0 8px") border-bottom=(compact ? "none" : "1px solid line.subtle")
+      button press=connect disabled=disabled class=TreeRow display="flex" align-items="center" gap=8 flex=1 min-width=0 height=(compact ? 32 : 36) padding="0 6px" border-width=0 background-color="transparent" color="ink.primary" text-align="left" aria-label="Project connection" title=(subtitle == "" ? "Project settings" : subtitle) testId="project-connection"
+        row width=22 height=22 flex-shrink=0 border-radius=6 align-items="center" justify-content="center" background-color="surface.action" color="ink.on-action" aria-hidden=true
+          Icon(name="layers", size=13, angle=0)
+        column flex=1 min-width=0 gap=0
+          row align-items="center" gap=4 min-width=0
+            text name testId="document-name" font="type.body" font-weight=600 min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+            column color="ink.muted" flex-shrink=0
+              Icon(name="chevron-down", size=12, angle=0)
+          if not compact
+            text subtitle font="type.caption" color="ink.muted" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+      IconButton(icon="panel-left", label=(open ? "Hide screens" : "Show screens"), hint="Screens", shortcut="", selected=false, disabled=false, testId="toggle-screens", press=toggle)
+
+component ActionBar
+  props
+    compact: bool
+    narrow: bool
+    minimal: bool
+    canUndo: bool
+    canRedo: bool
+    canExport: bool
+    canPreview: bool
+    open: bool
+    undo: action
+    redo: action
+    save: action
+    preview: action
+    exportCode: action
+    toggle: action
+  view
+    row height=(compact ? 40 : 48) flex-shrink=0 box-sizing="border-box" align-items="center" gap=2 padding=(compact ? "0 4px" : "0 8px") border-bottom=(compact ? "none" : "1px solid line.subtle")
+      button press=undo aria-keyshortcuts="Meta+z Control+z" class=Tool display=(narrow ? "none" : "flex") disabled=not canUndo aria-label="Undo" title="Undo (⌘Z)" testId="undo"
+        Icon(name="undo-2", size=16, angle=0)
+      button press=redo aria-keyshortcuts="Meta+Shift+z Control+Shift+z" class=Tool display=(narrow ? "none" : "flex") disabled=not canRedo aria-label="Redo" title="Redo (⇧⌘Z)" testId="redo"
+        Icon(name="redo-2", size=16, angle=0)
+      button press=save aria-keyshortcuts="Meta+s Control+s" class=Tool display=(narrow and compact ? "none" : "flex") aria-label="Save" title="Save (⌘S)" testId="save"
+        Icon(name="save", size=16, angle=0)
+      row flex=1 min-width=(compact ? 8 : 0) display=(minimal ? "none" : "flex")
+      button press=preview disabled=not canPreview class=Tool display=(minimal ? "none" : "flex") aria-label="Preview" title="Preview" testId="preview"
+        Icon(name="play", size=16, angle=0)
+      button press=exportCode disabled=not canExport class=PrimaryButton display=(minimal ? "none" : "flex") margin="0 2px" title=(canExport ? "Export Contract source" : "Export is available for editable screens") testId="export"
+        text "Export"
+      IconButton(icon="panel-right", label=(open ? "Hide inspector" : "Show inspector"), hint="Inspector", shortcut="", selected=false, disabled=false, testId="toggle-inspector", press=toggle)
+
+component DialogHeader
+  props
+    icon: string
+    title: string
+    subtitle: string
+    closeLabel: string
+    closeId: string
+    close: action
+  view
+    row min-height=56 flex-shrink=0 box-sizing="border-box" align-items="center" gap=10 padding="10px 12px 10px 16px" border-bottom="1px solid line.subtle"
+      row width=28 height=28 flex-shrink=0 border-radius=6 align-items="center" justify-content="center" background-color="surface.notice" color="ink.selected"
+        Icon(name=icon, size=14, angle=0)
+      column flex=1 min-width=0
+        text title font="type.heading" font-weight=600
+        text subtitle font="type.caption" color="ink.secondary"
+      IconButton(icon="x", label=closeLabel, hint=closeLabel, shortcut="", selected=false, disabled=false, testId=closeId, press=close)
 
 component ElementIcon
   props
@@ -1201,7 +1497,7 @@ component ScreenLayer
     activate: action
   derive x = n.x + (selected and not resizing ? dx : 0)
   derive y = n.y + (selected and not resizing ? dy : 0)
-  derive w = n.widthMode == "fill" ? `max(1px, calc(100% - ${x + n.right - (selected and resizing ? dx : 0)}cameraX))` : `${max(1, n.width + (selected and resizing ? dx : 0))}cameraX`
+  derive w = n.widthMode == "fill" ? `max(1px, calc(100% - ${x + n.right - (selected and resizing ? dx : 0)}px))` : `${max(1, n.width + (selected and resizing ? dx : 0))}px`
   derive h = max(1, n.height + (selected and resizing ? dy : 0))
   view
     if n.kind == "text"

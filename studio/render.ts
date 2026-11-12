@@ -16,8 +16,8 @@ export function render(args: unknown[], c: Ctx2D, frame: Frame) {
     const vw = Math.max(100,view.width + (frameSelected && resizing ? dx : 0)), vh = Math.max(100,view.height + (frameSelected && resizing ? dy : 0));
     const screen = workspace.screens.find(s=>s.id===view.screenId)!;
     c.save(); c.translate(vx,vy);
-    c.fillStyle = frameSelected ? '#0d99ff' : '#808087'; c.font = `${11 / zoom}px system-ui`; c.textBaseline = 'alphabetic'; c.textAlign = 'left';
-    c.fillText(`${screen.name} · ${view.name}  ${Math.round(vw)} × ${Math.round(vh)}`, 0, -12 / zoom, vw);
+    drawLabel(c, screen.name, view.name, vw, zoom, frameSelected);
+    if (frameSelected) drawSize(c, `${Math.round(vw)} × ${Math.round(vh)}`, vw, vh, zoom);
     const original = active && !screen.source ? screen.layers.find(n => n.id === selected) : undefined;
     let n = original && {...original};
     if(n) {
@@ -42,6 +42,30 @@ export function render(args: unknown[], c: Ctx2D, frame: Frame) {
     }
   }
   c.restore();
+}
+
+/** Frame title: screen name, then the viewport in a quieter tone, truncated rather than squeezed. */
+function drawLabel(c: Ctx2D, name: string, variant: string, width: number, zoom: number, selected: boolean) {
+  const size = 11 / zoom, y = -8 / zoom;
+  c.font = `500 ${size}px system-ui`; c.textBaseline = 'alphabetic'; c.textAlign = 'left';
+  const fit = (text: string, room: number) => {
+    if (c.measureText(text).width <= room) return text;
+    let end = text.length; while (end > 1 && c.measureText(text.slice(0, end) + '…').width > room) end--;
+    return end > 1 ? text.slice(0, end) + '…' : '';
+  };
+  const first = fit(name, width); c.fillStyle = selected ? '#0d99ff' : '#8c8c8c'; c.fillText(first, 0, y);
+  if (first !== name) return;
+  const gap = 6 / zoom, offset = c.measureText(name).width + gap;
+  c.font = `${size}px system-ui`; const rest = fit(variant, width - offset);
+  if (rest) { c.fillStyle = selected ? '#0d99ffb3' : '#8c8c8cb3'; c.fillText(rest, offset, y); }
+}
+
+/** Figma-style size badge centred under the selected frame. */
+function drawSize(c: Ctx2D, text: string, width: number, height: number, zoom: number) {
+  c.font = `500 ${10 / zoom}px system-ui`; c.textBaseline = 'middle'; c.textAlign = 'center';
+  const w = c.measureText(text).width + 10 / zoom, h = 16 / zoom, x = width / 2 - w / 2, y = height + 8 / zoom;
+  c.fillStyle = '#0d99ff'; c.beginPath(); c.roundRect(x, y, w, h, 3 / zoom); c.fill();
+  c.fillStyle = '#ffffff'; c.fillText(text, width / 2, y + h / 2 + 0.5 / zoom);
 }
 
 function drawGuide(c: Ctx2D, target: SnapTarget, horizontal: boolean, x: number, y: number, width: number, height: number, zoom: number) {

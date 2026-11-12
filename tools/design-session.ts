@@ -301,7 +301,7 @@ export class DesignSession {
         if(this.sourceMap?.digest===frame.plan)targets=bindingTargets(this.sourceMap,this.app,binding);
         if(!targets?.length)throw new Error('This build has no matching preview source map. Reconnect after it rebuilds.');
       }else if(binding.shared)throw new Error('Shared style drafts require a local Exact source map.');
-      this.drafts.stage({key,binding,original:binding.mode==='insert'?'[not set]':binding.mode==='replace'?binding.expression??row.editable.text:row.editable.text,value:next.author,preview:{key,site:this.picked?.node.site??0,plan:frame?.plan??'',property:binding.property,value:next.css,scope:binding.shared?'style':'site',targets},operation:this.app||row.editable.rung==='layout'?null:rowOperation(row,next.author)},this.files);
+      this.drafts.stage({key,binding,original:binding.mode==='insert'?'[not set]':binding.mode==='replace'?binding.expression??row.editable.text:row.editable.text,value:next.author,preview:{key,site:this.picked?.node.site??0,plan:frame?.plan??'',property:binding.property,value:next.css,scope:binding.shared?'style':'site',targets},operation:this.app||row.editable.rung==='layout'?null:rowOperation(row,next.author),...(this.picked?.node.label?{label:this.picked.node.label}:{})},this.files);
       this.draftError='';this.version++;this.applied=false;
       return this.view();
     } finally {this.busy=false;}
@@ -324,6 +324,7 @@ export class DesignSession {
     }finally{this.busy=false;}
   }
   undo(){if(this.busy)throw new Error('A change is still being applied.');this.drafts.undo();this.draftError='';this.version++;return this.view();}
+  revert(key:string){if(this.busy)throw new Error('A change is still being applied.');this.drafts.revert(key);this.draftError='';this.version++;return this.view();}
   discard(){if(this.busy)throw new Error('A change is still being applied.');this.drafts.clear();this.draftError='';this.version++;return this.view();}
   async editSpacing(version:number,property:string,value:string){
     await this.poll();
@@ -406,6 +407,7 @@ export async function designRequest(body:any) {
   if(body.op==='edit') return s.edit(Number(body.version),Number(body.row),body.value);
   if(body.op==='apply')return s.apply();
   if(body.op==='discard')return s.discard();
+  if(body.op==='revert')return s.revert(String(body.row));
   if(body.op==='spacing')return s.editSpacing(Number(body.version),String(body.row),String(body.value));
   if(body.op==='undo') return s.undo();
   if(body.op==='parent') {

@@ -6,7 +6,7 @@ import {layoutProperties,layoutValue,literalAt,ownFile,checkLayout,replaceSource
 
 export type DesignBinding={file:string;line:number;col:number;sha256:string;property:string;shared:boolean;mode?:'insert'|'replace';expression?:string};
 export type PreviewPatch={key:string;site:number;plan:string;property:string;value:string;scope:'site'|'style';targets?:{site:number;properties:string[]}[]};
-export type DesignPatch={key:string;binding:DesignBinding;original:string;value:string;preview:PreviewPatch;operation:any};
+export type DesignPatch={key:string;binding:DesignBinding;original:string;value:string;preview:PreviewPatch;operation:any;label?:string};
 const numeric=new Set(['font-size','font-weight','line-height','letter-spacing','border-radius','opacity','rotate','flex-grow','flex-shrink','order','z-index','scale']);
 const paint=new Set(['background-color','color','font-family','text-content','border-color','box-shadow','grid-template-columns','grid-template-rows','aspect-ratio','scale','transform-origin',...numeric]);
 export const bindingKey=(binding:DesignBinding)=>JSON.stringify([binding.file,binding.line,binding.col,binding.property]);
@@ -62,6 +62,12 @@ export class DesignDraft {
     if(patch.value===patch.original)this.patches.delete(patch.key);else this.patches.set(patch.key,patch);
     this.revision++;
   }
+  /** Remove one staged change, keeping the rest of the draft and one undo step. */
+  revert(key:string){
+    if(!this.patches.has(key))throw new Error('This change is no longer in the draft.');
+    this.past.push(this.snapshot());if(this.past.length>100)this.past.shift();
+    this.patches.delete(key);this.revision++;
+  }
   undo(){const previous=this.past.pop();if(!previous)throw new Error('There is no draft change to undo.');this.patches=new Map(previous.map(p=>[p.key,p]));this.revision++;}
   clear(){this.patches.clear();this.past=[];this.files={};this.revision++;}
   serialize(){return JSON.stringify({version:1,files:this.files,patches:this.snapshot()});}
@@ -79,7 +85,8 @@ export class DesignDraft {
       const safeOperation=operation===null?null:{op:'set-row',file:b.file,row:b.property,value:numeric.has(b.property)?Number(value.author):value.author,...(b.shared?{style:operation.style}:{at:{line:b.line,col:b.col},sha256:b.sha256})};
       const targets=patch.preview.targets;
       if(targets!==undefined&&(!Array.isArray(targets)||targets.length>10000||targets.some((t:any)=>!Number.isSafeInteger(t.site)||t.site<0||!Array.isArray(t.properties)||t.properties.length>8||t.properties.some((p:any)=>typeof p!=='string'||!/^[a-z-]+$/.test(p)))))throw new Error('The saved preview bindings are invalid.');
-      this.patches.set(patch.key,{key:patch.key,binding:b,original:patch.original,operation:safeOperation,value:value.author,preview:{key:patch.key,site:patch.preview.site,plan:patch.preview.plan,property:b.property,value:value.css,scope:b.shared?'style':'site',targets}});
+      const label=typeof patch.label==='string'&&patch.label?{label:patch.label.slice(0,200)}:{};
+      this.patches.set(patch.key,{key:patch.key,binding:b,original:patch.original,operation:safeOperation,value:value.author,...label,preview:{key:patch.key,site:patch.preview.site,plan:patch.preview.plan,property:b.property,value:value.css,scope:b.shared?'style':'site',targets}});
     }
     this.files=state.files;this.past=this.count?[[]]:[];this.revision++;
   }

@@ -4,11 +4,15 @@ fn screensWidth(): number = 240
 fn inspectorWidth(): number = 260
 
 // Shared primitives. Keep feature actions and data in their owning component.
+// Rhythm: 4px grid · 48px panel headers · 28px fields and rows · 24px section actions.
+
+// 32px tool button: toolbar and panel headers.
 style Tool
   box-sizing="border-box"
   display="flex"
   align-items="center"
   justify-content="center"
+  flex-shrink=0
   width=32
   height=32
   padding=6
@@ -27,10 +31,35 @@ style Tool
   :disabled
     opacity=0.35
 
+// 24px action beside a section title or field.
+style SmallTool
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex-shrink=0
+  width=24
+  height=24
+  padding=4
+  border-width=0
+  border-radius="radius.control"
+  background-color="transparent"
+  color="ink.secondary"
+  cursor="default"
+  :hover
+    background-color="surface.hover"
+  :active
+    background-color="surface.pressed"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent"
+  :disabled
+    opacity=0.35
+
 style Field
   width="100%"
   box-sizing="border-box"
-  height=30
+  height=28
+  min-width=0
   border="1px solid transparent"
   border-radius="radius.control"
   background-color="surface.field"
@@ -38,8 +67,133 @@ style Field
   padding-left=8
   padding-right=8
   font="type.body"
+  font-variant-numeric="tabular-nums"
+
+// Box shared by a field's prefix (letter, icon or swatch) and its transparent control.
+style FieldShell
+  display="flex"
+  align-items="center"
+  box-sizing="border-box"
+  height=28
+  min-width=0
+  border-radius="radius.control"
+  background-color="surface.field"
+  color="ink.primary"
+
+// Full-width button with a leading icon: secondary panel actions.
+style RowButton
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="flex-start"
+  gap=8
+  width="100%"
+  height=28
+  padding="0 8px"
+  border-width=0
+  border-radius="radius.control"
+  background-color="transparent"
+  color="ink.primary"
+  font="type.body"
+  text-align="left"
+  cursor="default"
+  :hover
+    background-color="surface.hover"
+  :active
+    background-color="surface.pressed"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent"
+  :disabled
+    opacity=0.35
+
+style PrimaryButton
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex-shrink=0
+  gap=6
+  height=28
+  padding="0 12px"
+  border-width=0
+  border-radius="radius.control"
+  background-color="surface.action"
+  color="ink.on-action"
+  font="type.body"
+  font-weight=500
+  white-space="nowrap"
+  cursor="default"
+  :hover
+    box-shadow="inset 0 0 0 100px #ffffff1f"
+  :focus-visible
+    box-shadow="0 0 0 2px accent"
+  :disabled
+    opacity=0.4
+
+style SecondaryButton
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex-shrink=0
+  gap=6
+  height=28
+  padding="0 12px"
+  border-width=0
+  border-radius="radius.control"
+  background-color="surface.field"
+  color="ink.primary"
+  font="type.body"
+  font-weight=500
+  white-space="nowrap"
+  cursor="default"
+  :hover
+    background-color="surface.pressed"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent"
+  :disabled
+    opacity=0.4
+
+// Segmented control track and its options. aria-pressed drives :checked.
+style Segmented
+  display="flex"
+  align-items="center"
+  box-sizing="border-box"
+  height=28
+  padding=2
+  gap=2
+  border-radius="radius.control"
+  background-color="surface.field"
+
+style Segment
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex=1
+  min-width=0
+  gap=6
+  height=24
+  padding="0 6px"
+  border-width=0
+  border-radius=4
+  background-color="transparent"
+  color="ink.secondary"
+  font="type.caption"
+  cursor="default"
+  :hover
+    background-color="surface.hover"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent"
+  :checked
+    background-color="surface.raised"
+    color="ink.primary"
+    box-shadow="shadow.raised"
+  :disabled
+    opacity=0.35
 
 style TreeRow
+  box-sizing="border-box"
   border-radius="radius.control"
   :hover
     background-color="surface.hover"
@@ -47,9 +201,30 @@ style TreeRow
     box-shadow="inset 0 0 0 2px accent"
 
 style PanelSection
-  padding=16
-  gap=12
+  box-sizing="border-box"
+  padding="12px 12px 16px 16px"
+  gap=8
   border-bottom="1px solid line.subtle"
+
+// Title row of a panel section; trailing 24px actions align to the gutter.
+style SectionHead
+  display="flex"
+  align-items="center"
+  gap=2
+  height=24
+  min-height=24
+
+// Floating chrome over the canvas: toolbar, zoom, collapsed panel headers.
+style FloatingBar
+  display="flex"
+  align-items="center"
+  box-sizing="border-box"
+  padding=4
+  gap=2
+  border="1px solid line.subtle"
+  border-radius="radius.menu"
+  background-color="surface.panel"
+  box-shadow="shadow.toolbar"
 
 style Menu
   box-sizing="border-box"
@@ -69,7 +244,7 @@ style MenuRow
   align-items="center"
   gap=10
   width="100%"
-  height=32
+  height=28
   padding="0 8px"
   border-width=0
   border-radius="radius.control"
@@ -82,6 +257,17 @@ style MenuRow
     background-color="surface.selected"
   :disabled
     opacity=0.35
+
+style Dialog
+  box-sizing="border-box"
+  max-width="100%"
+  max-height="100%"
+  border="1px solid line.subtle"
+  border-radius="radius.menu"
+  background-color="surface.panel"
+  color="ink.primary"
+  box-shadow="shadow.menu"
+  overflow="hidden"
 
 component IconButton
   props
@@ -97,11 +283,67 @@ component IconButton
     button press=press class=Tool aria-label=label title=(hint == "" ? label : hint) aria-keyshortcuts=shortcut aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.selected" : "transparent") color=(selected ? "ink.selected" : "ink.secondary")
       Icon(name=icon, size=16, angle=0)
 
+// Floating toolbar tool: the active tool is filled with the accent, as in Figma.
+component ToolbarButton
+  props
+    icon: string
+    label: string
+    hint: string
+    shortcut: string
+    selected: bool
+    disabled: bool
+    testId: string
+    press: action
+  view
+    button press=press class=Tool aria-label=label title=(hint == "" ? label : hint) aria-keyshortcuts=shortcut aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.action" : "transparent") color=(selected ? "ink.on-action" : "ink.primary")
+      Icon(name=icon, size=16, angle=0)
+
+// 24px icon action for section titles and field rows.
+component SmallButton
+  props
+    icon: string
+    label: string
+    selected: bool
+    disabled: bool
+    testId: string
+    press: action
+  view
+    button press=press class=SmallTool aria-label=label title=label aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.selected" : "transparent") color=(selected ? "ink.selected" : "ink.secondary")
+      Icon(name=icon, size=14, angle=0)
+
 component SectionHeading
   props
     label: string
   view
-    text label font="type.body" font-weight=600 color="ink.primary"
+    text label flex=1 min-width=0 font="type.body" font-weight=600 color="ink.primary" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+
+// Caption above a full-width control.
+component FieldLabel
+  props
+    label: string
+  view
+    text label font="type.caption" color="ink.secondary" padding-left=1
+
+// Figma-style field: a prefix letter or icon shares one box with its input.
+component InlineField
+  props
+    prefix: string
+    icon: string
+    value: string
+    accessibleLabel: string
+    hint: string
+    testId: string
+    disabled: bool
+    change: action
+  view
+    row class=FieldShell flex=1
+      if icon != "" or prefix != ""
+        row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" aria-hidden=true
+          if icon != ""
+            Icon(name=icon, size=14, angle=0)
+          else
+            text prefix font="type.caption"
+      input value=value change=change class=Field flex=1 background-color="transparent" padding-left=(prefix == "" and icon == "" ? 8 : 0) aria-label=accessibleLabel title=(hint == "" ? accessibleLabel : hint) testId=testId disabled=disabled
 
 component PropertyField
   props
@@ -111,9 +353,7 @@ component PropertyField
     testId: string
     change: action
   view
-    column flex=1 min-width=0 gap=6
-      text label font="type.caption" color="ink.secondary"
-      input value=value change=change class=Field aria-label=accessibleLabel testId=testId
+    InlineField(prefix=label, icon="", value=value, accessibleLabel=accessibleLabel, hint=accessibleLabel, testId=testId, disabled=false, change=change)
 
 component MenuItem
   props
@@ -129,6 +369,8 @@ component MenuItem
     button id=testId press=press class=MenuRow role="menuitem" popovertarget=menu popovertargetaction="hide" disabled=disabled destructive=destructive testId=testId color=(destructive ? "ink.danger" : "ink.primary")
       if icon != ""
         Icon(name=icon, size=16, angle=0)
+      else
+        column width=16 flex-shrink=0
       text label flex=1 font="type.body"
       if shortcut != ""
         text shortcut color="ink.muted" font="type.caption" aria-hidden=true
@@ -136,6 +378,17 @@ component MenuItem
 component MenuDivider
   view
     hr margin="5px 4px" border-width=0 height=1 background-color="line.subtle"
+
+component Divider
+  view
+    column width=1 height=16 flex-shrink=0 margin="0 4px" background-color="line.subtle" aria-hidden=true
+
+// Keyboard hint chip used in empty states and dialogs.
+component Kbd
+  props
+    label: string
+  view
+    text label font="type.caption" color="ink.secondary" padding="1px 5px" border="1px solid line.strong" border-radius=4 background-color="surface.field"
 
 // Shared compound-value shell: identifier and input align as one control.
 style InspectorValue

@@ -4,6 +4,7 @@ export function historyIcon(entry:Pick<HistoryEntry,'kind'|'changes'>){
   const kind=entry.kind;
   if(kind==='apply')return 'code-2';
   if(kind==='undo'||kind==='workspace-undo')return 'undo-2';
+  if(kind==='revert')return 'rotate-ccw';
   if(kind==='workspace-redo')return 'redo-2';
   if(kind==='discard'||kind==='workspace-delete')return 'trash-2';
   if(kind==='workspace-duplicate')return 'copy';
