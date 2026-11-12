@@ -45,7 +45,7 @@ Breakpoints read `exactViewport()`:
 - The dashboard has one column below 640 pixels of content width, two from 640, and three from 1040. Content width excludes the 240-pixel sidebar.
 - From 900 pixels the web and macOS draw the root tab bar as a sidebar. iOS uses UIKit's tab bar.
 
-Sheets are modal routes. On iOS they are UIKit sheets. The web draws them as dialogs, with the header's buttons at the bottom.
+Sheets are modal routes: UIKit sheets on iOS, dialogs on the web. Each draws its own title bar (`header appearance="none"` with the `SheetTitle` component): an icon for the meal or workout, the title, a live summary and a round close button. Add food adds a filled search field and a segmented meal picker. Log workout has a full-width Save button at the bottom.
 
 ## Glass
 
