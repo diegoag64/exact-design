@@ -27,6 +27,17 @@ test('studio icons, context menus and canvas gestures share the desktop interact
       }));
       expect(icons.length).toBe(3);for(const icon of icons){expect(icon.stroke).toBe(icon.color);expect(icon.stroke).not.toBe('rgb(0, 0, 0)');expect(icon.d.length).toBeGreaterThan(10);expect(icon.dx).toBeCloseTo(0,1);expect(icon.dy).toBeCloseTo(0,1);}
     }
+    // Icon buttons show the studio tooltip (name, shortcut chip, details) instead of a native title.
+    const tooltip=page.locator('#studio-tooltip');
+    await pan.hover();await page.waitForSelector('#studio-tooltip:popover-open');
+    expect(await tooltip.locator('.name').innerText()).toMatch(/^Pan\s+H$/);
+    expect(await tooltip.locator('kbd').innerText()).toBe('H');
+    expect(await tooltip.locator('.detail').count()).toBeGreaterThan(0);
+    expect(await page.locator('button[title]').count()).toBe(0);
+    await page.getByRole('button',{name:'Reduce preview effects',exact:true}).hover();await page.waitForFunction(()=>document.getElementById('studio-tooltip').innerText.startsWith('Reduce preview effects'));
+    await page.mouse.down();expect(await tooltip.evaluate(el=>el.matches(':popover-open'))).toBe(false);await page.mouse.up();
+    await page.getByRole('button',{name:'Reduce preview effects',exact:true}).click();
+    await page.mouse.move(800,700);
     const before=await camera();await page.keyboard.down('Space');await page.waitForFunction(()=>document.querySelector('button[aria-label="Pan"]').getAttribute('aria-pressed')==='true');
     await page.mouse.move(800,700);await page.mouse.down();await page.mouse.move(900,740,{steps:4});await page.keyboard.up('Space');
     expect(await pan.getAttribute('aria-pressed')).toBe('true');await page.mouse.up();

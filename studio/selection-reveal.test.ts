@@ -57,7 +57,18 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
     while(await frameScale()<=0.17)await zoomBy(1.05);
     await probe('none');
     await page.getByRole('button',{name:'Fit all screens',exact:true}).click();await probe('blur(4px)');
-    for(const preview of previewFrames)await preview.evaluate(()=>document.getElementById('detail-probe')?.remove());
+    // Reduced preview effects drop blurs at every zoom and remove CSS animations.
+    const motion=(expected:string)=>Promise.all(previewFrames.map(preview=>preview.waitForFunction(expected=>{
+      let el=document.getElementById('motion-probe');
+      if(!el){el=document.createElement('div');el.id='motion-probe';el.style.animation='probe-spin 1s infinite';document.body.append(el);}
+      return getComputedStyle(el).animationName===expected;
+    },expected,{polling:50,timeout:3000})));
+    const reduce=page.getByRole('button',{name:'Reduce preview effects',exact:true});
+    await motion('probe-spin');expect(await reduce.getAttribute('aria-pressed')).toBe('false');
+    await reduce.click();expect(await reduce.getAttribute('aria-pressed')).toBe('true');
+    await probe('none');await motion('none');
+    await reduce.click();await probe('blur(4px)');await motion('probe-spin');
+    for(const preview of previewFrames)await preview.evaluate(()=>{document.getElementById('detail-probe')?.remove();document.getElementById('motion-probe')?.remove();});
     const assertHover=async(text:string)=>{
       for(const preview of previewFrames){
         await preview.waitForFunction(text=>{
@@ -77,7 +88,7 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
     // A click also clears Exact's separate native hover box when the mouse leaves.
     await title.click({force:true});await page.mouse.move(5,5);
     for(const preview of previewFrames)expect(await preview.evaluate(()=>[...document.querySelectorAll('div[popover]')].filter(el=>el.style.outline.includes('solid')&&el.style.pointerEvents==='none'&&el.style.display!=='none').length)).toBe(0);
-    await page.locator('button[title="Room for your thoughts."]').last().hover();await assertHover('Room for your thoughts.');
+    await page.locator('button[data-tip="Room for your thoughts."]').last().hover();await assertHover('Room for your thoughts.');
     await page.mouse.move(5,5);
     for(const preview of previewFrames)await preview.waitForFunction(()=>!document.querySelector('[data-ed-hover]'),undefined,{polling:50,timeout:3000});
 
@@ -99,7 +110,7 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
       return {camera:Object.fromEntries(exact.state[0].filter(s=>['px','py','zoom'].includes(s.n.devName)).map(s=>[s.n.devName,s()])),scroll:[stage.scrollLeft,stage.scrollTop],stage:stage.getBoundingClientRect().toJSON(),canvas:canvas.getBoundingClientRect().toJSON(),tool:pan.getBoundingClientRect().toJSON(),frames:[...document.querySelectorAll('iframe[title="Live app preview"]')].map(f=>f.getBoundingClientRect().toJSON())};
     });
     const before=await snapshot();
-    await page.locator('button[title="The beginning of an idea"]').last().click();
+    await page.locator('button[data-tip="The beginning of an idea"]').last().click();
     await page.waitForFunction(y=>exact.state[0].find(s=>s.n.devName==='py')()!==y,before.camera.py,{polling:50});
     const after=await snapshot();expect(after.scroll).toEqual([0,0]);expect(after.canvas).toEqual(after.stage);expect(after.stage).toEqual(before.stage);expect(after.tool).toEqual(before.tool);expect(after.camera.zoom).toBe(before.camera.zoom);
     const dx=after.camera.px-before.camera.px,dy=after.camera.py-before.camera.py;
@@ -111,10 +122,10 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
     const selectedFrame=after.frames.at(-1),scale=selectedFrame.height/local.height;
     expect(selectedFrame.top+local.top*scale).toBeGreaterThan(after.stage.top);expect(selectedFrame.top+local.bottom*scale).toBeLessThan(after.stage.bottom);
     // Clicking an already visible layer keeps the camera still.
-    await page.locator('button[title="The beginning of an idea"]').last().click();await page.waitForTimeout(200);expect((await snapshot()).camera).toEqual(after.camera);
+    await page.locator('button[data-tip="The beginning of an idea"]').last().click();await page.waitForTimeout(200);expect((await snapshot()).camera).toEqual(after.camera);
     // Inspector visibility must not determine whether the canvas can reveal a selection.
     await page.getByRole('button',{name:'Hide inspector',exact:true}).click();
-    await page.locator('button[title="Screen"]').first().click();
+    await page.locator('button[data-tip="Screen"]').first().click();
     await page.waitForFunction(y=>exact.state[0].find(s=>s.n.devName==='py')()!==y,after.camera.py,{polling:50});
     const top=await snapshot();expect(top.scroll).toEqual([0,0]);expect(top.canvas).toEqual(top.stage);
     await page.getByRole('button',{name:'Fit all screens',exact:true}).click();

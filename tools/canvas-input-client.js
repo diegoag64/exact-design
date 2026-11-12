@@ -49,11 +49,19 @@ addEventListener('pointerup',()=>{if(canvasMode)queueMicrotask(()=>window.__exac
 
 // At small canvas zoom the studio asks for low detail: backdrop blurs are
 // dropped, since the GPU re-renders each one on every frame for little effect.
-let lowDetail=null;
+// With reduced preview effects it also asks previews to hold still: CSS
+// animations are removed, so elements show their resting style.
+const detailStyles={
+  low:'*,*::before,*::after{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
+  still:'*,*::before,*::after{animation:none!important}',
+};
+const detail={};
 addEventListener('message',e=>{
   if(!canvasMode||e.source!==parent||e.data?.kind!=='exact-design:preview-detail')return;
-  if(e.data.low&&!lowDetail){lowDetail=document.createElement('style');lowDetail.textContent='*,*::before,*::after{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}';(document.head??document.documentElement).append(lowDetail);}
-  else if(!e.data.low&&lowDetail){lowDetail.remove();lowDetail=null;}
+  for(const [key,css]of Object.entries(detailStyles)){
+    if(e.data[key]&&!detail[key]){detail[key]=document.createElement('style');detail[key].textContent=css;(document.head??document.documentElement).append(detail[key]);}
+    else if(!e.data[key]&&detail[key]){detail[key].remove();detail[key]=null;}
+  }
 });
 
 addEventListener('wheel',e=>{

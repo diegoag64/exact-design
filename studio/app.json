@@ -32,6 +32,8 @@
     ]
   },
   "data": [
-    "canvas-editing"
+    "canvas-editing",
+    "preview-effects",
+    "tip"
   ]
 }

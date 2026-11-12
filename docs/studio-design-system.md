@@ -11,6 +11,7 @@ The studio follows Figma's UI3 layout: two full-height panels around an unobstru
 | `studio/icons.contract` | Generated inline Lucide icon component |
 | `studio/assets/lucide/` | Pinned Lucide 1.72.0 SVG sources and ISC license |
 | `studio/modules/web/menus.js` | Browser menu focus and keyboard navigation |
+| `studio/modules/web/tooltips.js` | Hover and keyboard-focus tooltips for `data-tip` |
 | `studio/modules/web/canvas-navigation.js` | Browser gestures and validated iframe input |
 | `studio/app.contract` | Feature composition, selection, and camera state |
 
@@ -44,7 +45,7 @@ Import components and styles from `./ui.contract`; import `Icon` from `./icons.c
 | `Icon` | `name`, `size`, `angle`; inherits the enclosing control's text color |
 | `IconButton` | Labeled 32px tool button with selected, disabled, hint, shortcut, and test ID props |
 | `ToolbarButton` | Floating-toolbar tool; the active tool is filled with the action colour |
-| `SmallButton` | 24px icon action beside a section title or field (add, delete, duplicate, revert) |
+| `SmallButton` | 24px icon action beside a section title or field (add, delete, duplicate, revert), with an optional `hint` tooltip |
 | `InlineField` | Figma-style field: a prefix letter (X, Y, W, H, T/R/B/L) or icon shares one `FieldShell` box with its input |
 | `PropertyField` | `InlineField` with a letter prefix and a descriptive accessible label |
 | `FieldLabel` | Caption above a full-width control |
@@ -74,7 +75,15 @@ PropertyField(label="X", accessibleLabel="X position", value=`${node.x}`,
 
 Native inputs and selects cannot take state parts, so they keep the platform focus ring. Prefix glyphs never overlay a control: they sit in the same `FieldShell` beside a transparent input, which keeps the verify audit's covered-text check clean.
 
-Use accessible labels for icon-only controls and descriptive names for fields. A tooltip supplements the label. Disable actions that are temporarily unavailable; omit operations the tool does not implement. Do not add decorative eyebrows, placeholder tabs, or buttons that cannot perform an action.
+Use accessible labels for icon-only controls and descriptive names for fields. A tooltip supplements the label.
+
+## Tooltips
+
+Every icon-only control has a tooltip. Write it as `data-tip`, not `title`: the tooltips hatch shows it in the top layer after a short hover, or right away when moving between controls, and on keyboard focus. Native `title` tooltips are slow and unstyled, so the studio uses `title` only on the preview iframe, as its accessible name.
+
+Write tooltip text as `Name (shortcut) · detail · detail`. The name repeats the accessible label in plain words; a trailing shortcut such as `(⌘Z)`, `(H)` or `(⇧1)` becomes a key chip; each detail becomes a muted line that says what the control does or a condition, in a short sentence without a period. Name a toggle by what pressing it does now, such as `Hide screens panel` or `Restore preview effects`. Leave the details out when the name says everything, as for `Zoom in`.
+
+Tooltips use a fixed dark surface in both themes, so they read against the panels and canvas. Pointer down, scrolling, the wheel, Escape and leaving the window hide them. Disable actions that are temporarily unavailable; omit operations the tool does not implement. Do not add decorative eyebrows, placeholder tabs, or buttons that cannot perform an action.
 
 ## Icons
 
@@ -100,6 +109,8 @@ Icons use a 24-unit viewBox, a 1.75-unit stroke, and a 16px box; tree glyphs use
 Text entry keeps its own keys. Source apps receive their normal input in Preview mode. Canvas iframe gestures are accepted only from a registered window inside the canvas with the expected origin and `__ed_canvas=1`. Input ownership survives native inspection ending or restarting; full-screen Preview uses `__ed_canvas=0`. Camera updates remain in the Contract and persist through the existing workspace storage.
 
 Each canvas frame uses CSS translation and scale, with a browser compositing hint supplied by the preview hatch. Frames remain mounted during navigation so app state, source identities, and editing sessions survive camera changes. Below 15% zoom, canvas previews drop CSS backdrop filters: at that size a blur spans a few screen pixels, but the GPU still re-renders it on every frame. They return above 18%, and the gap prevents flicker near the boundary. The hatch reads the zoom from the frame scale that Exact writes, so camera state stays in the Contract. A preview that loads or reloads receives the current detail level. Full-screen Preview always shows full detail.
+
+**Reduce preview effects** (`reducedEffects`, a persisted Contract state) drops backdrop filters at every zoom and removes CSS animations with `animation: none`, so animated elements show their resting style. The view writes it to `data-preview-effects` on the hatch element, and the hatch relays it to each canvas preview with the zoom detail level. Switching restyles every visible preview at once, which costs a single long frame; turning it off restarts the previews' CSS animations.
 
 ## Context menus
 
