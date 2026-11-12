@@ -1,0 +1,10 @@
+{
+  "name": "Ember",
+  "app": {
+    "id": "dev.exactdesign.ember",
+    "name": "Ember"
+  },
+  "host": {
+    "web": {}
+  }
+}

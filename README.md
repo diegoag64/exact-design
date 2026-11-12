@@ -61,7 +61,14 @@ To try the included Exact example, run this in a second terminal:
 bun run demo
 ```
 
-Connect a project named Morrow at `http://127.0.0.1:5174`. The Add screen form discovers **Library** at `/` and **Note** at `/note`; choose either and add viewport variants. The example is a personal notebook with illustrated covers, search, collections, favorites, and an editor that saves notes locally. Cards use three columns on desktop, two on tablet, and one below 600 pixels. Light and dark themes follow the system setting. Each frame has its own running instance; browser storage remains shared by origin.
+Connect a project named Ember at `http://127.0.0.1:5174`. The Add screen form discovers every screen of the example, a calorie and activity tracker:
+
+- **Today** at `/`: energy left, macros, steps, water, meals and the week.
+- **Diary** at `/diary`, **Activity** at `/activity` and **Profile** at `/profile`.
+- **Add food** at `/diary/add` and **Log workout** at `/activity/log`, presented as sheets.
+- **Welcome** at `/welcome` and the onboarding steps at `/onboarding`, `/onboarding/body` and `/onboarding/plan`.
+
+Ember opens on a sample week, so every screen has data. Phone widths get one column and a bottom tab bar. From 640 pixels of content, the dashboard uses two columns, and at 1040 it uses three. Windows 900 pixels and wider draw the tabs as a sidebar. Translucent glass panels sit over animated colour, using `backdrop-filter` on the web, macOS and Linux. On iOS, UIKit draws the tab bar, sheets and floating button with its own Liquid Glass. Light and dark themes follow the system setting. Profile ▸ **Reset demo data** restores the sample week. Food, water, workouts and the plan from onboarding are saved locally. Every frame shares one copy of that data.
 
 ## Edit a connected app
 
@@ -154,7 +161,8 @@ Source files:
 - `tools/preview-channel.ts`: immediate selection and spacing feedback.
 - `tools/layout-source.ts`: source addresses and staged compiler validation.
 - `tools/element-bridge.ts`, `tools/element-bridge-client.js`: local live-preview inspection and rendered element navigation.
-- `examples/responsive`: a running Exact app for viewport comparisons.
+- `examples/ember`: the showcase Exact app: a calorie and activity tracker with responsive layouts and glass surfaces.
+- `fixtures/morrow`: the notebook app the preview, sharing and editing tests drive.
 - `studio/app.tamber`: editor theme.
 
 The UI checks pass at normal text sizes in light and dark modes. The editor chrome currently uses compact fixed type sizes; full support for enlarged system text remains unfinished.
