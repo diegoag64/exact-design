@@ -8,7 +8,14 @@ let draftObserver,draft={patches:[],revision:0};
 async function renderDraft(){
   if(!draftObserver)return;
   const current=draft;
-  try{await draftObserver.apply(current.patches);if(current===draft)void feedback({kind:'draft-status',revision:current.revision,plan:globalThis.exact?.plan||'',error:''});}
+  try{
+    await draftObserver.apply(current.patches);
+    if(current!==draft)return;
+    if(document.getElementById('exact-inspect')){
+      nativeInspector??=import('/__dev/inspect.js');
+      (await nativeInspector).refreshStudioOutlines?.();
+    }
+    if(current===draft)void feedback({kind:'draft-status',revision:current.revision,plan:globalThis.exact?.plan||'',error:''});}
   catch(error){if(current===draft)void feedback({kind:'draft-status',revision:current.revision,plan:globalThis.exact?.plan||'',error:String(error.message??error).slice(0,300)});}
 }
 async function feedback(packet){

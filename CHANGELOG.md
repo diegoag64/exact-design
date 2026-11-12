@@ -14,6 +14,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 ### Fixed
 
 - Two studio pages open at once, such as two tabs, no longer overwrite each other's preview readiness, sizes, and editing state. Each page now scopes its frame ids.
+- Refresh selection outlines after spacing drafts change or are removed, including repeated elements shifted by padding or gaps.
 - Reduced canvas layout and label-measurement work during pan and zoom, and kept live previews on compositor layers as the camera moves. Overview navigation with many visible previews remains limited by browser rendering.
 
 ### Changed

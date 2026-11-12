@@ -2,7 +2,7 @@ import {test,expect} from 'bun:test';
 import {mkdtemp,mkdir,readdir,cp,readFile,writeFile,rm} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {startDiscoveryServer} from '../tools/discovery-server';
-import {stopElementBridges} from '../tools/element-bridge';
+import {ElementBridge,stopElementBridges} from '../tools/element-bridge';
 import {suiteBrowser} from '../.exact-sdk/scripts/agent-launch.mjs';
 
 // Two real Exact apps and a private helper keep this regression independent
@@ -171,3 +171,46 @@ test('design inspector edits text, linked spacing and corners as drafts, with pe
     await rm(temp,{recursive:true,force:true});
   }
 },60000);
+
+
+// Exercise the pinned inspector through the same proxy and draft channel as live apps.
+test('draft padding and gap changes refresh every outline when applied and removed',async()=>{
+  const inspector=await readFile(resolve(import.meta.dir,'../.exact-sdk/host/web-js/inspect-dev.js'),'utf8');
+  const app=Bun.serve({hostname:'127.0.0.1',port:0,fetch:req=>{
+    if(new URL(req.url).pathname==='/__dev/inspect.js')return new Response(inspector,{headers:{'content-type':'text/javascript'}});
+    return new Response('<html><head></head><body><div id="exact-root"><div data-site="1" style="display:flex;flex-direction:column;gap:12px;width:200px"><div data-site="2" style="padding:12px;width:176px"><div style="height:40px">First</div></div><div data-site="2" style="padding:12px;width:176px"><div style="height:40px">Second</div></div></div></div></body></html>',{headers:{'content-type':'text/html'}});
+  }}),bridge=new ElementBridge(app.url.origin);
+  let suite:any,page:any;
+  try{
+    suite=await suiteBrowser();page=await suite.newPage();
+    await page.goto(bridge.origin+'/?__ed_frame=outline-test');
+    await page.evaluate(async()=>{
+      globalThis.exact={plan:'outline-plan'};
+      const inspector=await import('/__dev/inspect.js');
+      inspector.install({report:()=>{},facts:()=>({plan:'outline-plan'})});
+      await inspector.frame({on:true,seq:1});
+      await inspector.frame({kind:'outline',plan:'outline-plan',sites:[2]});
+    });
+    const aligned=()=>[...document.querySelectorAll('[data-exact-outline]')].every((mark,i)=>{
+      const box=mark.getBoundingClientRect(),target=document.querySelectorAll('[data-site="2"]')[i].getBoundingClientRect();
+      return ['x','y','width','height'].every(key=>Math.abs(box[key]-target[key])<0.1);
+    });
+    await page.waitForFunction(aligned);
+    const end=Date.now()+5000;
+    while(!bridge.frames.has('outline-test')){if(Date.now()>end)throw new Error('Preview did not register');await new Promise(r=>setTimeout(r,50));}
+    let revision=0;
+    for(const property of ['padding','gap']){
+      bridge.preview([{plan:'outline-plan',site:property==='padding'?2:1,property,value:'36px'}],++revision);
+      await page.waitForFunction(({property})=>getComputedStyle(document.querySelector('[data-site="'+(property==='padding'?2:1)+'"]'))[property]==='36px',{property});
+      await page.waitForFunction(aligned,undefined,{timeout:3000});
+      // Undo, revert and discard all send the remaining patch list, including [].
+      bridge.preview([],++revision);
+      await page.waitForFunction(({property})=>getComputedStyle(document.querySelector('[data-site="'+(property==='padding'?2:1)+'"]'))[property]==='12px',{property});
+      await page.waitForFunction(aligned,undefined,{timeout:3000});
+    }
+    expect(await page.locator('[data-exact-outline]').count()).toBe(2);
+  }finally{
+    if(page)await page.context().close();if(suite)await suite.browser.close();
+    bridge.server.stop(true);app.stop(true);
+  }
+},15000);
