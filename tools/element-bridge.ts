@@ -217,10 +217,12 @@ export class ElementBridge {
         const source=await response.text();
         // Pinned Exact loads its instance table only on selection. Expose a
         // read-only warmup in the proxy so hover resolves each-row keys too.
+        // Draft CSS can change border bounds or positions without resizing content.
+        // Expose placement too, without reselecting or reporting inspector state.
         // The SDK checkout and the application's source stay unchanged.
         if(source.includes('async function inspectTable()')){
           out.delete('etag');out.set('cache-control','no-store');
-          return new Response(source+'\nexport async function prepareStudioInstances(){await inspectTable();}\n',{status:response.status,headers:out});
+          return new Response(source+'\nexport async function prepareStudioInstances(){await inspectTable();}\nexport function refreshStudioOutlines(){place();}\n',{status:response.status,headers:out});
         }
         return new Response(source,{status:response.status,headers:out});
       }
