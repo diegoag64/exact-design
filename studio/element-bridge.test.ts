@@ -93,7 +93,7 @@ test('hover follows element bounds, clears safely, and does not cancel an in-fli
   };
   const script=readFileSync(new URL('../tools/element-bridge-client.js',import.meta.url),'utf8');
   // Stub Exact's native inspector module; execute the production command and overlay code.
-  runInNewContext(script.replace("import('/__dev/inspect.js')",'Promise.resolve({gate})')+'\nglobalThis.testClient={deliver,snapshot};',context);
+  runInNewContext(script.replaceAll("import('/__dev/inspect.js')",'Promise.resolve({gate})')+'\nglobalThis.testClient={deliver,snapshot};',context);
   context.testClient.snapshot();const id='root/0:button';
   const selection=context.testClient.deliver({seq:1,op:'select',id,plan:'plan-1'});
   await context.testClient.deliver({seq:2,op:'hover',id,plan:'plan-1'});
@@ -123,7 +123,7 @@ test('selection restoration waits for the new plan and verifies the source locat
   }) as typeof fetch;
   const s=new DesignSession('http://localhost:5174','fixture',request);
   const hovers:any[]=[];
-  s.bridge={frames:new Map([['phone',frame]]),origin:'http://localhost:9999',select:(...args:any[])=>commands.push(args),hover:(...args:any[])=>hovers.push(args)} as any;
+  s.bridge={frames:new Map([['phone',frame]]),origin:'http://localhost:9999',select:(...args:any[])=>commands.push(args),linkedHover:(frame:string,id:string)=>hovers.push([frame,id])} as any;
   await s.start();
   const source={file:'app.contract',line:10,col:5};
   events=[{event:'selection',build:'page',site:2,instance:[],source,rows:[{name:'background_color',editable:{rung:'template',file:'app.contract',at:{line:10,col:10},sha256:'before',row:'background-color',text:'#fff'}}]}];
@@ -249,4 +249,44 @@ test('offscreen selections use the smallest camera pan and large selections alig
   expect(selectionPan(view,{left:300,top:1000,width:100,height:50})).toEqual({x:0,y:132});
   expect(selectionPan(view,{left:100,top:100,width:40,height:40})).toEqual({x:-132,y:0});
   expect(selectionPan(view,{left:300,top:-100,width:100,height:1500})).toEqual({x:0,y:-182});
+});
+
+
+test('hover links matching instances on the same route and clears on leave or reload',async()=>{
+  const bridge=new ElementBridge('http://127.0.0.1:1');
+  const node=(id:string,instance:unknown[]=[])=>({id,identity:JSON.stringify([2,instance]),path:id,parent:'',depth:0,label:'Card',tag:'button',site:2,instance});
+  const post=async(frame:string,url:string,nodes:any[],page='page',plan='plan',routeUrl=url)=>{
+    const response=await fetch(bridge.origin+'/__exact_design/tree',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({frame,page,plan,build:'build',inspecting:true,nodes,after:0,url,routeUrl,width:400,viewportHeight:800,contentHeight:1000,fullHeight:true})});
+    expect(response.ok).toBe(true);
+  };
+  const hovered=(frame:string)=>bridge.commands.get(frame)?.find(c=>c.op==='hover')?.id??'';
+  try{
+    await post('phone','/notes?filter=all&__ed_frame=phone',[node('phone-first',['one']),node('phone-second',['two'])]);
+    await post('tablet','/notes?__ed_frame=tablet&filter=all',[node('tablet-first',['one']),node('tablet-second',['two'])]);
+    await post('other','/notes?filter=favorites',[node('other',['two'])]);
+    await post('branch','/notes?filter=all',[node('missing',['one'])]);
+    await post('old-build','/notes?filter=all',[node('old',['two'])],'page','old-plan');
+    bridge.linkedHover('phone','phone-second');
+    expect(['phone','tablet','other','branch','old-build'].map(hovered)).toEqual(['phone-second','tablet-second','','','']);
+    // A leave from the previous screen must not erase a newer screen's hover.
+    bridge.linkedHover('tablet','tablet-first');bridge.linkedHover('phone','');
+    expect(hovered('phone')).toBe('phone-first');expect(hovered('tablet')).toBe('tablet-first');
+    bridge.linkedHover('tablet','');expect(hovered('phone')).toBe('');expect(hovered('tablet')).toBe('');
+    bridge.linkedHover('phone','phone-second','tree');
+    await post('late','/notes?filter=all',[node('late-second',['two'])]);expect(hovered('late')).toBe('late-second');
+    // Source page replacement invalidates all copies, even with the same plan.
+    await post('phone','/notes?filter=all',[node('phone-second',['two'])],'reloaded');
+    expect(hovered('tablet')).toBe('');expect(hovered('late')).toBe('');
+    let hoverTime=0;
+    const feedback=async(page:string,id:string,time=++hoverTime)=>fetch(bridge.origin+'/__exact_design/feedback',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:'hover',frame:'phone',page,plan:'plan',id,time})});
+    expect((await feedback('page','phone-second')).status).toBe(409);
+    expect((await feedback('reloaded','missing')).status).toBe(400);
+    expect((await feedback('reloaded','phone-second')).ok).toBe(true);expect(hovered('tablet')).toBe('tablet-second');
+    expect((await feedback('reloaded','')).ok).toBe(true);expect(hovered('tablet')).toBe('');
+    expect((await feedback('reloaded','phone-second',1)).ok).toBe(true);expect(hovered('tablet')).toBe('');
+    // In-app navigation changes hover grouping, not the URL used for size updates.
+    await post('tablet','/notes?filter=all',[node('tablet-second',['two'])],'page','plan','/different');
+    bridge.linkedHover('phone','phone-second');expect(hovered('tablet')).toBe('');
+    expect(bridge.frames.get('tablet')?.url).toBe('/notes?filter=all');
+  }finally{bridge.server.stop(true);}
 });

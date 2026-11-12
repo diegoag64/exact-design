@@ -92,6 +92,14 @@ Canvas and tree rows share the `studio-menu` popover. Right-clicking a tree row 
 
 Exact owns placement, viewport-edge fitting, action dismissal, and click-away dismissal. The browser menu adapter focuses the first enabled item and supports Up/Down, Home/End, type-ahead, Enter, and Escape. Closing returns focus without scrolling the canvas. Menus preserve native editing behavior inside text fields.
 
+## Linked hover
+
+Canvas and layer-tree hover use one active target per connected project. Viewports match by route, query, hash, compiled plan, source site, and repeated-item identity. Internal preview parameters do not distinguish pages. Hidden elements, ambiguous matches, and other routes receive no outline. Hover never changes selection or creates timeline entries.
+
+The preview bridge pushes matching targets to each viewport. Each frame draws its outline from its own element bounds. Pointer exit, cancellation, focus loss, panning, and edit-session closure clear hover. A late leave from a previous viewport cannot clear the current viewport's hover. Source-page reloads invalidate the target; new matching viewports receive the current target.
+
+Exact's native pointer gate runs after the studio's hover handler. The local proxy exposes a read-only instance-table warmup from the pinned inspector module, so repeated items resolve before the first selection. No SDK or application files are changed.
+
 ## Design inspector
 
 Properties are grouped into collapsible Position, Layout, Spacing, Text, Typography, Appearance, Fill, Stroke, and Effects sections. Dimensions and typography metrics use paired fields. The source adapter in `tools/inspector-fields.ts` supplies property names, groups, and compound-field metadata; the view does not infer source semantics from displayed labels.

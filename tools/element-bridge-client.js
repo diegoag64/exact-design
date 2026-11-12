@@ -12,7 +12,7 @@ async function renderDraft(){
   catch(error){if(current===draft)void feedback({kind:'draft-status',revision:current.revision,plan:globalThis.exact?.plan||'',error:String(error.message??error).slice(0,300)});}
 }
 async function feedback(packet){
-  try{return (await fetch('/__exact_design/feedback',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...packet,frame,page})})).ok;}catch{return false;}
+  try{return (await fetch('/__exact_design/feedback',{method:'POST',headers:{'content-type':'application/json'},keepalive:packet.kind==='hover',body:JSON.stringify({...packet,frame,page})})).ok;}catch{return false;}
 }
 window.__exactDesignPick=(x,y)=>{
   if(!document.getElementById('exact-inspect'))return;
@@ -25,6 +25,7 @@ const style=document.createElement('style');style.textContent='#exact-inspect{di
 const outline=document.createElement('div');outline.dataset.edHover='';outline.setAttribute('aria-hidden','true');
 outline.style.cssText='position:fixed;pointer-events:none;z-index:2147483647;box-sizing:border-box;border:1px solid #3b82f6;';
 let hovered='',hoverPlan='',hoverAnimation=0;
+let pointerHover='',hoverSending=false,hoverPending=null,nativeInspector,instancePlan='';
 function clearHover(){hovered='';cancelAnimationFrame(hoverAnimation);outline.remove();}
 function drawHover(){
   const el=nodes.get(hovered);
@@ -36,6 +37,32 @@ function drawHover(){
 }
 function hover(id,plan){clearHover();if(!id||plan!==globalThis.exact?.plan)return;hovered=id;hoverPlan=plan;drawHover();}
 addEventListener('pagehide',clearHover);
+window.__exactDesignClearNativeHover=()=>{
+  if(!document.getElementById('exact-inspect'))return;
+  nativeInspector??=import('/__dev/inspect.js');
+  void nativeInspector.then(inspector=>inspector.gate(new PointerEvent('pointermove',{clientX:-1,clientY:-1}))).catch(()=>{});
+};
+async function sendHover(){
+  if(hoverSending)return;hoverSending=true;
+  try{while(hoverPending){
+    const packet=hoverPending;hoverPending=null;
+    if(!await feedback(packet)){
+      if(!hoverPending&&pointerHover===packet.id&&packet.plan===globalThis.exact?.plan)hoverPending=packet;
+      break; // Retry after the next hierarchy report, not in a request loop.
+    }
+  }}
+  finally{hoverSending=false;}
+}
+window.__exactDesignHover=event=>{
+  window.__exactDesignClearNativeHover();
+  const root=document.getElementById('exact-root');
+  const el=event&&document.getElementById('exact-inspect')?document.elementsFromPoint(event.clientX,event.clientY).find(el=>root?.contains(el))?.closest('[data-site]'):null;
+  const id=el?[...nodes].find(([,node])=>node===el)?.[0]||'':'';
+  if(id===pointerHover)return;
+  pointerHover=id;hover(id,globalThis.exact?.plan||'');
+  hoverPending={kind:'hover',id,time:performance.timeOrigin+performance.now(),plan:globalThis.exact?.plan||''};void sendHover();
+};
+
 function presentElement(el,css){
   const tag=el.tagName.toLowerCase(),text=el.textContent?.trim().replace(/\s+/g,' ').slice(0,120)||'';
   const flex=css.display.includes('flex'),grid=css.display.includes('grid');
@@ -62,7 +89,7 @@ function snapshot(){
     const {kind,label}=presentElement(el,getComputedStyle(el));
     rows.push({id,identity,path,parent:parentId,depth:parentId?(rows.find(r=>r.id===parentId)?.depth??0)+1:0,label,kind,tag,site:Number(el.dataset.site),instance});
   }
-  return {...pageObserver?.snapshot(),frame,page,build:window.__exactDesignBuild||'',plan:globalThis.exact?.plan||'',inspecting:!!document.getElementById('exact-inspect'),nodes:rows};
+  return {...pageObserver?.snapshot(),routeUrl:location.pathname+location.search+location.hash,frame,page,build:window.__exactDesignBuild||'',plan:globalThis.exact?.plan||'',inspecting:!!document.getElementById('exact-inspect'),nodes:rows};
 }
 // Scroll only this document. scrollIntoView also scrolls the embedding
 // editor's overflow:hidden canvas, independently of its camera coordinates.
@@ -102,7 +129,7 @@ async function deliver(task){
   if(!Number.isSafeInteger(task.seq)||task.seq<=command)return;
   command=task.seq;
   if(task.op==='select'){selectionCommand=task.seq;if(task.plan===globalThis.exact?.plan)await select(task.id,task.seq);}
-  if(task.op==='hover')hover(task.id,task.plan);
+  if(task.op==='hover'&&(!task.page||task.page===page))hover(task.id,task.plan);
   if(task.op==='measure'){measurement={id:task.id,plan:task.plan};spacingObserver?.select(task.id,task.plan);}
   if(task.op==='draft'){draft={patches:task.patches||[],revision:task.draftRevision};void renderDraft();}
 }
@@ -112,9 +139,16 @@ events.onmessage=e=>{try{void deliver(JSON.parse(e.data)).catch(()=>{});}catch{}
 async function tick(){
   if(working)return;working=true;
   try{
+    const plan=globalThis.exact?.plan;
+    if(plan&&instancePlan!==plan&&document.getElementById('exact-inspect')){
+      nativeInspector??=import('/__dev/inspect.js');
+      const inspector=await nativeInspector;
+      if(inspector.prepareStudioInstances){await inspector.prepareStudioInstances();instancePlan=plan;}
+    }
     const response=await fetch('/__exact_design/tree',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...snapshot(),after:command})});
     if(!response.ok)return;
     const tasks=(await response.json()).commands||[];
+    if(hoverPending)void sendHover();
     if(!pushed)for(const task of tasks)await deliver(task);
   }catch{}finally{working=false;}
 }

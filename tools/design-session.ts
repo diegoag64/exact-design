@@ -352,11 +352,11 @@ export class DesignSession {
   hover(id:string){
     const frame=this.bridge&&(this.picked?this.bridge.frames.get(this.picked.frame):this.bridge.frames.get(this.preferredFrame)??[...this.bridge.frames.values()][0]);
     const next=frame&&id&&frame.nodes.some(n=>n.id===id)?frame.frame:'';
-    if(this.hoveredFrame&&this.hoveredFrame!==next)this.bridge?.hover(this.hoveredFrame,'');
-    if(next)this.bridge!.hover(next,id);
+    if(this.hoveredFrame&&this.hoveredFrame!==next)this.bridge?.linkedHover(this.hoveredFrame,'',this.client);
+    if(next)this.bridge!.linkedHover(next,id,this.client);
     this.hoveredFrame=next;
   }
-  async close() {this.hover('');this.bridge?.feedback?.delete(this.receivePreview);this.preview.close();await this.call({method:'inspect',client:this.client,on:false});}
+  async close() {this.hover('');this.bridge?.clearLinkedHover?.();this.bridge?.feedback?.delete(this.receivePreview);this.preview.close();await this.call({method:'inspect',client:this.client,on:false});}
 }
 const sessions=new Map<string,{session:DesignSession;seen:number}>();
 export function designEvents(id:string,request:Request){

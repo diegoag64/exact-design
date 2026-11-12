@@ -4,13 +4,15 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {decodeSpacing} from '../studio/spacing';
 export type ElementNode={id:string;identity:string;path:string;parent:string;depth:number;label:string;kind?:string;tag:string;site:number;instance:unknown[]};
-export type ElementFrame={frame:string;page?:string;build:string;plan:string;inspecting:boolean;nodes:ElementNode[];seen:number;contentHeight?:number;viewportHeight?:number;fullHeight?:boolean;width?:number;url?:string};
+export type ElementFrame={frame:string;page?:string;build:string;plan:string;inspecting:boolean;nodes:ElementNode[];seen:number;contentHeight?:number;viewportHeight?:number;fullHeight?:boolean;width?:number;url?:string;routeUrl?:string};
 const script=readFileSync(new URL('./element-bridge-client.js',import.meta.url),'utf8');
 const bridges=new Map<string,ElementBridge>();
 export function stopElementBridges(){for(const bridge of bridges.values())bridge.server.stop(true);bridges.clear();}
 export function bridgeFor(origin:string){let bridge=bridges.get(origin);if(!bridge){const port=20000+parseInt(createHash('sha256').update(origin).digest('hex').slice(0,6),16)%30000;bridge=new ElementBridge(origin,port);bridges.set(origin,bridge);}return bridge;}
 export class ElementBridge {
   frames=new Map<string,ElementFrame>();seq=0;
+  private hoverTime=0;
+  private activeHover:{owner:string;frame:string;page?:string;plan:string;route:string;site:number;instance:string}|null=null;
   connections=new Set<unknown>();
   commands=new Map<string,({seq:number;op:string;id:string;plan:string}&Record<string,any>)[]>();
   listeners=new Map<string,Set<ReadableStreamDefaultController<Uint8Array>>>();
@@ -56,6 +58,32 @@ export class ElementBridge {
     this.send(frame,'select',id);
   }
   hover(frame:string,id:string){this.send(frame,'hover',id);}
+  private route(frame:ElementFrame){
+    const route=frame.routeUrl??frame.url;if(!route)return '';
+    try{const url=new URL(route,this.target);for(const key of [...url.searchParams.keys()])if(key.startsWith('__ed_'))url.searchParams.delete(key);url.searchParams.sort();return url.pathname+url.search+url.hash;}catch{return '';}
+  }
+  linkedHover(frameId:string,id:string,owner=frameId){
+    const frame=this.frames.get(frameId),node=frame?.nodes.find(n=>n.id===id);
+    if(id&&frame?.inspecting&&node)this.activeHover={owner,frame:frameId,page:frame.page,plan:frame.plan,route:this.route(frame),site:node.site,instance:JSON.stringify(node.instance)};
+    else if(this.activeHover?.owner===owner)this.activeHover=null;
+    else return;
+    this.syncHover();
+  }
+  clearLinkedHover(){this.activeHover=null;this.syncHover();}
+  private syncHover(){
+    const active=this.activeHover,source=active&&this.frames.get(active.frame);
+    if(active&&(!source||!source.inspecting||source.page!==active.page||source.plan!==active.plan||this.route(source)!==active.route||!source.nodes.some(n=>n.site===active.site&&JSON.stringify(n.instance)===active.instance)))this.activeHover=null;
+    for(const frame of this.frames.values()){
+      const current=this.activeHover;
+      const matches=current&&frame.inspecting&&frame.plan===current.plan&&(frame.frame===current.frame||current.route&&this.route(frame)===current.route)?frame.nodes.filter(n=>n.site===current.site&&JSON.stringify(n.instance)===current.instance):[];
+      // Never fall back to a DOM path or label: responsive branches and repeated
+      // templates can put a different element at the same visual tree position.
+      const id=matches.length===1?matches[0].id:'';
+      const previous=this.commands.get(frame.frame)?.find(c=>c.op==='hover');
+      if((previous?.id===id&&previous.plan===frame.plan&&previous.page===frame.page)||(!previous&&!id))continue;
+      this.send(frame.frame,'hover',id,{page:frame.page});
+    }
+  }
   measure(frame:string,id:string){
     const previous=this.commands.get(frame)?.find(c=>c.op==='measure');
     if(previous?.id===id&&previous.plan===this.frames.get(frame)?.plan)return;
@@ -122,7 +150,13 @@ export class ElementBridge {
     if(url.pathname==='/__exact_design/feedback'&&req.method==='POST'){
       const packet=await req.json(),frame=this.frames.get(packet.frame);
       if(!frame||packet.page!==frame.page||packet.plan!==frame.plan)return new Response(null,{status:409});
-      if(packet.kind==='pick'){
+      if(packet.kind==='hover'){
+        if(!Number.isFinite(packet.time)||packet.time<0||typeof packet.id!=='string'||packet.id.length>2048||(packet.id&&(!frame.inspecting||!frame.nodes.some(n=>n.id===packet.id))))return new Response(null,{status:400});
+        // Frames send independently; an older request can arrive after the
+        // pointer has already entered a different viewport.
+        if(packet.time<this.hoverTime)return Response.json({ok:true});
+        this.hoverTime=packet.time;this.linkedHover(frame.frame,packet.id);
+      }else if(packet.kind==='pick'){
         if(typeof packet.id!=='string'||!frame.inspecting||!frame.nodes.some(n=>n.id===packet.id))return new Response(null,{status:400});
       }else if(packet.kind==='spacing'){
         const measured=decodeSpacing(frame.frame,JSON.stringify({...packet,kind:'exact-design:spacing'}));
@@ -143,9 +177,10 @@ export class ElementBridge {
       if(!this.frames.has(body.frame)&&this.frames.size>=200)return new Response(null,{status:429});
       const nodes=body.nodes.filter((n:any)=>n&&typeof n.id==='string'&&n.id.length<2048&&typeof n.identity==='string'&&n.identity.length<2048&&typeof n.path==='string'&&n.path.length<4096&&typeof n.parent==='string'&&n.parent.length<2048&&typeof n.label==='string'&&n.label.length<=120&&typeof n.tag==='string'&&n.tag.length<40&&Number.isSafeInteger(n.depth)&&n.depth>=0&&n.depth<1000&&Number.isSafeInteger(n.site)&&Array.isArray(n.instance));
       const previous=this.frames.get(body.frame);
-      const frame={...(previous?.page===body.page?{contentHeight:previous?.contentHeight,viewportHeight:previous?.viewportHeight,fullHeight:previous?.fullHeight,width:previous?.width,url:previous?.url}:{}),frame:body.frame,page:typeof body.page==='string'&&body.page.length<=100?body.page:'',build:body.build,plan:body.plan,inspecting:body.inspecting===true,nodes,seen:Date.now()};
+      const frame={...(previous?.page===body.page?{contentHeight:previous?.contentHeight,viewportHeight:previous?.viewportHeight,fullHeight:previous?.fullHeight,width:previous?.width,url:previous?.url}:{}),routeUrl:typeof body.routeUrl==='string'&&body.routeUrl.length<=4096?body.routeUrl:undefined,frame:body.frame,page:typeof body.page==='string'&&body.page.length<=100?body.page:'',build:body.build,plan:body.plan,inspecting:body.inspecting===true,nodes,seen:Date.now()};
       this.frames.set(body.frame,frame);
       this.size(frame,{...body,height:body.contentHeight});
+      this.syncHover();
       if(previous?.page!==frame.page||previous?.plan!==frame.plan||previous?.inspecting!==frame.inspecting)for(const listener of this.feedback)listener(frame,{kind:'ready'});
       return Response.json({commands:(this.commands.get(body.frame)||[]).filter(c=>c.seq>Number(body.after))});
     }
@@ -166,6 +201,17 @@ export class ElementBridge {
         const inject=`<script src="/__exact_design/canvas-input-client.js"></script><script src="/__exact_design/event-stream-client.js"></script><script src="/__exact_design/shared-state-client.js"></script><script>{const original=window.fetch.bind(window);window.fetch=function(input,init){if(input==='/__dev/report'&&typeof init?.body==='string'){try{const report=JSON.parse(init.body);if(report.kind==='register'&&typeof report.id==='string')window.__exactDesignBuild=report.id;}catch{}}return original(input,init);};let press;addEventListener('pointerdown',e=>{press={x:e.clientX,y:e.clientY,id:e.pointerId};},true);addEventListener('pointerup',e=>{if(press?.id===e.pointerId&&Math.hypot(e.clientX-press.x,e.clientY-press.y)<=10)window.__exactDesignPick?.(e.clientX,e.clientY);press=null;},true);addEventListener('pointercancel',()=>{press=null;},true);}</script><script type="module" src="/__exact_design/client.js"></script>`;
         html=/<head[^>]*>/i.test(html)?html.replace(/<head[^>]*>/i,head=>head+inject):inject+html;
         return new Response(html,{status:response.status,headers:out});
+      }
+      if(url.pathname==='/__dev/inspect.js'&&response.ok){
+        const source=await response.text();
+        // Pinned Exact loads its instance table only on selection. Expose a
+        // read-only warmup in the proxy so hover resolves each-row keys too.
+        // The SDK checkout and the application's source stay unchanged.
+        if(source.includes('async function inspectTable()')){
+          out.delete('etag');out.set('cache-control','no-store');
+          return new Response(source+'\nexport async function prepareStudioInstances(){await inspectTable();}\n',{status:response.status,headers:out});
+        }
+        return new Response(source,{status:response.status,headers:out});
       }
       if(url.pathname.endsWith('/app.js')&&response.ok){
         const source=await response.text(),adapted=sharedRuntime(source);

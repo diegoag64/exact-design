@@ -16,6 +16,7 @@ let middle=null;
 addEventListener('pointerdown',e=>{
   if(e.button!==1||!canvasMode)return;
   e.preventDefault();e.stopImmediatePropagation();
+  window.__exactDesignHover?.(null);
   middle={id:e.pointerId,x:e.screenX,y:e.screenY,target:e.target,cursor:e.target.style.cursor,priority:e.target.style.getPropertyPriority('cursor')};
   e.target.style.setProperty('cursor','grabbing','important');
   e.target.setPointerCapture?.(e.pointerId);
@@ -37,8 +38,18 @@ for(const type of ['pointerup','pointercancel'])addEventListener(type,e=>{
   e.preventDefault();e.stopImmediatePropagation();endMiddle();
 },true);
 addEventListener('blur',endMiddle,true);
+// The studio owns hover before Exact's local gate can retain a per-frame box.
+addEventListener('pointermove',e=>{
+  if(!canvasMode||!inspecting()||!window.__exactDesignHover)return;
+  e.stopImmediatePropagation();window.__exactDesignHover(e);
+},true);
+addEventListener('pointerout',e=>{if(canvasMode&&!e.relatedTarget)window.__exactDesignHover?.(null);},true);
+for(const type of ['pointercancel','blur','pagehide'])addEventListener(type,()=>{if(canvasMode)window.__exactDesignHover?.(null);},true);
+addEventListener('pointerup',()=>{if(canvasMode)queueMicrotask(()=>window.__exactDesignClearNativeHover?.());},true);
+
 addEventListener('wheel',e=>{
   if(!canvasMode)return;
+  window.__exactDesignHover?.(null);
   e.preventDefault();e.stopImmediatePropagation();
   canvasInput({op:'wheel',x:e.clientX,y:e.clientY,dx:e.deltaX,dy:e.deltaY,mode:e.deltaMode,ctrl:e.ctrlKey,meta:e.metaKey});
 },{capture:true,passive:false});
@@ -51,6 +62,7 @@ addEventListener('keydown',e=>{
     e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)canvasInput({op:'tool',tool:e.code==='KeyH'?'Pan':'Select'});return;
   }
   if(e.code!=='Space')return;
+  window.__exactDesignHover?.(null);
   e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)canvasInput({op:'space',down:true});
 },true);
 // Exact's element gate expects a Node target. Window focus transitions are

@@ -37,6 +37,33 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
     const frame=await(await page.locator('iframe[title="Live app preview"]').last().elementHandle()).contentFrame();await frame.waitForFunction(()=>document.getElementById('exact-inspect'),undefined,{polling:50});
     // Inspected app documents relay their context menu and middle drag to the studio.
     const title=frame.locator('#exact-root').getByText('Room for your thoughts.',{exact:true});
+    // Pointer and tree hover share one source/instance across responsive copies.
+    const previewFrames=await Promise.all((await page.locator('iframe[title="Live app preview"]').elementHandles()).map(async handle=>await handle.contentFrame()));
+    for(const preview of previewFrames)await preview.waitForFunction(()=>document.getElementById('exact-inspect'),undefined,{polling:50});
+    await page.getByRole('button',{name:'Fit all screens',exact:true}).click();
+    const assertHover=async(text:string)=>{
+      for(const preview of previewFrames){
+        await preview.waitForFunction(text=>{
+          const box=document.querySelector('[data-ed-hover]');
+          const target=[...document.querySelectorAll('#exact-root [data-site]')].find(el=>!el.querySelector('[data-site]')&&el.textContent.trim()===text);
+          if(!box||!target)return false;
+          const a=box.getBoundingClientRect(),b=target.getBoundingClientRect();return Math.abs(a.left-b.left)<1&&Math.abs(a.top-b.top)<1&&Math.abs(a.width-b.width)<1;
+        },text,{polling:50,timeout:5000});
+      }
+    };
+    await title.hover({force:true});await assertHover('Room for your thoughts.');
+    await frame.locator('#exact-root').getByText('Something worth making',{exact:true}).hover({force:true});await assertHover('Something worth making');
+    const firstTitle=previewFrames[0].locator('#exact-root').getByText('Room for your thoughts.',{exact:true});
+    await firstTitle.hover({force:true});await assertHover('Room for your thoughts.');
+    await page.mouse.move(5,5);
+    for(const preview of previewFrames)await preview.waitForFunction(()=>!document.querySelector('[data-ed-hover]'),undefined,{polling:50,timeout:3000});
+    // A click also clears Exact's separate native hover box when the mouse leaves.
+    await title.click({force:true});await page.mouse.move(5,5);
+    for(const preview of previewFrames)expect(await preview.evaluate(()=>[...document.querySelectorAll('div[popover]')].filter(el=>el.style.outline.includes('solid')&&el.style.pointerEvents==='none'&&el.style.display!=='none').length)).toBe(0);
+    await page.locator('button[title="Room for your thoughts."]').last().hover();await assertHover('Room for your thoughts.');
+    await page.mouse.move(5,5);
+    for(const preview of previewFrames)await preview.waitForFunction(()=>!document.querySelector('[data-ed-hover]'),undefined,{polling:50,timeout:3000});
+
     // Exact's inspection shield intentionally receives the physical pointer.
     await title.click({button:'right',force:true});
     const menu=page.getByRole('menu',{name:'Canvas actions'});await menu.waitFor();
