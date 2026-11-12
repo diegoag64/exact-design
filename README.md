@@ -21,11 +21,23 @@ Setup downloads Exact at revision `336a059fd1464bee7c61640afb7124ebf276d06d` int
 
 ## Arrange screens
 
-Click + beside Screens to name a screen and choose its first viewport. With a project connected, choose a project route or a blank editable screen. The sidebar groups viewport variants under each screen. Use the chevron to collapse or expand a group. Click a screen name or viewport to smoothly pan to its top, centered horizontally in the visible canvas, without changing zoom. Scrolling or dragging interrupts the pan, and reduced motion positions it immediately. Select a viewport in the sidebar or click its canvas title to edit its screen name and dimensions. Drag the title to move the frame; drag the lower-right handle to resize it. Moving frames snap to nearby edges, centers, and an 80-pixel gap beside other frames. Pink guides show the alignment or spacing. Hold Option/Alt while dragging to ignore snapping. A completed drag is one undo step.
+Click + beside Screens to name a screen and choose its viewports: one device or a device set. With a project connected, choose a project route or a blank editable screen. The sidebar groups viewport variants under each screen. Use the chevron to collapse or expand a group. Click a screen name or viewport to smoothly pan to its top, centered horizontally in the visible canvas, without changing zoom. Scrolling or dragging interrupts the pan, and reduced motion positions it immediately. Select a viewport in the sidebar or click its canvas title to edit its screen name and dimensions. Drag the title to move the frame; drag the lower-right handle to resize it. Moving frames snap to nearby edges, centers, and an 80-pixel gap beside other frames. Pink guides show the alignment or spacing. Hold Option/Alt while dragging to ignore snapping. A completed drag is one undo step.
 
-The inspector separates shared Screen settings (name and route) from the selected Viewport. Choose its preset from the dropdown, or enter Width and Height for a custom size. Use Add viewport to reveal phone, tablet, and desktop options that create another linked frame. Layer edits apply to every viewport of that screen. Duplicate screen creates an independent copy of the content. Deleting the last viewport of a screen removes that screen; the final viewport in the workspace cannot be deleted. Undo restores deleted content.
+The inspector separates shared Screen settings (name and route) from the selected Viewport. Choose its preset from the dropdown, or enter Width and Height for a custom size. Use + beside Viewport to add another linked frame. Pick one of 13 device sizes, or a set: **Core** (Phone 390, Tablet 768, Desktop 1440), **Apple devices** (iPhone SE, iPhone Pro Max, iPad mini, iPad Pro, Laptop), or **Every size**. A set adds only the sizes the screen does not show yet, in one undo step. Layer edits apply to every viewport of that screen. Duplicate screen creates an independent copy of the content. Deleting the last viewport of a screen removes that screen; the final viewport in the workspace cannot be deleted. Undo restores deleted content.
 
 New screens appear below the existing frames. Viewport variants appear to the right, and the canvas fits new frames into view. Click a sidebar entry to focus a viewport, or the zoom percentage to fit all screens.
+
+### Device sizes
+
+| Kind | Sizes (CSS pixels, iOS points) |
+| --- | --- |
+| Phone | iPhone SE 375 × 667 · Phone 390 × 844 · iPhone Pro 402 × 874 · Android 412 × 915 · iPhone Pro Max 440 × 956 |
+| Tablet | iPad mini 744 × 1133 · Tablet 768 × 1024 · iPad Air 820 × 1180 · iPad Pro 1032 × 1376 · iPad landscape 1180 × 820 |
+| Desktop | Laptop 1280 × 800 · Desktop 1440 × 900 · Wide 1920 × 1080 |
+
+These are web frames at device sizes. They show the web build's responsive layout, not native iOS or macOS controls.
+
+**Tidy up** (the grid button beside Screens, or the canvas menu) arranges one row per screen in library order, narrowest frame first, using each frame's loaded height so tall pages never overlap the next row. After adding a device set or several screens, the editor tidies automatically while the new frames load. Those passes are one undo step and one timeline entry. The camera keeps the result in view until you pan or zoom.
 
 ## Connect a running Exact app
 
@@ -43,9 +55,19 @@ Sharing currently supports the pinned Exact JavaScript development bundle and Ty
 
 Local app screens expand to their full rendered height when they load. Their widths still determine responsive layout. **Auto** beside Height keeps each frame fitted to its content as images load, content changes, or the width changes. The preset height acts as a minimum. Enter a Height to use a fixed viewport again, or click **Auto** to restore content sizing. This choice survives a reload. Canvas bounds, frame selection, snapping, and placement use the displayed height.
 
-Auto height expands the app's main vertical scrolling regions through preview-only CSS. It does not change source. The running app receives the expanded frame height, so use fixed height when testing behavior tied to a device's height. Automatic sizing supports local HTTP development servers. Remote previews keep their fixed viewport. Infinite feeds and virtualized lists show the content the app currently renders; Auto does not fetch every record. Expanded frames are bounded at 50,000 pixels, and canvas zoom reaches 1% for long screens.
+Auto height expands the app's main vertical scrolling regions through preview-only CSS. It does not change source. The running app receives the expanded frame height, so use fixed height when testing behavior tied to a device's height. While a route is presented as a modal or full-screen cover (`navigationPresentation="modal"` or `"fullscreen"`), the frame keeps the device height, as on a device. Expanding the page would stack the route below its parent screen. Automatic sizing supports local HTTP development servers. Remote previews keep their fixed viewport. Infinite feeds and virtualized lists show the content the app currently renders; Auto does not fetch every record. Expanded frames are bounded at 50,000 pixels, and canvas zoom reaches 1% for long screens.
 
-Use **Refresh screens** in the Add screen form after adding routes to your app. A dynamic route such as `/note/:id` is marked **Set path**: replace the parameter with a real value, such as `/note/7`, before adding it. Discovery does not invent record IDs or open every route. You can always enter a name and route manually, including when the server is offline or has no manifest. Choose **Blank** for an editable screen.
+**Add all** in the Add screen form adds every listed route not yet on the canvas, each with the chosen viewports, in one undo step. Dynamic routes are skipped, since they need a real path. A workspace holds up to 100 screens and 200 viewports. Use **Refresh screens** in the Add screen form after adding routes to your app.
+
+### Setup links
+
+A setup link connects a project and adds its screens in one step:
+
+```
+http://127.0.0.1:5173/?connect=http://127.0.0.1:5174&name=Ember&viewports=Core
+```
+
+`connect` is the app's dev-server URL and `name` the project name. `viewports` is a device or set name from the table above; it defaults to **Core**. The editor connects the project if needed and adds each discovered route not already on the canvas. An untouched starter workspace loses its default Home screen. The whole setup is one undo step. Each browser applies a link once, so reloading it keeps your later edits, and a different link applies again. A setup that fails (the app not started yet, for example) shows the reason with **Retry**, and runs again on the next load unless you dismiss it. `bun run demo` prints Ember's link. A dynamic route such as `/note/:id` is marked **Set path**: replace the parameter with a real value, such as `/note/7`, before adding it. Discovery does not invent record IDs or open every route. You can always enter a name and route manually, including when the server is offline or has no manifest. Choose **Blank** for an editable screen.
 
 Discovery reads the `routes.json` file produced by Exact's web build and dev server. The local helper makes this read because the app server does not allow the editor to fetch the manifest across browser origins. It only requests that file, does not follow redirects, and does not change the app's source. It omits fallback routes and merges duplicate paths. Refreshing the list never removes or changes screens already on the canvas.
 
@@ -80,7 +102,7 @@ Hover over a layer or an element in a screen to outline its matching instance in
 
 Selected elements show padding and flex-gap bands on the canvas. Click an editable value, enter a number or CSS length, and press Enter to preview it. Escape or leaving the field cancels that input. Editing one padding side or gap axis preserves the others, including shorthand units. Shared style values are identified in their tooltip. Computed values are read-only. Controls stay the same size at different canvas zoom levels and follow scrolling and draft edits. Grid gaps and unresolved percentage gaps remain available through the inspector rather than the canvas overlay.
 
-Local previews load through a development bridge as soon as a screen connects, without changing app source or the SDK. Editing reuses that frame. Browser-only storage belongs to the bridge's separate origin. The bridge uses a stable local port for each project URL. Preview control events share one browser WebSocket per project through a SharedWorker, leaving the browser's HTTP connections free for app scripts, data loads, and rebuild checkpoints when many frames are open. Its hierarchy shows up to 600 mounted, visible elements per viewport; unmounted virtualized content and hidden routes are not listed. Library components without editable source can still be selected.
+Local previews load through a development bridge as soon as a screen connects, without changing app source or the SDK. Editing reuses that frame. Browser-only storage belongs to the bridge's separate origin. The bridge uses a stable local port for each project URL. Preview control events, including Exact's per-page live-reload stream (`/__dev/page`), share one browser WebSocket per project through a SharedWorker. This leaves the browser's six HTTP connections per origin free for app scripts, data loads, and rebuild checkpoints. In testing, thirty Ember frames loaded in about five seconds. Its hierarchy shows up to 600 mounted, visible elements per viewport; unmounted virtualized content and hidden routes are not listed. Library components without editable source can still be selected.
 
 The inspector offers authored visual attributes and common properties that have not yet been added to the selected element. Enter a value and press Enter or leave the field to preview it. Edits become a design draft. They update the viewport copies without writing source, compiling the app, or replacing its frame. A shared style affects each source instance that uses that property, while explicit overrides retain their values. Changing a token reference replaces that attribute's value in the draft. Editing token definitions is not implemented.
 

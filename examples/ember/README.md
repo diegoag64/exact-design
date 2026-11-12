@@ -18,6 +18,20 @@ bun tools/demo.mjs web --port 5184
 
 In the editor, click **Connect project**, name it Ember, and enter the app's URL. The Add screen form lists every screen below.
 
+With the editor running (`bun run dev`), open this link to set everything up in one step. It connects Ember and adds all ten screens at phone, tablet and desktop sizes:
+
+```
+http://127.0.0.1:5173/?connect=http://127.0.0.1:5174&name=Ember&viewports=Core
+```
+
+`bun run demo` prints the link. Use `viewports=Apple%20devices` or `viewports=Every%20size` for more sizes.
+
+To set it up by hand instead, open **Add screen**, set **Viewports** to **Core** and click **Add all 10**. Each screen gets a phone, tablet and desktop frame, tidied into one row per screen as they load. To check one screen across every breakpoint, select one of its viewports and choose **+ › Every size**. The sizes straddle Ember's breakpoints: 600 for phone spacing, 900 for the sidebar, and 640 and 1040 of content width for dashboard columns. Phones and portrait tablets show the bottom tab bar; iPad Pro portrait, iPad landscape, Laptop and wider show the sidebar.
+
+Thirty live frames is a comfortable load. **Every size** on all ten screens is 130 running copies of the app, so add it to the screens you are checking.
+
+These are web frames. On iOS, Ember's tab bar, sheets and + button are UIKit controls with Liquid Glass, so the web frames approximate them. Native iOS and macOS previews need simulator and Mac builds; they are not part of the editor yet.
+
 ## Screens
 
 Each screen is its own route, so the editor can place each one on the canvas.

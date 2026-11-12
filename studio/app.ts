@@ -5,10 +5,12 @@ import { WorkspacePersistence } from './persistence';
 import {DraftStorage} from './draft-storage';
 import {draftReview} from './draft-review';
 import { emptySpacing } from './spacing';
-import { screenSource,localPreview } from './project';
+import { screenSource,localPreview,projectUrl } from './project';
 import { parseRoutes, type DiscoveredScreen } from './discovery';
 import { snapTargets } from './snapping';
 import { render } from './render';
+import { deviceOptions } from './devices';
+const catalog=deviceOptions();
 const editor = new WorkspaceEditor();
 const persistence = new WorkspacePersistence(editor);
 const drafts=new DraftStorage();
@@ -68,7 +70,7 @@ const snapshot = () => {
     maxX: Math.max(...frames.map(view => view.x + view.width)),
     maxY: Math.max(...frames.map(view => view.y + view.height)),
     selected: editor.selected, canUndo: editor.past.length > 0, canRedo: editor.future.length > 0,
-    code: editor.code(), status: persistence.error || status, resizing,
+    code: editor.code(), status: persistence.error || status, resizing, devices: catalog.devices, deviceSets: catalog.sets,
   };
 };
 const reply = (fit=false,error='') => {
@@ -77,7 +79,7 @@ const reply = (fit=false,error='') => {
 };
 async function logWorkspace(storage:any,before:string,kind:string,target:string,timestamp:number){
   const after=JSON.stringify(editor.document),changes=workspaceChanges(JSON.parse(before),editor.document);
-  if(changes.length)await history.append(storage.fs,{time:new Date(timestamp).toISOString(),kind:'workspace-'+kind,project:editor.document.project.url,label:kind==='property'?'Edit '+changes.map(c=>c.property).join(', '):kind==='move'?'Move / resize':kind.charAt(0).toUpperCase()+kind.slice(1),target,changes,beforeState:before,afterState:after});
+  if(changes.length)await history.append(storage.fs,{time:new Date(timestamp).toISOString(),kind:'workspace-'+kind,project:editor.document.project.url,label:kind==='property'?'Edit '+changes.map(c=>c.property).join(', '):kind==='move'?'Move / resize':kind==='arrange'?'Tidy up':kind==='variants'?'Add device set':kind==='add-all'?'Add all screens':kind==='setup'?'Set up project':kind.charAt(0).toUpperCase()+kind.slice(1),target,changes,beforeState:before,afterState:after});
 }
 const sources: Sources = {
   history: async ([project],_store,storage)=>{try{await history.load(storage.fs);return {entries:history.view(project),error:''};}catch(error){return {entries:[],error:error instanceof Error?error.message:'Could not load timeline.'};}},
@@ -153,8 +155,18 @@ const sources: Sources = {
       if(op==='connect') editor.connectProject(name,value);
       else if(op==='disconnect') editor.disconnectProject();
       else if(op==='add' || op==='blank') editor.addScreen(name,value,preset,op==='add');
+      else if(op==='setup') {
+        const url=projectUrl(value),found=await discoverProject(url,discoveryCache?.owner===url?discoveryCache.revision:0);
+        if(found.error&&!found.routes.length) return reply(false,found.error);
+        if(!editor.setupProject(name,url,found.routes.map(r=>({name:r.name,route:r.route})),preset||'Core')) return reply(false,'That project lists no screens to add.');
+      }
+      else if(op==='add-all') {
+        const found=await discoverProject(editor.document.project.url,discoveryCache?.owner===editor.document.project.url?discoveryCache.revision:0);
+        const added=new Set(editor.document.screens.map(s=>s.route));
+        editor.addScreens(found.routes.filter(r=>!r.dynamic&&!added.has(r.route)).map(r=>({name:r.name,route:r.route})),preset,true);
+      }
       else return reply(false,'Unknown library action.');
-      resizing=false;status='';await persistence.save(storage.fs);await logWorkspace(storage,before,op,name,timestamp);return reply(op==='add'||op==='blank');
+      resizing=false;status='';await persistence.save(storage.fs);await logWorkspace(storage,before,op,name,timestamp);return reply(op==='add'||op==='blank'||op==='add-all'||op==='setup');
     } catch(e) {if((e as {code?:string}).code==='bake')throw e;return reply(false,(e as Error).message);}
   },
   document: async (_args, _store, storage) => {
@@ -172,15 +184,18 @@ const sources: Sources = {
     if(op === 'screen') editor.addView('',true);
     if(op === 'duplicate') editor.addView('',true,true);
     if(op === 'variant') editor.addView(key);
+    if(op === 'variants') { try { editor.addViews(key); } catch(e) { status=(e as Error).message; } }
+    let merged=false;
+    if(op === 'arrange') merged=editor.arrange(key==='settle');
     if(op === 'add') editor.add(key);
     if(op === 'property') { if(key === 'source' && !validSource(value.trim())) status = 'Use an http:// or https:// URL'; else { try { editor.property(key, value); } catch(e) {status=(e as Error).message;} } }
     if(op === 'undo') editor.undo();
     if(op === 'redo') editor.redo();
     if(op === 'delete') editor.remove();
     const saved=await persistence.save(storage.fs,op==='save');
-    if(saved)try{await logWorkspace(storage,before,op,target,timestamp);}catch{status='Could not save the timeline. Your workspace is saved.';}
+    if(saved&&!merged)try{await logWorkspace(storage,before,op,target,timestamp);}catch{status='Could not save the timeline. Your workspace is saved.';}
     if(op==='save'&&saved&&!status)status='Saved';
-    return reply(['screen','duplicate','variant'].includes(op)||(op==='property'&&['source','route'].includes(key)));
+    return reply(['screen','duplicate','variant','variants'].includes(op)||(op==='arrange'&&key!=='settle')||(op==='property'&&['source','route'].includes(key)));
   },
 };
 export const answer: Answer = (source, args, store, storage, native) => sources[source](args, store, storage, native);

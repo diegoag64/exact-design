@@ -46,3 +46,65 @@ test('invalid preview URL schemes are rejected',()=>{
   const e=new WorkspaceEditor(); e.select(e.active); e.property('source','javascript:alert(1)'); expect(e.screen.source).toBe('');
   e.document.screens[0].source='data:text/html,bad'; expect(()=>loadWorkspace(e.document)).toThrow();
 });
+test('device sets add every missing size to a screen in one undo step',()=>{
+  const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');e.addScreen('Today','/','Phone',true);
+  e.addViews('Core');const today=e.document.views.filter(v=>v.screenId===e.screen.id);
+  expect(today.map(v=>v.name)).toEqual(['Phone','Tablet','Desktop']);
+  e.addViews('Core');expect(e.document.views.filter(v=>v.screenId===e.screen.id).length).toBe(3);
+  e.undo();expect(e.document.views.filter(v=>v.screenId===e.screen.id).length).toBe(1);
+  e.addView('iPad mini');expect([e.view.width,e.view.height]).toEqual([744,1133]);
+  expect(loadWorkspace(e.document)).toEqual(e.document);
+});
+test('adding many screens lays out one row each and rejects duplicates, parameters and overflow',()=>{
+  const e=new WorkspaceEditor();expect(()=>e.addScreens([{name:'Today',route:'/'}],'Core',true)).toThrow('Connect a project');
+  e.connectProject('Ember','http://127.0.0.1:5174');
+  e.addScreens([{name:'Today',route:'/'},{name:'Diary',route:'/diary'}],'Every size',true);
+  expect(e.document.screens.length).toBe(3);expect(e.document.views.length).toBe(27);
+  const diary=e.document.screens.find(s=>s.route==='/diary')!,row=e.document.views.filter(v=>v.screenId===diary.id);
+  expect(row.map(v=>v.width)).toEqual([...row.map(v=>v.width)].sort((a,b)=>a-b));expect(new Set(row.map(v=>v.y)).size).toBe(1);
+  expect(row[1].x).toBe(row[0].width+80);
+  e.undo();expect(e.document.screens.length).toBe(1);
+  expect(()=>e.addScreens([{name:'A',route:'/a'},{name:'B',route:'/a'}],'Core',true)).toThrow('already');
+  expect(()=>e.addScreens([{name:'Note',route:'/note/:id'}],'Core',true)).toThrow('route parameters');
+  expect(()=>e.addScreens(Array.from({length:20},(_,i)=>({name:`S${i}`,route:`/s${i}`})),'Every size',true)).toThrow('holds 200');
+  expect(e.document.screens.length).toBe(1);
+});
+test('tidy up stacks one row per screen using displayed content heights',()=>{
+  const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
+  e.addScreens([{name:'Today',route:'/'},{name:'Diary',route:'/diary'}],'Core',true);
+  const today=e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/')!;
+  e.contentSizes.set(today.id,{source:'http://127.0.0.1:5174/',width:today.width,viewportHeight:today.height,height:2400});
+  e.arrange();
+  const rows=e.document.screens.map(s=>e.document.views.filter(v=>v.screenId===s.id));
+  const todayRow=rows[1],diaryRow=rows[2];
+  expect(diaryRow[0].y).toBe(todayRow[0].y+2400+80);expect(todayRow.map(v=>v.x)).toEqual([0,470,1318]);
+  e.undo();expect(e.document.screens.length).toBe(3);
+});
+test('settling tidy passes merge into one undo step until another edit',()=>{
+  const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
+  e.addScreens([{name:'Today',route:'/'},{name:'Diary',route:'/diary'}],'Core',true);
+  const depth=e.past.length,phone=e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/')!;
+  // Already tidy: no undo step, so the next real pass must not merge into an older edit.
+  expect(e.arrange(true)).toBe(false);expect(e.past.length).toBe(depth);
+  e.contentSizes.set(phone.id,{source:'http://127.0.0.1:5174/',width:phone.width,viewportHeight:phone.height,height:2000});
+  expect(e.arrange(true)).toBe(false);expect(e.past.length).toBe(depth+1);
+  e.contentSizes.set(phone.id,{source:'http://127.0.0.1:5174/',width:phone.width,viewportHeight:phone.height,height:3000});
+  expect(e.arrange(true)).toBe(true);expect(e.past.length).toBe(depth+1);
+  const diary=e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/diary')!;
+  expect(diary.y).toBe(phone.y+3000+80);
+  e.undo();expect(e.past.length).toBe(depth);
+  e.select(phone.id);e.property('name','Today again');expect(e.arrange(true)).toBe(false);
+});
+test('project setup connects, adds missing routes once, replaces the untouched starter, and undoes in one step',()=>{
+  const e=new WorkspaceEditor();expect(e.isPristine()).toBe(true);
+  const routes=[{name:'Today',route:'/'},{name:'Diary',route:'/diary'},{name:'Note',route:'/note/:id'}];
+  expect(e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core')).toBe(2);
+  expect(e.document.project).toEqual({name:'Ember',url:'http://127.0.0.1:5174'});
+  expect(e.document.screens.map(s=>s.name)).toEqual(['Today','Diary']);expect(e.document.views.length).toBe(6);
+  expect(e.document.views.some(v=>v.id===e.active)).toBe(true);
+  e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core');expect(e.document.views.length).toBe(6);expect(e.past.length).toBe(1);
+  e.undo();expect(e.isPristine()).toBe(true);
+  // An edited starter stays.
+  e.selected='title';e.property('text','Mine');e.setupProject('Ember','http://127.0.0.1:5174',routes,'Phone');
+  expect(e.document.screens.map(s=>s.name)).toEqual(['Home','Today','Diary']);
+});

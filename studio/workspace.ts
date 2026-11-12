@@ -5,7 +5,9 @@ import { Editor, initial, validate, exportContract, resolveLayer, type Layer } f
 export type Screen = { id: string; name: string; source: string; route: string; layers: Layer[] };
 export type View = { id: string; screenId: string; name: string; x: number; y: number; width: number; height: number; heightMode?: 'content'|'fixed' };
 export type Workspace = { version: 2; name: string; project: Project; screens: Screen[]; views: View[] };
-export const presets: Record<string, [number, number]> = { Phone: [390, 844], Tablet: [768, 1024], Desktop: [1440, 900] };
+import { presets, deviceSets, resolveDevices } from './devices';
+export { presets } from './devices';
+export type NewScreen = { name: string; route: string };
 export const createWorkspace = (): Workspace => ({ version: 2, name: 'Untitled', project: {name: '', url: ''}, screens: [{ id: 'screen-1', name: 'Home', source: '', route: '', layers: initial().layers.map(n => n.kind === 'button' ? n : {...n, widthMode: 'fill', right: 720 - n.x - n.width, fontSize: n.id === 'title' ? 28 : n.id === 'card-title' ? 18 : n.fontSize, height: n.id === 'card-title' ? 44 : n.id === 'card-copy' ? 48 : n.height}) }], views: [{ id: 'view-1', screenId: 'screen-1', name: 'Custom', x: 0, y: 0, width: 720, height: 520 }] });
 export function loadWorkspace(value: unknown): Workspace {
   if ((value as {version?: number})?.version === 1) {
@@ -34,7 +36,7 @@ export function loadWorkspace(value: unknown): Workspace {
   return structuredClone(d);
 }
 export class WorkspaceEditor {
-  document = createWorkspace(); active = 'view-1'; selected = ''; past: Workspace[] = []; future: Workspace[] = [];
+  document = createWorkspace(); active = 'view-1'; selected = ''; past: Workspace[] = []; future: Workspace[] = []; private settling = false;
   contentSizes=new Map<string,{source:string;width:number;viewportHeight:number;height:number}>();
   get frames(){return this.document.views.map(v=>{const screen=this.document.screens.find(s=>s.id===v.screenId)!,source=screenSource(screen,this.document.project),size=this.contentSizes.get(v.id);return source&&v.heightMode!=='fixed'&&size?.source===source&&size.width===v.width&&size.viewportHeight===v.height?{...v,height:size.height}:v;});}
   get frame(){return this.frames.find(v=>v.id===this.active)??this.frames[0];}
@@ -43,10 +45,13 @@ export class WorkspaceEditor {
   get target() { return this.selected === this.view.id ? this.view : this.layers.find(n => n.id === this.selected); }
   get source() { return screenSource(this.screen,this.document.project); }
   get layers() { return (this.source ? [] : this.screen.layers).map(n=>resolveLayer(n,this.view.width)); }
-  change(work: (d: Workspace) => void) {
+  /** Apply one undoable edit; returns false when it changed nothing and left no undo step. */
+  change(work: (d: Workspace) => void): boolean {
+    this.settling = false;
     const next = structuredClone(this.document); work(next);
-    if (JSON.stringify(next) === JSON.stringify(this.document)) return;
+    if (JSON.stringify(next) === JSON.stringify(this.document)) return false;
     this.past.push(this.document); if (this.past.length > 100) this.past.shift(); this.document = next; this.future = []; this.reconcile();
+    return true;
   }
   reconcile() { if (!this.document.views.some(v => v.id === this.active)) this.active = this.document.views[0].id; if (!this.target) this.selected = ''; }
   undo() { const d=this.past.pop(); if(d) { this.future.push(this.document); this.document=d; this.reconcile(); } }
@@ -83,22 +88,84 @@ export class WorkspaceEditor {
       d.project={name:'',url:''};
     });
   }
-  addScreen(name: string, path: string, preset: string, linked: boolean) {
-    if(!name.trim()) throw new Error('Give your screen a name.');
-    if(this.document.screens.length>=100 || this.document.views.length>=200) throw new Error('This workspace is full.');
+  addScreen(name: string, path: string, preset: string, linked: boolean) { this.addScreens([{name, route: path}], preset, linked); }
+  /** Add screens in one undo step: one row each, with a viewport per device in the chosen device or set. */
+  addScreens(items: NewScreen[], choice: string, linked: boolean) {
+    const sizes = resolveDevices(choice), list = sizes.length ? sizes : [{name: 'Custom', width: 720, height: 520}];
+    if(!items.length) throw new Error('There are no screens to add.');
     if(linked && !this.document.project.url) throw new Error('Connect a project first.');
-    const route=linked?screenRoute(path):'';
-    if(route && hasRouteParameters(route)) throw new Error('Replace route parameters with a real path, such as /notes/7.');
-    if(route && this.document.screens.some(s=>s.route===route)) throw new Error('That route is already in your screen library.');
-    const id=this.id('view'),screenId=this.id('screen');
-    const [width,height]=presets[preset]??[720,520];
-    const y=Math.max(...this.frames.map(v=>v.y+v.height))+FRAME_GAP;
+    if(this.document.screens.length+items.length>100 || this.document.views.length+items.length*list.length>200) throw new Error(items.length*list.length>1?`That adds ${items.length*list.length} viewports; a workspace holds 200. Choose fewer sizes or screens.`:'This workspace is full.');
+    const seen=new Set(this.document.screens.map(s=>s.route).filter(Boolean)),rows:{name:string;route:string}[]=[];
+    for(const item of items) {
+      if(!item.name.trim()) throw new Error('Give your screen a name.');
+      const route=linked?screenRoute(item.route):'';
+      if(route && hasRouteParameters(route)) throw new Error('Replace route parameters with a real path, such as /notes/7.');
+      if(route && seen.has(route)) throw new Error('That route is already in your screen library.');
+      if(route)seen.add(route); rows.push({name:item.name.trim().slice(0,120),route});
+    }
+    let y=Math.max(...this.frames.map(v=>v.y+v.height))+FRAME_GAP; let first='';
     this.change(d=>{
-      d.screens.push({id:screenId,name:name.trim().slice(0,120),route,source:'',layers:[]});
-      d.views.push({id,screenId,name:presets[preset]?preset:'Custom',x:0,y,width,height});
+      for(const row of rows) {
+        const screenId=this.nextId(d,'screen'); d.screens.push({id:screenId,name:row.name,route:row.route,source:'',layers:[]});
+        let x=0;
+        for(const size of list) {
+          const id=this.nextId(d,'view'); first||=id;
+          d.views.push({id,screenId,name:size.name,x,y,width:size.width,height:size.height}); x+=size.width+FRAME_GAP;
+        }
+        y+=Math.max(...list.map(size=>size.height))+FRAME_GAP;
+      }
     });
-    this.active=id;this.selected=id;
+    this.active=first;this.selected=first;
   }
+  /** Add each device of a set to the active screen that it does not already show, in one undo step. */
+  addViews(choice: string) {
+    if(!deviceSets[choice]) return this.addView(choice);
+    const screenId=this.view.screenId,shown=this.document.views.filter(v=>v.screenId===screenId);
+    const fresh=resolveDevices(choice).filter(size=>!shown.some(v=>v.width===size.width&&v.height===size.height));
+    if(!fresh.length) return;
+    if(this.document.views.length+fresh.length>200) throw new Error('This workspace is full.');
+    let x=Math.max(...this.frames.map(v=>v.x+v.width))+FRAME_GAP; const y=this.view.y; let first='';
+    this.change(d=>{for(const size of fresh){const id=this.nextId(d,'view');first||=id;d.views.push({id,screenId,name:size.name,x,y,width:size.width,height:size.height,heightMode:'content'});x+=size.width+FRAME_GAP;}});
+    this.active=first;this.selected=first;
+  }
+  /** Tidy up: one row per screen in library order, using each frame's displayed height so loaded content never overlaps.
+   *  Settling passes, repeated while new frames report their heights, merge into the first pass's undo step; returns whether this one merged. */
+  arrange(settle=false): boolean {
+    const frames=this.frames; if(!frames.length) return false;
+    const x0=Math.min(...frames.map(v=>v.x)); let y=Math.min(...frames.map(v=>v.y));
+    const at=new Map<string,{x:number;y:number}>();
+    for(const screen of this.document.screens) {
+      const row=frames.filter(v=>v.screenId===screen.id).sort((a,b)=>a.x-b.x||a.y-b.y); if(!row.length) continue;
+      let x=x0; for(const v of row){at.set(v.id,{x,y});x+=v.width+FRAME_GAP;}
+      y+=Math.max(...row.map(v=>v.height))+FRAME_GAP;
+    }
+    const place=(d:Workspace)=>{for(const v of d.views){const p=at.get(v.id);if(p){v.x=Math.round(p.x);v.y=Math.round(p.y);}}};
+    if(settle&&this.settling){const next=structuredClone(this.document);place(next);this.document=next;this.future=[];return true;}
+    this.settling=this.change(place)&&settle;return false;
+  }
+  /** True for the untouched starter workspace, which a project setup may replace. */
+  isPristine() {
+    const fresh=createWorkspace(),d=this.document;
+    return !d.project.url&&d.views.length===1&&d.views[0].width===fresh.views[0].width&&d.views[0].height===fresh.views[0].height&&JSON.stringify(d.screens)===JSON.stringify(fresh.screens);
+  }
+  /** Run several edits as one undo step. */
+  batch(work: () => void) {
+    const before=this.document,depth=this.past.length;
+    try { work(); } finally { if(this.document!==before&&this.past.length>depth){ this.past.length=depth; this.past.push(before); } }
+  }
+  /** Connect a project and add each of its routes the library lacks, replacing an untouched starter screen; one undo step. */
+  setupProject(name: string, url: string, routes: NewScreen[], choice: string) {
+    const pristine=this.isPristine(),starter=this.document.screens[0]?.id;
+    this.batch(()=>{
+      if(this.document.project.url!==projectUrl(url)) this.connectProject(name||'Project',url);
+      const have=new Set(this.document.screens.map(s=>s.route)),missing=routes.filter(r=>!hasRouteParameters(r.route)&&!have.has(screenRoute(r.route)));
+      if(missing.length) this.addScreens(missing,choice,true);
+      if(pristine&&missing.length) this.change(d=>{d.views=d.views.filter(v=>v.screenId!==starter);d.screens=d.screens.filter(s=>s.id!==starter);});
+    });
+    this.reconcile();
+    return this.document.screens.filter(s=>s.route).length;
+  }
+  private nextId(d: Workspace, prefix: string) { let i=1; const ids=[...d.views,...d.screens].map(n=>n.id); while(ids.includes(`${prefix}-${i}`)) i++; return `${prefix}-${i}`; }
   layerEdit(work: (e: Editor)=>void) {
     const e=new Editor(); e.document={version:1,name:this.screen.name,width:this.view.width,height:this.view.height,layers:structuredClone(this.screen.layers)}; e.selected=this.selected;
     work(e); const screenId=this.screen.id;

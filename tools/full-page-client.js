@@ -10,7 +10,14 @@ export function fullPage(report){
     const root=document.getElementById('exact-root')||document.body;
     if(!root)return;
     if(observed!==root){observer.disconnect();observer.observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});observed=root;}
-    if(enabled){
+    // A presented modal or full-screen route covers the device: expanding the page underneath
+    // would stack the route below its parent screen, so it keeps the viewport height.
+    const presented=[...root.querySelectorAll('[navigationpresentation]')].some(el=>el.getAttribute('navigationpresentation')!=='push'&&el.checkVisibility({visibilityProperty:true}));
+    if(enabled&&presented){
+      sheet.disabled=true;
+      for(const name of ['edPageGrow','edPagePosition','edPageScroll','edPageFlex'])for(const el of root.querySelectorAll(`[data-${name.replace(/[A-Z]/g,c=>'-'+c.toLowerCase())}]`))delete el.dataset[name];
+      height=minimum;
+    }else if(enabled){
       // Read the authored layout without our expansion. Re-evaluating at each
       // width also releases obsolete scroll regions after responsive changes.
       sheet.disabled=true;
