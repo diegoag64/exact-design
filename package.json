@@ -10,6 +10,7 @@
     "test:preview": "bun test studio/preview-loading.test.ts studio/shared-preview.test.ts studio/selection-reveal.test.ts studio/studio-ui.test.ts studio/design-editing.test.ts",
     "test:ui": "bun tools/run.mjs test web",
     "verify": "bun tools/run.mjs verify",
+    "profile:canvas": "bun tools/profile-canvas.mjs",
     "icons": "bun tools/build-icons.mjs"
   },
   "packageManager": "bun@1.4.2"
