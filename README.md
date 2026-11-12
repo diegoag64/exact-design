@@ -79,7 +79,7 @@ The inspector offers authored visual attributes and common properties that have 
 
 The inspector groups controls into collapsible Position, Layout, Spacing, Text, Typography, Appearance, Fill, Stroke, and Effects sections. Flow and alignment use icon controls. Opacity uses percentages. Numbers use pixels for lengths; CSS lengths and percentages are also accepted.
 
-Padding, margin, flex gap, and corner radius expose linked or independent values with named edges, axes, and corners. The chain control links values; the layers indicator identifies shared source. Repeated templates show how many elements an edit affects. Padding and margin accept one to four values, such as `8 16` or `8px 16px`.
+Padding, margin, flex gap, and border radius expose linked or independent values with named edges, axes, and corners. The chain control links values; the layers indicator identifies shared source. Repeated templates show how many elements an edit affects. Padding and margin accept one to four values, such as `8 16` or `8px 16px`.
 
 Editing an unset property adds a local attribute. **Add property** offers further flex, grid, sizing, and visual controls. Responsive style expressions remain read-only until you choose **Override**, which stages a static replacement and records the original expression. X and Y become editable after you choose a positioning mode such as Relative or Absolute.
 
@@ -95,7 +95,7 @@ Editing supports local Exact dev servers with the `tamber/1` editing API. Its lo
 
 ## Edit a screen
 
-Select a layer on the canvas or in the left panel. Drag it to move it, or drag its lower-right handle to resize it. The inspector edits dimensions, color, corner radius, and text. Fixed width preserves a layer’s width across variants. Fill preserves its left and right insets, so it grows or shrinks with the frame. Switching modes preserves the layer’s current visible width. Text wraps within its configured height; increase that height to show more lines.
+Select a layer on the canvas or in the left panel. Drag it to move it, or drag its lower-right handle to resize it. The inspector edits dimensions, color, border radius, and text. Fixed width preserves a layer’s width across variants. Fill preserves its left and right insets, so it grows or shrinks with the frame. Switching modes preserves the layer’s current visible width. Text wraps within its configured height; increase that height to show more lines.
 
 The bottom toolbar adds rectangles, text, and buttons. Select and Pan remain available in Edit app. Use Pan (H), hold Space and drag, or scroll the trackpad to move around, including over an inspected app screen. Release Space to return to the previous tool. Pinch to zoom. Click the percentage to fit all screens.
 

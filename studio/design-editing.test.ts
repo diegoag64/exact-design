@@ -82,15 +82,15 @@ test('design inspector edits text, linked spacing and corners as drafts, with pe
 
     await page.getByRole('button',{name:'Close timeline',exact:true}).click();
     await page.locator('button[title="card-1"]').first().click();
-    await page.getByRole('textbox',{name:'Corner radius all',exact:true}).waitFor({timeout:6000});
+    await page.getByRole('textbox',{name:'Border radius all',exact:true}).waitFor({timeout:6000});
     await commit('Padding all','12');
     await frame.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="card-1"]')).padding==='12px',undefined,{polling:50});
     await page.getByRole('button',{name:'Override Width',exact:true}).click();
     await commit('Width','360');
     await frame.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="card-1"]')).width==='360px',undefined,{polling:50});
 
-    await page.getByRole('button',{name:'Unlink Corner radius',exact:true}).click();
-    await commit('Corner radius Top left','28');
+    await page.getByRole('button',{name:'Unlink Border radius',exact:true}).click();
+    await commit('Border radius Top left','28');
     await frame.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="card-1"]')).borderTopLeftRadius==='28px',undefined,{polling:50});
     expect(await frame.locator('[data-testid="card-1"]').evaluate(e=>getComputedStyle(e).borderTopRightRadius)).toBe('16px');
     // Select the card's content container through the same native inspector gate.

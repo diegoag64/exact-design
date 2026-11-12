@@ -1038,8 +1038,8 @@ component Studio
                               input value=n.fill change=prop("fill") class=Field flex=1 min-width=0 aria-label="Fill color" testId="fill"
                           if n.kind != "text"
                             column gap=8
-                              text "Corner radius" font-weight=500
-                              input value=`${n.radius}` change=prop("radius") class=Field aria-label="Corner radius" testId="radius"
+                              text "Border radius" font-weight=500
+                              input value=`${n.radius}` change=prop("radius") class=Field aria-label="Border radius" testId="radius"
                           if n.kind != "rectangle"
                             column gap=10
                               text "Text" font-weight=500
