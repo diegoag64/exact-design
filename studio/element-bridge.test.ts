@@ -1,4 +1,5 @@
 import {test,expect} from 'bun:test';
+import {selectionPan} from './modules/web/canvas-navigation.js';
 import {ElementBridge,bridgeFor,stopElementBridges} from '../tools/element-bridge';
 import {DesignSession} from '../tools/design-session';
 import {readFileSync} from 'node:fs';
@@ -218,4 +219,26 @@ test('inspected frames relay canvas gestures while ordinary app input stays loca
   const before=packets.length,typing=event({target:{closest:()=>({})}});handlers.keydown(typing);expect(typing.prevented).toBeUndefined();
   inspecting=false;wheel=event({deltaY:20});handlers.wheel(wheel);handlers.keydown(event());
   expect(wheel.prevented).toBeUndefined();expect(packets.length).toBe(before);
+});
+
+test('revealing a selected layer scrolls only ancestors inside its preview document',()=>{
+  const script=readFileSync(new URL('../tools/element-bridge-client.js',import.meta.url),'utf8'),calls:any[]=[];
+  const root:any={parentElement:null,clientLeft:0,clientTop:0,clientWidth:500,clientHeight:500,offsetWidth:500,offsetHeight:500,scrollWidth:500,scrollHeight:500,scrollLeft:0,scrollTop:0,css:{},getBoundingClientRect:()=>({left:0,top:0,width:500,height:500}),scrollTo(v:any){calls.push(['root',v]);Object.assign(this,{scrollLeft:v.left,scrollTop:v.top});}};
+  const scroll:any={...root,parentElement:root,clientWidth:100,clientHeight:100,offsetWidth:100,offsetHeight:100,scrollWidth:400,scrollHeight:700,css:{overflowX:'auto',overflowY:'auto'},getBoundingClientRect:()=>({left:0,top:10,width:100,height:100}),scrollTo(v:any){calls.push(['inner',v]);Object.assign(this,{scrollLeft:v.left,scrollTop:v.top});}};
+  const el={parentElement:scroll,getBoundingClientRect:()=>({left:200-scroll.scrollLeft,right:220-scroll.scrollLeft,top:350-scroll.scrollTop,bottom:370-scroll.scrollTop}),scrollIntoView(){throw new Error('Must not scroll embedding ancestors');}};
+  const reveal=runInNewContext(script.slice(script.indexOf('function revealWithinFrame('),script.indexOf('async function select('))+';revealWithinFrame;',{document:{scrollingElement:root},getComputedStyle:(node:any)=>node.css,innerWidth:500,innerHeight:500});
+  reveal(el);expect(calls).toEqual([['inner',{left:120,top:260,behavior:'instant'}]]);
+  calls.length=0;reveal(el);expect(calls).toEqual([]);
+  root.scrollHeight=1200;
+  reveal({parentElement:root,getBoundingClientRect:()=>({left:20,right:40,top:800-root.scrollTop,bottom:820-root.scrollTop})});
+  expect(calls).toEqual([['root',{left:0,top:320,behavior:'instant'}]]);
+});
+
+test('offscreen selections use the smallest camera pan and large selections align to their top',()=>{
+  const view={left:200,top:50,width:1000,height:900};
+  expect(selectionPan(view,{left:300,top:100,width:100,height:40})).toEqual({x:0,y:0});
+  expect(selectionPan(view,{left:300,top:900,width:100,height:18.1})).toEqual({x:0,y:0});
+  expect(selectionPan(view,{left:300,top:1000,width:100,height:50})).toEqual({x:0,y:132});
+  expect(selectionPan(view,{left:100,top:100,width:40,height:40})).toEqual({x:-132,y:0});
+  expect(selectionPan(view,{left:300,top:-100,width:100,height:1500})).toEqual({x:0,y:-182});
 });

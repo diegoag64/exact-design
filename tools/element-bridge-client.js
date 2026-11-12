@@ -64,9 +64,24 @@ function snapshot(){
   }
   return {...pageObserver?.snapshot(),frame,page,build:window.__exactDesignBuild||'',plan:globalThis.exact?.plan||'',inspecting:!!document.getElementById('exact-inspect'),nodes:rows};
 }
+// Scroll only this document. scrollIntoView also scrolls the embedding
+// editor's overflow:hidden canvas, independently of its camera coordinates.
+function revealWithinFrame(el){
+  const delta=(start,end,low,high)=>end-start>high-low?start-low:start<low?start-low:end>high?end-high:0;
+  for(let at=el.parentElement;at;at=at.parentElement){
+    const root=at===document.scrollingElement,css=getComputedStyle(at),box=at.getBoundingClientRect();
+    const sx=root?1:(box.width/at.offsetWidth||1),sy=root?1:(box.height/at.offsetHeight||1);
+    const left=root?0:box.left+at.clientLeft*sx,top=root?0:box.top+at.clientTop*sy;
+    const width=root?innerWidth:at.clientWidth*sx,height=root?innerHeight:at.clientHeight*sy;
+    const rect=el.getBoundingClientRect();
+    const x=(root||['auto','scroll','hidden'].includes(css.overflowX))&&at.scrollWidth>at.clientWidth?delta(rect.left,rect.right,left,left+width)/sx:0;
+    const y=(root||['auto','scroll','hidden'].includes(css.overflowY))&&at.scrollHeight>at.clientHeight?delta(rect.top,rect.bottom,top,top+height)/sy:0;
+    if(x||y)at.scrollTo({left:at.scrollLeft+x,top:at.scrollTop+y,behavior:'instant'});
+  }
+}
 async function select(id,sequence){
   const el=nodes.get(id);if(!el?.isConnected||!document.getElementById('exact-inspect'))return;
-  el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
+  revealWithinFrame(el);
   await new Promise(requestAnimationFrame);
   if(sequence!==selectionCommand)return;
   const rect=el.getBoundingClientRect(),x=Math.max(1,Math.min(innerWidth-1,rect.left+rect.width/2)),y=Math.max(1,Math.min(innerHeight-1,rect.top+rect.height/2));
@@ -77,6 +92,8 @@ async function select(id,sequence){
   try{
     const inspector=await import('/__dev/inspect.js');
     if(sequence!==selectionCommand)return;
+    const bounds=el.getBoundingClientRect();
+    window.parent?.postMessage({kind:'exact-design:canvas',op:'reveal',x:bounds.left,y:bounds.top,width:bounds.width,height:bounds.height},'*');
     for(const type of ['pointerdown','pointerup'])inspector.gate(new PointerEvent(type,{bubbles:true,clientX:x,clientY:y,pointerId:991,button:0}));
   }
   finally{mask.remove();el.removeAttribute('data-ed-pick');}

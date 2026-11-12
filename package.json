@@ -7,7 +7,7 @@
     "dev": "bun tools/run.mjs web --port 5173",
     "build": "bun tools/run.mjs web-build --out dist",
     "test": "bun test studio/model.test.ts studio/workspace.test.ts studio/persistence.test.ts studio/snapping.test.ts studio/spacing.test.ts studio/project.test.ts studio/previews.test.ts studio/event-stream.test.ts studio/shared-runtime.test.ts studio/discovery.test.ts studio/design-session.test.ts studio/design-drafts.test.ts studio/layout-source.test.ts studio/element-bridge.test.ts",
-    "test:preview": "bun test studio/preview-loading.test.ts studio/shared-preview.test.ts",
+    "test:preview": "bun test studio/preview-loading.test.ts studio/shared-preview.test.ts studio/selection-reveal.test.ts",
     "test:ui": "bun tools/run.mjs test web",
     "verify": "bun tools/run.mjs verify"
   },

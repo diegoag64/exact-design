@@ -30,5 +30,8 @@
     "preview-engines": [
       "web"
     ]
-  }
+  },
+  "data": [
+    "canvas-editing"
+  ]
 }
