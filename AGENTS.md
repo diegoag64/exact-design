@@ -37,3 +37,19 @@ Report the checks run, failures, and untested behavior. Attribute a failure to a
 Keep the root README focused on startup and documentation links. Put task instructions in `docs/use-the-studio.md`, development details in `docs/development.md`, and UI conventions in `docs/studio-design-system.md`.
 
 Add notable user-visible changes to `CHANGELOG.md` under Unreleased. Group entries under Added, Changed, or Fixed as needed. At release time, move those entries to the release heading with its actual date and version. Keep historical development dates distinct from releases.
+
+## Name and describe pull requests
+
+Use `<type>(<scope>): <summary>` for every PR title. Examples:
+
+- `fix(ui): correct inspector field spacing`
+- `feat(studio): add viewport presets`
+- `docs(repo): simplify setup and contributor guidance`
+
+Use a lowercase type: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`, or `chore`. Use a short lowercase scope that names the affected area, such as `ui`, `studio`, `preview`, `ember`, or `repo`. Choose the primary area when a change spans several areas.
+
+Write the summary as an imperative phrase with no trailing period. Describe the resulting change. Keep the full title within 72 characters. For a breaking change, put `!` before the colon and explain the migration in the description.
+
+Use [.github/pull_request_template.md](.github/pull_request_template.md) for the description. Under Summary, state the problem and resulting behavior. Under Validation, list the checks run and their results, including anything not tested and why. Add a Risks or migration section only when needed. For visible UI changes, include before-and-after screenshots when available, or explain why they are missing.
+
+Keep descriptions readable in under a minute. Link related issues and supporting evidence instead of pasting logs. Before requesting review, update the title and description to match the final scope.
