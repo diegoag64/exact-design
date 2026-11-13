@@ -19,18 +19,17 @@ type DiskState={signature?:string;app?:string;buildMs?:number;coldMs?:number;sho
 /** A job's progress as the drawer lists it: build the app, prepare the simulator, capture the screens. */
 export type StepState='pending'|'active'|'done'|'skipped'|'failed';
 export type Step={id:'build'|'device'|'capture';label:string;state:StepState;detail:string};
-/** Reads a native build's output as it arrives: Rust crates as cargo compiles them, and Swift's `[n / m]` target counts,
- *  the only line that says how far the build has to go. `progress` is -1 when the output gives no fraction. */
+/** Names the stage of a native build from its output as it arrives: each Rust crate as cargo compiles it, then Swift.
+ *  The output gives no fraction: cargo prints no total, and the SDK replays swift-build's `[n / m]` counts only after
+ *  Swift finishes, so a build's progress stays indeterminate. */
 export class BuildProgress {
-  private rest='';crates=0;detail='Compiling the Contract…';progress=-1;private swift=0;
+  private rest='';crates=0;detail='Compiling the Contract…';
   feed(text:string){const lines=(this.rest+text).split(/\r?\n/);this.rest=lines.pop()??'';let changed=false;for(const line of lines)changed=this.line(line)||changed;return changed;}
   private line(raw:string){
-    const line=raw.trim();let m=/^Compiling ([\w.-]+)/.exec(line);
-    if(m){this.crates++;this.detail=`Compiling Rust · ${m[1]} · ${this.crates} ${this.crates===1?'crate':'crates'}`;this.progress=-1;return true;}
-    m=/^\[(\d+)\s*\/\s*(\d+)\]\s*(.*)$/.exec(line);
-    if(m){const done=Number(m[1]),total=Number(m[2]);if(total<2)return false;this.swift=Math.max(this.swift,Math.min(1,done/total));this.detail=`Compiling Swift${m[3]?` · ${m[3]}`:''}`;this.progress=this.swift;return true;}
-    if(line.startsWith('host/apple: baked')){this.detail='Compiling Swift…';this.progress=-1;return true;}
-    if(line.startsWith('Build complete!')){this.detail='Packaging the app…';this.progress=-1;return true;}
+    const line=raw.trim(),m=/^Compiling ([\w.-]+)/.exec(line);
+    if(m){this.crates++;this.detail=`Compiling Rust · ${m[1]} · ${this.crates} ${this.crates===1?'crate':'crates'}`;return true;}
+    if(line.startsWith('host/apple: baked')){this.detail='Compiling Swift…';return true;}
+    if(line.startsWith('Build complete!')){this.detail='Packaging the app…';return true;}
     return false;
   }
 }
@@ -143,7 +142,7 @@ export class AppPreviews {
   readonly key:string;readonly dir:string;private disk:DiskState={shots:{}};private hashes=new Map<string,{mtime:number;size:number;hash:string}>();
   private tokens=new Set<string>();private pending=0;private tail=Promise.resolve();private listeners=new Set<()=>void>();private statuses=new Map<string,{state:FrameStatus;error:string}>();
   signature='';state='idle';phase='';message='';error='';done=0;total=0;
-  steps:Step[]=[];fraction=-1;estimate=0;private stepAt=0;private ticker?:ReturnType<typeof setInterval>;
+  steps:Step[]=[];estimate=0;private stepAt=0;private ticker?:ReturnType<typeof setInterval>;
   private constructor(readonly service:NativePreviews,readonly appDir:string){this.key=hash(appDir).slice(0,16);this.dir=join(service.cache,this.key);}
   static async open(service:NativePreviews,dir:string){const a=new AppPreviews(service,dir);await mkdir(join(a.dir,'shots'),{recursive:true});try{a.disk=JSON.parse(await readFile(join(a.dir,'state.json'),'utf8'));}catch{}return a;}
   async inputs(){const entries:string[]=[];const walk=async(dir:string,rel='')=>{for(const e of (await readdir(dir,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){if(e.isSymbolicLink())continue;const path=join(dir,e.name),name=rel+e.name;if(e.isDirectory()){if(!e.name.startsWith('.')&&!['target','node_modules','dist'].includes(e.name))await walk(path,name+'/');}else if(e.isFile()){const s=await stat(path),prev=this.hashes.get(name);const digest=prev&&prev.mtime===s.mtimeMs&&prev.size===s.size?prev.hash:hash(await readFile(path));this.hashes.set(name,{mtime:s.mtimeMs,size:s.size,hash:digest});entries.push(JSON.stringify([name,digest]));}}};await walk(this.appDir);return hash(entries.join('\n')+await this.service.versions());}
@@ -154,8 +153,8 @@ export class AppPreviews {
   /** A frame's state: a job's status while it runs or after it failed, else what its latest screenshot says. */
   private frameState(key:string):FrameStatus{const shot=this.disk.shots[key],status=this.statuses.get(key);return status?.state==='ready'||!status?(shot?(shot.signature===this.signature?'ready':'stale'):'empty'):status.state;}
   snapshot(frames:NativeFrame[],origin='http://127.0.0.1:5175'){
-    // While capturing, the fraction is the real count of screens done; a build reports Swift's target count when it has one.
-    const capturing=this.steps.find(s=>s.id==='capture')?.state==='active',progress=capturing&&this.total?this.done/this.total:this.fraction;
+    // Only capture has a real fraction: the screens done. Building and preparing a simulator report -1.
+    const capturing=this.steps.find(s=>s.id==='capture')?.state==='active',progress=capturing&&this.total?this.done/this.total:-1;
     return {state:this.state,phase:this.phase,message:this.message,error:this.error,done:this.done,total:this.total,
       steps:this.steps.map(s=>({...s,detail:s.id==='capture'&&s.state==='active'?`${Math.min(this.done+1,this.total)} of ${this.total}`:s.detail})),progress,elapsed:this.elapsed,estimate:this.estimate,frames:frames.map(f=>{const key=frameKey(f),shot=this.disk.shots[key],status=this.statuses.get(key);return {id:f.id,state:this.frameState(key),shot:shot?`${origin}/native/shot/${this.key}/${shot.file}?v=${shot.capturedAt}`:'',width:shot?.width??0,height:shot?.height??0,capturedAt:shot?.capturedAt??0,error:status?.error??''};})};}
   /** Starts one job per new token. `capture` empty: every frame that is not ready; ids: exactly those frames. */
@@ -170,14 +169,15 @@ export class AppPreviews {
     if(phase==='boot'||phase==='install')this.step('device','active',text);
     if(phase==='capture'){const device=this.steps.find(s=>s.id==='device');if(device?.state==='pending')this.step('device','skipped','Already running');this.step('capture','active',`${Math.min(this.done+1,this.total)} of ${this.total}`);}
     this.publish();}
-  /** Moves a step on: an earlier active step is done once a later one starts. */
-  private step(id:Step['id'],state:StepState,detail:string,progress=-1){
+  /** Moves a job to a step. One step is active at a time: an earlier active step is done, and a later one goes back to
+   *  pending, as when a capture has to launch the app first. */
+  private step(id:Step['id'],state:StepState,detail:string){
     const index=this.steps.findIndex(s=>s.id===id);if(index<0)return;const step=this.steps[index]!;
-    if(state==='active'){for(const s of this.steps.slice(0,index))if(s.state==='active')s.state='done';if(step.state!=='active')this.stepAt=this.service.now();}
-    step.state=state;step.detail=detail;if(id!=='capture')this.fraction=progress;this.publish();}
-  private startSteps(){this.steps=[{id:'build',label:'Build app',state:'pending',detail:''},{id:'device',label:'Prepare simulator',state:'pending',detail:''},{id:'capture',label:'Capture',state:'pending',detail:''}];this.fraction=-1;this.estimate=0;this.stepAt=this.service.now();
+    if(state==='active'){this.steps.forEach((s,i)=>{if(i!==index&&s.state==='active')s.state=i<index?'done':'pending';});if(step.state!=='active')this.stepAt=this.service.now();}
+    step.state=state;step.detail=detail;this.publish();}
+  private startSteps(){this.steps=[{id:'build',label:'Build app',state:'pending',detail:''},{id:'device',label:'Prepare simulator',state:'pending',detail:''},{id:'capture',label:'Capture',state:'pending',detail:''}];this.estimate=0;this.stepAt=this.service.now();
     clearInterval(this.ticker);this.ticker=setInterval(()=>this.publish(),1000);this.ticker.unref?.();}
-  private endSteps(){clearInterval(this.ticker);this.ticker=undefined;this.steps=[];this.fraction=-1;this.estimate=0;}
+  private endSteps(){clearInterval(this.ticker);this.ticker=undefined;this.steps=[];this.estimate=0;}
   /** Seconds the active step has run, for the drawer's timer. */
   get elapsed(){return this.state==='working'&&this.steps.some(s=>s.state==='active')?Math.max(0,Math.floor((this.service.now()-this.stepAt)/1000)):0;}
   private async job(frames:NativeFrame[],capture:string[]){
@@ -194,15 +194,16 @@ export class AppPreviews {
       if(!jobs.length){this.state='idle';this.message='Native previews are up to date.';return;}
       this.total=jobs.length;for(const j of jobs)this.statuses.set(j.key,{state:'queued',error:''});this.publish();
       if(this.disk.signature!==inputSignature||!this.disk.app||!existsSync(this.disk.app)){
-        // Cold: this checkout has no app from an earlier build, so every crate and Swift target compiles.
-        const cold=!this.disk.app||!existsSync(this.disk.app);
+        // Cold: neither this helper nor the SDK's CLI (`bun exact.mjs ios`, or an interrupted refresh) has built the app for
+        // the iOS Simulator in this checkout, so every crate and Swift target compiles.
+        const built=!!this.disk.app&&existsSync(this.disk.app),cold=!built&&!existsSync(join(this.appDir,'target','aarch64-apple-ios-sim'));
         const fs=await statfs(this.appDir);const free=this.service.options.free?await this.service.options.free(this.appDir):fs.bavail*fs.bsize;const min=cold?20:10;
         if(free<min*1024**3)throw new Error(`Only ${(free/1024**3).toFixed(1)} GB free. Native builds need ${min} GB free.`);
         this.service.checkRunning();
-        this.message=cold?`Building ${app.name} for iOS. The first build in this checkout takes several minutes.`:`Rebuilding ${app.name} with your changes…`;this.phase='build';
+        this.message=cold?`Building ${app.name} for iOS. The first build in this checkout takes several minutes.`:built?`Rebuilding ${app.name} with your changes…`:`Building ${app.name} for iOS…`;this.phase='build';
         this.estimate=Math.round(((cold?this.disk.coldMs:this.disk.buildMs)??0)/1000);
         const reader=new BuildProgress();this.step('build','active',reader.detail);let output='';const started=this.service.now();
-        try{output=await this.service.run([process.execPath,join(root,'tools/native-build.mjs'),this.appDir,...this.service.target.buildArgs],{PATH:`${homedir()}/.cargo/bin:${process.env.PATH}`,EXACT_FEEDBACK:'0'},text=>{if(reader.feed(text))this.step('build','active',reader.detail,reader.progress);});await writeFile(join(this.dir,'build.log'),output);const built=/host\/apple:\s+(.+?\.app)(?:\s|$)/.exec(output)?.[1];if(!built||!existsSync(built))throw new Error('Build did not produce an app bundle.');this.disk.app=built;this.disk.signature=inputSignature;const took=this.service.now()-started;this.disk.buildMs=took;if(cold)this.disk.coldMs=took;await this.save();await this.refresh();this.estimate=0;this.step('build','done',`Built in ${Math.max(1,Math.round(took/1000))} s`);}
+        try{output=await this.service.run([process.execPath,join(root,'tools/native-build.mjs'),this.appDir,...this.service.target.buildArgs],{PATH:`${homedir()}/.cargo/bin:${process.env.PATH}`,EXACT_FEEDBACK:'0'},text=>{if(reader.feed(text))this.step('build','active',reader.detail);});await writeFile(join(this.dir,'build.log'),output);const built=/host\/apple:\s+(.+?\.app)(?:\s|$)/.exec(output)?.[1];if(!built||!existsSync(built))throw new Error('Build did not produce an app bundle.');this.disk.app=built;this.disk.signature=inputSignature;const took=this.service.now()-started;this.disk.buildMs=took;if(cold)this.disk.coldMs=took;await this.save();await this.refresh();this.estimate=0;this.step('build','done',`Built in ${Math.max(1,Math.round(took/1000))} s`);}
         catch(e){await writeFile(join(this.dir,'build.log'),output+'\n'+message(e));this.step('build','failed','Build failed');throw new Error(`${brief(e)} Full log: ${join(this.dir,'build.log')}`);}
       }else this.step('build','skipped','Up to date');
       this.service.checkRunning();const context={name:app.name as string,appId:app.app.id as string,scheme:handler.protocol as string,signature:this.disk.signature!};

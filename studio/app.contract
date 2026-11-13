@@ -60,7 +60,10 @@ shape NativeStep
   state: string
   detail: string
 
-// `progress` is the active step's real fraction (Swift targets built, screens captured), or -1 when the helper has none.
+shape SavedDrafts
+  count: number
+
+// `progress` is the share of screens captured while capturing, or -1: a build reports no fraction.
 // `elapsed` is the active step's seconds so far; `estimate` the last comparable build's seconds, or 0.
 shape NativeStatus
   state: string
@@ -372,7 +375,9 @@ component Studio
   // Fit the simulator's screen in the drawer: 288px wide inside its padding, and the drawer's height less its header,
   // device controls, actions and padding (about 210px, plus room for a status or error line).
   derive nativeFit = min(288 / nativeSize.width, max(120, viewport.height - (rightOpen ? 12 : 64) - (viewport.width >= 1000 ? 64 : 120) - 210 - (nativeFrameError != "" or native.state == "working" or nativeDone ? 36 : 0) - (nativeDrafts > 0 ? 52 : 0)) / nativeSize.height)
-  derive nativeDrafts = editing ? (match designChanged { case some(r) => r.draftCount, case none => 0 }) : 0
+  // Read again when editing ends, since finishing saves the session's drafts without applying them.
+  resource savedDrafts = savedDrafts((nativeOpen and not editing ? doc.projectUrl : "")) as shape SavedDrafts else empty()
+  derive nativeDrafts = editing ? (match designChanged { case some(r) => r.draftCount, case none => 0 }) : savedDrafts.count
   derive nativeBusy = native.state == "working" or native.state == "unavailable"
   action toggleNative
     nativeOpen = not nativeOpen
@@ -1131,7 +1136,7 @@ component Studio
                           text "This screen has no route" font="type.body" font-weight=500 color="ink.primary" text-align="center"
                           text "Native previews open a project route in the iOS Simulator. Select a screen from your project." font="type.caption" text-align="center"
                       else
-                        NativeScreen(id=doc.screenId, name=`${doc.screenName} on ${nativeSize.name}`, width=round(nativeSize.width * nativeFit), height=round(nativeSize.height * nativeFit), frame=nativeShot, error=nativeFrameError)
+                        NativeScreen(name=`${doc.screenName} on ${nativeSize.name}`, width=round(nativeSize.width * nativeFit), height=round(nativeSize.height * nativeFit), frame=nativeShot, error=nativeFrameError)
                       if native.state == "working" and native.steps.length > 0
                         NativeProgress(status=native, still=still)
                     column flex-shrink=0 gap=8 padding=12 border-top="1px solid line.subtle"
@@ -1867,7 +1872,6 @@ component NativeProgress
 
 component NativeScreen
   props
-    id: string
     name: string
     width: number
     height: number

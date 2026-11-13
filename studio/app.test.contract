@@ -1015,12 +1015,13 @@ test "the native preview drawer shows the selected screen beside editable web fr
   clock data
   expect state native.total == 1
   expect tree has "native-steps"
-  expect text "native-step-build-detail" == "Compiling Swift · ExactKit"
-  expect tree has "native-progress-bar"
+  expect text "native-step-build-detail" == "Compiling Swift…"
+  expect tree has "native-progress-indeterminate"
   expect text "native-step-device-detail" == "Already running"
   clock until state native.phase == "capture" within 3000
   expect text "native-step-build-detail" == "Built in 1 s"
   expect text "native-step-capture-detail" == "1 of 1"
+  expect tree has "native-progress-bar"
   clock until state native.message == "Native previews updated." within 5000
   expect tree missing "native-steps"
   expect tree has "native-shot"
@@ -1119,6 +1120,14 @@ test "the native drawer says unapplied draft changes are not in the native build
   clock data
   expect tree has "apply-design"
   expect text "native-drafts" == "1 unapplied change isn't in the native build. Apply to code, then refresh."
+  tap "edit-app"
+  clock data
+  expect tree missing "apply-design"
+  expect text "native-drafts" == "1 unapplied change isn't in the native build. Apply to code, then refresh."
+  tap "edit-app"
+  clock data
+  clock +1800 real
+  expect tree has "apply-design"
   tap "discard-design"
   clock data
   expect tree missing "native-drafts"

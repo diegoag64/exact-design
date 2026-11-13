@@ -28,7 +28,7 @@ async function fixture(options:{noXcode?:boolean;low?:boolean;buildFail?:boolean
     if(s==='xcrun --find simctl'){if(options.noXcode)throw new Error('Xcode missing');return `${SIMCTL}\n`;}
     if(args[0]==='xcrun')throw new Error('simctl must run directly');
     if(sub[0]==='boot'){if(booted.has(sub[1]))throw new Error('Unable to boot device in current state: Booted');booted.add(sub[1]);}
-    if(s.includes('native-build.mjs')){for(const chunk of ['   Compiling exact-core v0.1.0\n','[Using on-disk description]\n[2 / 21] ExactCore\n','[26 / 30',  '] ExactIOS-product\n','Build complete! (6.43 sec)\n'])onOutput?.(chunk);if(options.buildFail)throw new Error('noise\nerror: compilation failed\nnoise');if(options.rewrite)await writeFile(join(appDir,'app.json'),JSON.stringify({...config,host:{ios:{}}}));return `host/apple: ${bundle} (cargo foo); built and signed`;}
+    if(s.includes('native-build.mjs')){for(const chunk of ['   Compiling exact-core v0.1.0\n','host/apple: baked L=0; Swift embedded composition\n','[2 / 21] ExactCore\n[26 / 30] ExactIOS-product\nBuild complete! (6.43 sec)\n'])onOutput?.(chunk);if(options.buildFail)throw new Error('noise\nerror: compilation failed\nnoise');if(options.rewrite)await writeFile(join(appDir,'app.json'),JSON.stringify({...config,host:{ios:{}}}));return `host/apple: ${bundle} (cargo foo); built and signed`;}
     if(s.includes('list runtimes'))return JSON.stringify({runtimes});
     if(s.includes('list devices'))return JSON.stringify({devices:{[runtimes[1].identifier]:[{name:'Doom Exact iPhone',deviceTypeIdentifier:type,isAvailable:true,udid:'foreign',state:'Booted'},{name:'Exact Design iPhone 17',deviceTypeIdentifier:type,isAvailable:true,udid:'owned',state:booted.has('owned')?'Booted':'Shutdown'}]}});
     if(s.includes('screenshot')){const png=Buffer.alloc(24);Buffer.from('89504e470d0a1a0a','hex').copy(png);png.writeUInt32BE(1206,16);png.writeUInt32BE(2622,20);await writeFile(args.at(-1)!,png);}
@@ -482,23 +482,26 @@ test.skipIf(!e2e)('real Ember iPhone 17 captures',async()=>{
   }finally{await service.stop();}
 },600000);
 
-test('build output reports crates, Swift target fractions that never move back, and packaging',()=>{
-  const p=new BuildProgress();expect(p.detail).toBe('Compiling the Contract…');expect(p.progress).toBe(-1);
-  expect(p.feed('warning: ember: app.contract:1:1 warning\n   Compiling exact-core v0.1.0 (/sdk)\n   Compiling ember-apple v0.1.0\n')).toBe(true);
-  expect(p.detail).toBe('Compiling Rust · ember-apple · 2 crates');expect(p.progress).toBe(-1);
-  // A line split across chunks is read once it is whole; `[1 / 1]` carries no fraction.
-  expect(p.feed('[1 / 1]\n[12 / 2')).toBe(false);expect(p.feed('8] ExactLaunchParts\n')).toBe(true);
-  expect(p.detail).toBe('Compiling Swift · ExactLaunchParts');expect(p.progress).toBeCloseTo(12/28);
-  p.feed('[13 / 40] ExactKit\n');expect(p.progress).toBeCloseTo(12/28);
-  p.feed('Build complete! (6.43 sec)\n');expect(p.detail).toBe('Packaging the app…');expect(p.progress).toBe(-1);
+test('build output names crates as they compile, then Swift and packaging',()=>{
+  const p=new BuildProgress();expect(p.detail).toBe('Compiling the Contract…');
+  expect(p.feed('warning: ember: app.contract:1:1 warning\n   Compiling exact-core v0.1.0 (/sdk)\n   Compiling ember-')).toBe(true);
+  expect(p.detail).toBe('Compiling Rust · exact-core · 1 crate');
+  // A line split across chunks is read once it is whole.
+  expect(p.feed('apple v0.1.0\n')).toBe(true);expect(p.detail).toBe('Compiling Rust · ember-apple · 2 crates');
+  expect(p.feed('host/apple: baked L=0; Swift embedded composition\n')).toBe(true);expect(p.detail).toBe('Compiling Swift…');
+  // The SDK replays swift-build's counts in one batch after Swift finishes; they carry no live progress.
+  expect(p.feed('[2 / 21] ExactCore\n[26 / 30] ExactIOS-product\n')).toBe(false);
+  p.feed('Build complete! (6.43 sec)\n');expect(p.detail).toBe('Packaging the app…');
 });
 test('a capture job reports build, simulator and capture steps with real progress',async()=>{
   const f=await fixture();const seen:any[]=[];f.app.subscribe(()=>seen.push(structuredClone(f.app.snapshot(frames))));
   await f.app.start('a',frames);
   const building=seen.filter(s=>s.steps[0]?.state==='active');
   expect(building[0].message).toBe('Building Ember for iOS. The first build in this checkout takes several minutes.');
-  expect(building.map(s=>s.steps[0].detail)).toContain('Compiling Rust · exact-core · 1 crate');
-  expect(building.map(s=>s.progress)).toContain(26/30);
+  expect(building.map(s=>s.steps[0].detail)).toEqual(expect.arrayContaining(['Compiling Rust · exact-core · 1 crate','Compiling Swift…','Packaging the app…']));
+  expect(building.every(s=>s.progress===-1)).toBe(true);
+  // One step is active at a time, even when a capture has to launch the app first.
+  expect(seen.every(s=>s.steps.filter((x:any)=>x.state==='active').length<=1)).toBe(true);
   expect(seen.some(s=>s.steps[1]?.state==='active'&&s.steps[1].detail.startsWith('Starting iPhone 17'))).toBe(true);
   const capturing=seen.filter(s=>s.steps[2]?.state==='active');
   expect(capturing[0].steps[0]).toMatchObject({state:'done'});expect(capturing[0].steps[0].detail).toMatch(/^Built in \d+ s$/);
@@ -514,4 +517,11 @@ test('a capture job reports build, simulator and capture steps with real progres
 test('a failed build marks its step failed',async()=>{
   const f=await fixture({buildFail:true});const seen:any[]=[];f.app.subscribe(()=>seen.push(structuredClone(f.app.snapshot(frames))));
   await f.app.start('a',frames);expect(seen.some(s=>s.steps[0]?.state==='failed')).toBe(true);expect(seen.at(-1).state).toBe('error');expect(seen.at(-1).steps).toEqual([]);
+});
+test('earlier iOS build output in the checkout makes a build warm: 10 GB is enough and it is not called a first build',async()=>{
+  const cold=await fixture({service:{free:async()=>15*1024**3}});await cold.app.start('a',frames);
+  expect(cold.app.snapshot(frames).error).toBe('Only 15.0 GB free. Native builds need 20 GB free.');
+  const warm=await fixture({service:{free:async()=>15*1024**3}});await mkdir(join(warm.appDir,'target','aarch64-apple-ios-sim'),{recursive:true});
+  const seen:string[]=[];warm.app.subscribe(()=>seen.push(warm.app.message));await warm.app.start('a',frames);
+  expect(seen).toContain('Building Ember for iOS…');expect(seen.some(m=>m.includes('first build'))).toBe(false);expect(warm.app.snapshot(frames).state).toBe('idle');
 });

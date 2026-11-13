@@ -1,8 +1,7 @@
 /** Viewport sizes in CSS pixels (iOS points). Phone, Tablet and Desktop keep their original sizes for saved workspaces. */
 export type DeviceKind = 'phone' | 'tablet' | 'desktop';
-/** `web` devices size canvas viewports. `ios` devices name the simulators that capture native previews. */
-export type DevicePlatform = 'web' | 'ios';
-export type Device = { name: string; width: number; height: number; kind: DeviceKind; platform?: DevicePlatform; simulator?: string };
+/** `simulator` names a native device's CoreSimulator device type. */
+export type Device = { name: string; width: number; height: number; kind: DeviceKind; simulator?: string };
 export const devices: Device[] = [
   { name: 'iPhone SE', width: 375, height: 667, kind: 'phone' },
   { name: 'Phone', width: 390, height: 844, kind: 'phone' },
@@ -21,13 +20,12 @@ export const devices: Device[] = [
 /** Native devices for the native preview drawer: the size is the simulator's screen in points, and `simulator` is its
  *  CoreSimulator device type. They are not viewport presets: the canvas always shows the editable web build. */
 export const nativeDevices: Device[] = [
-  { name: 'Native iPhone SE', width: 375, height: 667, kind: 'phone', platform: 'ios', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation' },
-  { name: 'Native iPhone 17', width: 402, height: 874, kind: 'phone', platform: 'ios', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17' },
-  { name: 'Native iPhone 17 Pro Max', width: 440, height: 956, kind: 'phone', platform: 'ios', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max' },
-  { name: 'Native iPad Pro 11', width: 834, height: 1210, kind: 'tablet', platform: 'ios', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB' },
+  { name: 'Native iPhone SE', width: 375, height: 667, kind: 'phone', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation' },
+  { name: 'Native iPhone 17', width: 402, height: 874, kind: 'phone', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17' },
+  { name: 'Native iPhone 17 Pro Max', width: 440, height: 956, kind: 'phone', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max' },
+  { name: 'Native iPad Pro 11', width: 834, height: 1210, kind: 'tablet', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB' },
 ];
 export const DEFAULT_NATIVE_DEVICE = 'native-iphone-17';
-export const platformOf = (device: Device): DevicePlatform => device.platform ?? 'web';
 /** Named groups of devices, added together and laid out narrowest first. */
 export const deviceSets: Record<string, string[]> = {
   Core: ['Phone', 'Tablet', 'Desktop'],

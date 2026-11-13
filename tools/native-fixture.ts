@@ -16,7 +16,7 @@ export function nativeScreens(body:any,request:Request):Response {
   let timer:ReturnType<typeof setTimeout>|undefined,closed=false;
   const stream=new ReadableStream<Uint8Array>({start(controller){
     let done=0,phase='capture',progress=-1;
-    // The first capture job for a project builds: a Swift progress report, then the build is done.
+    // The first capture job for a project builds, with no fraction like a real build, then the build is done.
     const steps=[{id:'build',label:'Build app',state:'pending',detail:''},{id:'device',label:'Prepare simulator',state:'skipped',detail:'Already running'},{id:'capture',label:'Capture',state:'pending',detail:''}];
     const emit=(state:'working'|'idle',message:string)=>{if(!closed)controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({state,phase:state==='working'?phase:'',message,error:'',done,total:jobs.length,steps:state==='working'?steps:[],progress:state==='working'?progress:-1,elapsed:state==='working'?1:0,estimate:0,frames})}\n\n`));};
     const working=()=>{if(phase==='capture'){steps[2]={...steps[2]!,state:'active',detail:`${Math.min(done+1,jobs.length)} of ${jobs.length}`};progress=done/jobs.length;}emit('working',phase==='build'?'Building Native app for iOS…':`Capturing ${Math.min(done+1,jobs.length)} of ${jobs.length}…`);};
@@ -26,7 +26,7 @@ export function nativeScreens(body:any,request:Request):Response {
     if(!jobs.length){emit('idle','Native previews are up to date.');return;}
     jobs.forEach(({frame})=>{frame.state='queued';});
     const project=String(body.project);
-    if(!built.has(project)){phase='build';steps[0]={...steps[0]!,state:'active',detail:'Compiling Swift · ExactKit'};progress=0.5;}
+    if(!built.has(project)){phase='build';steps[0]={...steps[0]!,state:'active',detail:'Compiling Swift…'};}
     else steps[0]={...steps[0]!,state:'skipped',detail:'Up to date'};
     working();
     const next=()=>{

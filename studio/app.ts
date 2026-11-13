@@ -91,6 +91,8 @@ async function logWorkspace(storage:any,before:string,kind:string,target:string,
   if(changes.length)await history.append(storage.fs,{time:new Date(timestamp).toISOString(),kind:'workspace-'+kind,project:editor.document.project.url,label:kind==='property'?'Edit '+changes.map(c=>c.property).join(', '):kind==='move'?'Move / resize':kind==='arrange'?'Tidy up':kind==='variants'?'Add device set':kind==='add-all'?'Add all screens':kind==='setup'?'Set up project':kind.charAt(0).toUpperCase()+kind.slice(1),target,changes,beforeState:before,afterState:after});
 }
 const sources: Sources = {
+  // Draft changes saved for a project outlive the editing session; the native drawer counts them while not editing.
+  savedDrafts: async ([project],_store,storage)=>{if(!project)return {count:0};try{await drafts.load(storage.fs);return {count:draftReview(drafts.get(new URL(project).origin)).reduce((n,f)=>n+f.changes.length,0)};}catch{return {count:0};}},
   history: async ([project],_store,storage)=>{try{await history.load(storage.fs);return {entries:history.view(project),error:''};}catch(error){return {entries:[],error:error instanceof Error?error.message:'Could not load timeline.'};}},
   scene: ([,,since]) => {setScope(since);return snapshot();},
   // The native preview drawer asks for one frame per connected screen, on the chosen device and appearance; frame ids are
