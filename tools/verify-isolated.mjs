@@ -60,6 +60,7 @@ export async function runIsolated(args, root = repositoryRoot) {
   await mkdir(resolve(root, '.exact/verification'), {recursive:true});
   const output = await mkdtemp(resolve(root, '.exact/verification/run-'));
   const workspace = resolve(output, 'workspace');
+  const previousTestMode = process.env.EXACT_DESIGN_TEST;
   let helper, fixture, bridges, child, interrupted, groupStopped = false;
   const signalGroup = signal => {
     if (!child?.pid || groupStopped) return;
@@ -88,6 +89,8 @@ export async function runIsolated(args, root = repositoryRoot) {
     report.dirty = Boolean((await git(root, ['status', '--porcelain'])).trim());
     await copySources(root, workspace);
     await symlink(resolve(root, '.exact-sdk'), resolve(workspace, '.exact-sdk'), 'dir');
+    // The helper runs here, so it needs the same native fixture mode as the child.
+    process.env.EXACT_DESIGN_TEST = '1';
     const {startDiscoveryServer} = await import(resolve(workspace, 'tools/discovery-server.ts'));
     const {startDiscoveryFixture} = await import(resolve(workspace, 'tools/discovery-fixture.ts'));
     bridges = await import(resolve(workspace, 'tools/element-bridge.ts'));
@@ -128,6 +131,8 @@ export async function runIsolated(args, root = repositoryRoot) {
     clearTimeout(killTimer);
     signalGroup('SIGKILL');
     helper?.stop(true); fixture?.stop(true); bridges?.stopElementBridges();
+    if (previousTestMode === undefined) delete process.env.EXACT_DESIGN_TEST;
+    else process.env.EXACT_DESIGN_TEST = previousTestMode;
     // Preserve SDK reports and captures, then remove copied source and build output.
     const shots = resolve(workspace, 'studio/.exact/verify');
     try {

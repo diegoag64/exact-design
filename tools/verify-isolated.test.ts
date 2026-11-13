@@ -66,7 +66,7 @@ for (const mode of ['failure', 'SIGTERM', 'SIGINT', 'early']) test(`verification
     await writeFile(resolve(source,'studio/app.test.contract'), 'http://127.0.0.1:5176');
     await writeFile(resolve(source,'studio/app.json'), '{}');
     await writeFile(resolve(source,'studio/exact.mjs'),await readFile(resolve(import.meta.dir,'../studio/exact.mjs'),'utf8'));
-    await writeFile(resolve(source,'tools/discovery-server.ts'), "export const startDiscoveryServer=port=>Bun.serve({hostname:'127.0.0.1',port,fetch:()=>new Response('helper')});");
+    await writeFile(resolve(source,'tools/discovery-server.ts'), "export const startDiscoveryServer=port=>{if(process.env.EXACT_DESIGN_TEST!=='1')throw new Error('helper must use native test fixtures');return Bun.serve({hostname:'127.0.0.1',port,fetch:()=>new Response('helper')});};");
     await writeFile(resolve(source,'tools/discovery-fixture.ts'), "export const startDiscoveryFixture=port=>Bun.serve({hostname:'127.0.0.1',port,fetch:()=>new Response('fixture')});");
     await writeFile(resolve(source,'tools/element-bridge.ts'), `export const stopElementBridges=()=>{};${mode==='early'?"process.kill(process.pid,'SIGTERM');await Bun.sleep(20);":''}`);
     await writeFile(resolve(source,'.exact-sdk/scripts/bun.mjs'), "export function ensureBun(version){if(version!=='1.4.2')throw Error('Wrong Bun pin');globalThis.bunChecked=true;}");
