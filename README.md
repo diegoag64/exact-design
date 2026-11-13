@@ -1,6 +1,16 @@
 # Exact Design
 
-A visual editor for Exact apps. Compare screens at multiple device sizes, edit layout and appearance in live previews, and review a draft before applying it to source. Blank screens support editable layers and Contract export.
+> **Very experimental.** Expect bugs and breaking changes.
+
+**A visual editor for Exact apps.**
+
+Compare phone, tablet, and desktop layouts on one canvas. Edit layout and appearance in live previews, then review your draft before applying it to source.
+
+[Run locally](#run-locally) · [Try the demo](#try-the-demo) · [Use the studio](docs/use-the-studio.md) · [Changelog](CHANGELOG.md)
+
+![Exact Design showing Ember at phone, tablet, and desktop sizes on one canvas](docs/images/studio-overview.png)
+
+Blank screens support editable layers and Contract export.
 
 ## Run locally
 
@@ -11,7 +21,7 @@ bun run setup
 bun run dev
 ```
 
-Open `http://127.0.0.1:5173`. Setup installs the pinned Exact SDK in `.exact-sdk`. The editor also uses port 5175 for its local preview helper.
+Open [the studio](http://127.0.0.1:5173) at `http://127.0.0.1:5173`. Setup installs the pinned Exact SDK in `.exact-sdk`. The editor also uses port 5175 for its local preview helper.
 
 ## Try the demo
 
@@ -25,15 +35,19 @@ Open the setup link printed in the terminal to add Ember's screens at phone, tab
 
 Select a viewport, click **Edit app**, and change a property. Click **Review** to inspect the draft, then **Apply changes** to write it to source.
 
+![The energy card selected across Ember's viewports, with the Layers tree and layout inspector open](docs/images/studio-inspector.png)
+
 ## Documentation
 
-- [Use the studio](docs/use-the-studio.md): connect your app, arrange screens, and edit drafts.
-- [Development](docs/development.md): commands, test requirements, and source layout.
-- [Studio design system](docs/studio-design-system.md): shared controls, tokens, icons, and interactions.
-- [Ember](examples/ember/README.md): the demo app.
-- [Changelog](CHANGELOG.md): notable changes.
-- [Contributing](CONTRIBUTING.md): report issues, run checks, and open pull requests.
-- [Security policy](SECURITY.md): report vulnerabilities privately.
+| Guide | What you'll find |
+| --- | --- |
+| [Use the studio](docs/use-the-studio.md) | Connect your app, arrange screens, and edit drafts |
+| [Development](docs/development.md) | Commands, test requirements, and source layout |
+| [Studio design system](docs/studio-design-system.md) | Shared controls, tokens, icons, and interactions |
+| [Ember](examples/ember/README.md) | The demo app and its screens |
+| [Contributing](CONTRIBUTING.md) | Report issues, run checks, and open pull requests |
+
+[Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
 
 ## Status
 
