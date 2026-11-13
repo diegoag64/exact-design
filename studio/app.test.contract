@@ -48,6 +48,11 @@ test "save and reopen a document"
 
 test "drag and resize on the canvas"
   size 1440x900
+  // Land the workspace and finish the loading veil before pointer input.
+  clock data
+  clock settle
+  expect state booting == false
+  expect tree missing "canvas-loading"
   tap "canvas" drag 34 17 from 150 145 mouse
   clock data
   expect state doc.layers.0.x == 96
@@ -124,6 +129,11 @@ test "create rename duplicate and delete screens"
 
 test "move and resize a screen frame"
   size 1440x900
+  // Land the workspace and finish the loading veil before pointer input.
+  clock data
+  clock settle
+  expect state booting == false
+  expect tree missing "canvas-loading"
   tap "canvas" drag 34 17 from 80 68 mouse
   clock data
   expect state doc.views.0.x == 40
@@ -261,6 +271,11 @@ test "frames snap into place as one undo step"
 
 test "canvas pan and zoom restore without saving"
   size 1440x900
+  // Land the workspace and finish the loading veil before pointer input.
+  clock data
+  clock settle
+  expect state booting == false
+  expect tree missing "canvas-loading"
   tap "hand-tool"
   tap "canvas" drag 120 60 from 150 150 mouse
   tap "zoom-in"
