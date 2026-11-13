@@ -122,7 +122,7 @@ export class NativePreviews {
 type Job={key:string;frame:NativeFrame};
 export class AppPreviews {
   readonly key:string;readonly dir:string;private disk:DiskState={shots:{}};private hashes=new Map<string,{mtime:number;size:number;hash:string}>();
-  private tokens=new Set<string>();private tail=Promise.resolve();private listeners=new Set<()=>void>();private statuses=new Map<string,{state:FrameStatus;error:string}>();
+  private tokens=new Set<string>();private pending=0;private tail=Promise.resolve();private listeners=new Set<()=>void>();private statuses=new Map<string,{state:FrameStatus;error:string}>();
   signature='';state='idle';phase='';message='';error='';done=0;total=0;
   private constructor(readonly service:NativePreviews,readonly appDir:string){this.key=hash(appDir).slice(0,16);this.dir=join(service.cache,this.key);}
   static async open(service:NativePreviews,dir:string){const a=new AppPreviews(service,dir);await mkdir(join(a.dir,'shots'),{recursive:true});try{a.disk=JSON.parse(await readFile(join(a.dir,'state.json'),'utf8'));}catch{}return a;}
@@ -137,10 +137,11 @@ export class AppPreviews {
   /** Starts one job per new token. `capture` empty: every frame that is not ready; ids: exactly those frames. */
   start(token:string,frames:NativeFrame[],capture:string[]=[]){
     if(this.service.stopping||!token||this.tokens.has(token))return this.tail;
-    this.tokens.add(token);
-    if(this.state!=='working'){this.state='working';this.phase='queued';this.message='Waiting for native refresh…';this.error='';this.done=0;this.total=0;this.publish();}
-    const copy=frames.map(f=>({...f,appearance:f.appearance??'light'})),ids=[...capture];this.tail=this.service.enqueue(()=>this.job(copy,ids));return this.tail;
+    this.tokens.add(token);this.pending++;
+    if(this.state!=='working')this.waiting();
+    const copy=frames.map(f=>({...f,appearance:f.appearance??'light'})),ids=[...capture];this.tail=this.service.enqueue(()=>this.job(copy,ids)).finally(()=>{this.pending--;});return this.tail;
   }
+  private waiting(){this.state='working';this.phase='queued';this.message='Waiting for native refresh…';this.error='';this.done=0;this.total=0;this.publish();}
   private progress(phase:string,text:string){this.phase=phase;this.message=text;this.publish();}
   private async job(frames:NativeFrame[],capture:string[]){
     this.service.nextJob();this.state='working';this.phase='';this.message='Preparing native previews…';this.error='';this.done=0;this.total=0;this.publish();let jobs:Job[]=[],appId='';const used:string[]=[];
@@ -174,7 +175,7 @@ export class AppPreviews {
       await Promise.all(Array.from({length:await this.service.parallelism(devices)},worker));
       this.service.checkRunning();await this.save();this.state='idle';this.message='Native previews updated.';
     }catch(e){if(this.state!=='unavailable')this.state='error';this.error=message(e).includes('Full log:')?message(e):brief(e);this.message=this.error;for(const j of jobs)this.statuses.set(j.key,{state:'error',error:this.error});}
-    finally{this.phase='';this.publish();
+    finally{if(this.pending>1&&!this.service.stopping)this.waiting();else{this.phase='';this.publish();}
       // So the next job starts on the tree: open runners now that this job's boots and launches are over.
       if(!this.service.stopping&&used.length&&appId)await this.service.openRunners(used,appId).catch(()=>{});}
   }

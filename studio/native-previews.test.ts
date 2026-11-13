@@ -262,6 +262,19 @@ test('a queued refresh replaces a previous success message without hiding active
   const active=current.start('active',frames);await buildEntered.promise;const queued=current.start('queued',frames);
   expect(current.snapshot(frames).phase).toBe('build');buildRelease.resolve();await Promise.all([active,queued]);await service.stop();
 });
+test('an interleaved queued refresh stays working after its earlier job completes',async()=>{
+  const f=await fixture(),g=await fixture(),firstEntered=deferred(),firstRelease=deferred(),secondEntered=deferred(),secondRelease=deferred();let captures=0;
+  const run:Runner=async(args,env)=>{
+    if(args.includes('--type=png')){captures++;if(captures===1){firstEntered.resolve();await firstRelease.promise;}else if(captures===2){secondEntered.resolve();await secondRelease.promise;}}
+    return f.runner(args,env);
+  };
+  const service=new NativePreviews({...f.serviceOptions,run,target:new Simulators(run,'darwin')}),a=await service.app(f.appDir),b=await service.app(g.appDir);
+  const first=a.start('a-first',frames,['one']);await firstEntered.promise;const activePhase=a.snapshot(frames).phase;
+  const middle=b.start('b',frames,['one']),last=a.start('a-last',frames,['one']);
+  expect(a.snapshot(frames).phase).toBe(activePhase);firstRelease.resolve();await secondEntered.promise;
+  expect(a.snapshot(frames)).toMatchObject({state:'working',phase:'queued',message:'Waiting for native refresh…',done:0,total:0});
+  secondRelease.resolve();await Promise.all([first,middle,last]);expect(a.snapshot(frames)).toMatchObject({state:'idle',message:'Native previews updated.'});await service.stop();
+});
 test('projects sharing a bundle ID reinstall their own build when switching back',async()=>{
   const f=await fixture(),g=await fixture();await writeFile(join(g.appDir,'app.contract'),'different app');
   const config=JSON.parse(await readFile(join(g.appDir,'app.json'),'utf8'));config.name='Other';await writeFile(join(g.appDir,'app.json'),JSON.stringify(config));
