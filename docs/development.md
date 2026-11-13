@@ -106,6 +106,39 @@ The decoration renderer in `studio/render.ts` caches the current serialized scen
 
 The canvas keeps separate preview layers. A shared transformed parent reduced Exact binding evaluations in an Ember experiment but increased rendering cost. Pausing preview animations reduced idle work without improving navigation timings, so previews retain their normal animation behavior.
 
+## Native iOS previews
+
+Native frames show screenshots of the app's native build running in the iOS Simulator. The studio helper (`tools/discovery-server.ts`) owns the pipeline in `tools/native-previews.ts`; under the test launchers (`EXACT_DESIGN_TEST=1`) it serves the canned states in `tools/native-fixture.ts` instead, so no Xcode is needed for `test:ui` or `verify`. The device catalog in `studio/devices.ts` names each native device's CoreSimulator device type.
+
+### Helper protocol
+
+`POST /native` with a JSON body answers with `text/event-stream`. Each `data:` line is a complete JSON snapshot; the stream stays open and sends a new snapshot whenever anything in it changes, including a frame going stale after a source edit.
+
+```json
+{"project":"http://127.0.0.1:5174","run":"","frames":[{"id":"view-7","device":"native-iphone-17","route":"/diary/add"}]}
+```
+
+- `project` is the connected project's local origin. `device` is a catalog slug from `studio/devices.ts` whose platform is `ios`. `route` is the screen's route.
+- `run` is `""` to report status only. A new non-empty token captures every listed frame once, building first when the inputs changed. Repeating a token the helper has already started reports that job and never starts it again; the studio sends a fresh token for each **Refresh** press.
+
+```json
+{"state":"working","phase":"build","message":"Building Ember for iOS…","error":"","done":0,"total":4,
+ "frames":[{"id":"view-7","state":"ready","shot":"http://127.0.0.1:5175/native/shot/<key>/<file>.png?v=1794540000000","width":1206,"height":2622,"capturedAt":1794540000000,"error":""}]}
+```
+
+| Field | Values |
+| --- | --- |
+| `state` | `idle` (nothing running), `working`, `error` (the last job failed as a whole), `unavailable` (no Mac, no Xcode, or no simulator runtime) |
+| `phase` | `""`, `build`, `boot`, `install`, `capture` while `working` |
+| `message` | One short sentence for the status toast |
+| `error` | The job's failure, or why native previews are unavailable |
+| `done`, `total` | Frames captured in the current job, of those it will capture |
+| `frames[].state` | `empty` (never captured), `queued`, `capturing`, `ready`, `stale` (a screenshot exists but the app's inputs changed since), `error` |
+| `frames[].shot` | Absolute URL of the latest screenshot, or `""`. A `stale`, `queued` or `capturing` frame keeps its previous screenshot |
+| `frames[].width`, `height` | Screenshot size in device pixels, or 0 |
+
+Frame ids are echoed unchanged. `GET /native/shot/<key>/<file>.png` serves a screenshot from the helper's cache.
+
 ## Preview limits
 
 The shared runtime supports the pinned Exact JavaScript development bundle and TypeScript request/reply data sources. Streaming sources, Rust sources, and native module operations need separate adapters. Unsupported bundles and browsers without SharedWorker retain independent state.
