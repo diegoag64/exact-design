@@ -1056,7 +1056,7 @@ component Studio
                 if native.state == "working" or native.error != ""
                   row class=FloatingBar position="absolute" bottom=148 left="50%" translate="-50% 0" padding="8px 12px" gap=8 max-width="calc(100% - 32px)" z-index=2 role="status"
                     Icon(name=(native.error != "" ? "circle-alert" : "refresh-cw"), size=14, angle=0)
-                    text (native.error != "" ? native.error : `${native.message} · ${native.done} of ${native.total}`) font="type.body" testId="native-progress"
+                    text (native.error != "" ? native.error : native.message) font="type.body" testId="native-progress"
                 if doc.status != "" and doc.status != statusSeen
                   row class=FloatingBar position="absolute" bottom=68 left="50%" translate="-50% 0" height=32 padding="0 12px" gap=8 max-width="calc(100% - 32px)" min-width=0 z-index=2 role="status" color=(doc.status == "Saved" ? "ink.secondary" : "ink.danger")
                     Icon(name=(doc.status == "Saved" ? "check" : "circle-alert"), size=14, angle=0)

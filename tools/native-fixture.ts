@@ -13,7 +13,7 @@ export function nativeScreens(body:any,request:Request):Response {
   let timer:ReturnType<typeof setTimeout>|undefined,closed=false;
   const stream=new ReadableStream<Uint8Array>({start(controller){
     let done=0;
-    const emit=(working:boolean)=>{if(!closed)controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({state:working?'working':'idle',phase:working?'capture':'',message:working?'Capturing native previews…':'',error:'',done,total:frames.length,frames})}\n\n`));};
+    const emit=(working:boolean)=>{if(!closed)controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({state:working?'working':'idle',phase:working?'capture':'',message:working?`Capturing ${Math.min(done+1,frames.length)} of ${frames.length}…`:'',error:'',done,total:frames.length,frames})}\n\n`));};
     const stop=()=>{closed=true;clearTimeout(timer);try{controller.close();}catch{}};
     request.signal.addEventListener('abort',stop,{once:true});
     if(!capture){emit(false);return;}

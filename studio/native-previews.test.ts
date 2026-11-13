@@ -12,8 +12,9 @@ const temps:string[]=[];afterEach(async()=>{for(const p of temps.splice(0))await
 async function fixture(options:{noXcode?:boolean;low?:boolean;buildFail?:boolean;quit?:boolean;handler?:boolean;rewrite?:boolean}={}){
   const dir=await mkdtemp(join(tmpdir(),'native-test-'));temps.push(dir);const appDir=join(dir,'app'),bundle=join(dir,'Ember.app');await mkdir(appDir);await mkdir(bundle);
   const config={name:'Ember',app:{id:'dev.test.ember'},protocol_handlers:options.handler===false?[]:[{protocol:'web+ember',url:'/open?u=%s'}]};await writeFile(join(appDir,'app.json'),JSON.stringify(config));await writeFile(join(appDir,'app.contract'),'first');
-  const calls:{args:string[];env?:Record<string,string>}[]=[];
+  const calls:{args:string[];env?:Record<string,string>}[]=[];const booted=new Set<string>();
   const runner:Runner=async(args,env)=>{calls.push({args,env});const s=args.join(' ');
+    if(args[2]==='boot'){if(booted.has(args[3]))throw new Error('Unable to boot device in current state: Booted');booted.add(args[3]);}
     if(s.includes('--find')&&options.noXcode)throw new Error('Xcode missing');
     if(s.includes('native-build.mjs')){if(options.buildFail)throw new Error('noise\nerror: compilation failed\nnoise');if(options.rewrite)await writeFile(join(appDir,'app.json'),JSON.stringify({...config,host:{ios:{}}}));return `host/apple: ${bundle} (cargo foo); built and signed`;}
     if(s.includes('list runtimes'))return JSON.stringify({runtimes});
@@ -21,12 +22,12 @@ async function fixture(options:{noXcode?:boolean;low?:boolean;buildFail?:boolean
     if(s.includes('screenshot')){const png=Buffer.alloc(24);Buffer.from('89504e470d0a1a0a','hex').copy(png);png.writeUInt32BE(1206,16);png.writeUInt32BE(2622,20);await writeFile(args.at(-1)!,png);}
     if(s.includes('launchctl'))return options.quit?'':'UIKitApplication:dev.test.ember';return 'ok';
   };
-  const service=new NativePreviews({run:runner,target:new Simulators(runner,'darwin'),cache:join(dir,'cache'),apps:[appDir],settle:0,firstSettle:0,free:async()=>options.low?5*1024**3:100*1024**3,fetch:(async()=>Response.json(config)) as typeof fetch});
+  const service=new NativePreviews({run:runner,target:new Simulators(runner,'darwin'),cache:join(dir,'cache'),apps:[appDir],settle:0,firstSettle:0,interval:0,free:async()=>options.low?5*1024**3:100*1024**3,fetch:(async()=>Response.json(config)) as typeof fetch});
   return {service,app:await service.app(appDir),appDir,calls,runner};
 }
 test('runtime selection respects supported device types before version',()=>{expect(selectRuntime(runtimes,type)?.version).toBe('27.0');expect(selectRuntime(runtimes,'Duo')?.version).toBe('27.1');expect(selectRuntime(runtimes,'missing')).toBeUndefined();});
 test('reuse exact managed device and never boot or stop foreign devices',async()=>{const f=await fixture();const sim=new Simulators(f.runner,'darwin');const id=await sim.destination('iPhone 17',type);expect(id).toBe('owned');await sim.boot(id);await sim.stop();expect(f.calls.some(c=>c.args.includes('create'))).toBe(false);expect(f.calls.some(c=>c.args.includes('foreign'))).toBe(false);await expect(sim.boot('foreign')).rejects.toThrow('unmanaged');});
-test('cache, post-build signature, staleness, repeat tokens and launch environment',async()=>{const f=await fixture({rewrite:true});await f.app.start('a',frames);expect(f.app.snapshot(frames).frames.map(f=>f.state)).toEqual(['ready','ready']);expect(f.calls.filter(c=>c.args.includes('launch')).map(c=>c.env?.SIMCTL_CHILD_EXACT_LAUNCH_URL)).toEqual(['web+ember://','web+ember://diary/add']);expect(f.calls.some(c=>c.args.includes('openurl'))).toBe(false);
+test('cache, post-build signature, staleness, repeat tokens and launch environment',async()=>{const f=await fixture({rewrite:true});await f.app.start('a',frames);expect(f.app.snapshot(frames).frames.map(f=>f.state)).toEqual(['ready','ready']);expect(f.calls.filter(c=>c.args.includes('launch')).map(c=>c.env?.SIMCTL_CHILD_EXACT_LAUNCH_URL)).toEqual(['web+ember://','web+ember://','web+ember://diary/add']);expect(f.calls.some(c=>c.args.includes('openurl'))).toBe(false);
   await f.app.start('a',frames);await f.app.start('b',frames);expect(f.calls.filter(c=>c.args.some(a=>a.endsWith('native-build.mjs')))).toHaveLength(1);await writeFile(join(f.appDir,'app.contract'),'changed');await f.app.refresh();expect(f.app.snapshot(frames).frames[0].state).toBe('stale');await f.app.start('c',frames);expect(f.calls.filter(c=>c.args.some(a=>a.endsWith('native-build.mjs')))).toHaveLength(2);
 });
 for(const [name,options,expected,state]of [ ['no Xcode',{noXcode:true},'need Xcode with the iOS Simulator','unavailable'],['low disk',{low:true},'5.0 GB free','error'],['build failure',{buildFail:true},'Full log:','error'],['missing protocol handler',{handler:false},'protocol_handlers','error']] as const)test(name,async()=>{const f=await fixture(options);await f.app.start('a',frames);expect(f.app.state).toBe(state);expect(f.app.error).toContain(expected);});
@@ -46,10 +47,19 @@ test('missing runtime is unavailable and unsupported device errors only its fram
   await f.app.start('unsupported',[{id:'ipad',device:'native-ipad-pro-11',route:'/'}]);expect(f.app.snapshot([{id:'ipad',device:'native-ipad-pro-11',route:'/'}]).frames[0].error).toContain('No installed iOS Simulator runtime supports');
 });
 test('new tokens queue behind the active job and cached installs survive service restart',async()=>{
-  const f=await fixture();await Promise.all([f.app.start('one',frames),f.app.start('two',frames),f.app.start('two',frames)]);expect(f.calls.filter(c=>c.args.includes('launch'))).toHaveLength(4);expect(f.calls.filter(c=>c.args.includes('install'))).toHaveLength(1);
+  const f=await fixture();await Promise.all([f.app.start('one',frames),f.app.start('two',frames),f.app.start('two',frames)]);expect(f.calls.filter(c=>c.args.includes('launch'))).toHaveLength(5);expect(f.calls.filter(c=>c.args.includes('install'))).toHaveLength(1);
   const next=new NativePreviews({...f.service.options});const app=await next.app(f.appDir);await app.start('three',frames);expect(f.calls.filter(c=>c.args.some(a=>a.endsWith('native-build.mjs')))).toHaveLength(1);expect(f.calls.filter(c=>c.args.includes('install'))).toHaveLength(1);
 });
 test('device creation ignores names with wrong type or runtime',async()=>{
   const calls:string[][]=[];const run:Runner=async args=>{calls.push(args);if(args.includes('runtimes'))return JSON.stringify({runtimes});if(args.includes('devices'))return JSON.stringify({devices:{[runtimes[0].identifier]:[{name:'Exact Design iPhone 17',deviceTypeIdentifier:type,isAvailable:true,udid:'wrong-runtime'}],[runtimes[1].identifier]:[{name:'Exact Design iPhone 17',deviceTypeIdentifier:'Duo',isAvailable:true,udid:'wrong-type'}]}});return 'new-owned';};
   expect(await new Simulators(run,'darwin').destination('iPhone 17',type)).toBe('new-owned');expect(calls.at(-1)).toEqual(['xcrun','simctl','create','Exact Design iPhone 17',type,runtimes[1].identifier]);
+});
+test('capture waits until two screenshots match',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'native-settle-'));let shots=0;const pngs=[1,2,3,3].map(n=>{const png=Buffer.alloc(25);Buffer.from('89504e470d0a1a0a','hex').copy(png);png.writeUInt32BE(1206,16);png.writeUInt32BE(2622,20);png[24]=n;return png;});
+  const target={buildArgs:[],available:async()=>{},destination:async()=>'owned',boot:async()=>false,install:async()=>{},launch:async()=>{},stop:async()=>{},capture:async(_id:string,path:string)=>{await writeFile(path,pngs[Math.min(shots++,3)]);return true;}};
+  const appDir=join(dir,'app');await mkdir(appDir);await writeFile(join(appDir,'app.json'),JSON.stringify({name:'Ember',app:{id:'dev.test.ember'},protocol_handlers:[{protocol:'web+ember',url:'/open?u=%s'}]}));
+  const bundle=join(dir,'Ember.app');await mkdir(bundle);
+  const service=new NativePreviews({target,run:async args=>args.join(' ').includes('native-build')?`host/apple: ${bundle} (x); built`:'ok',cache:join(dir,'cache'),apps:[appDir],settle:0,firstSettle:0,interval:0,free:async()=>100*1024**3});
+  const app=await service.app(appDir);await app.start('a',[{id:'v',device:'native-iphone-17',route:'/'}]);
+  expect(shots).toBe(4);expect(app.snapshot([{id:'v',device:'native-iphone-17',route:'/'}]).frames[0].state).toBe('ready');
 });

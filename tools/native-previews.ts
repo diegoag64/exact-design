@@ -26,7 +26,7 @@ const normalized=(v:any):string=>JSON.stringify(Array.isArray(v)?v.map(x=>JSON.p
 export class NativePreviews {
   readonly target:NativeTarget;readonly run:Runner;readonly cache:string;
   private apps=new Map<string,Promise<AppPreviews>>();private mappings=new Map<string,{dir:string;until:number}>();private version?:Promise<string>;
-  constructor(readonly options:{target?:NativeTarget;run?:Runner;cache?:string;apps?:string[];fetch?:typeof fetch;free?: (dir:string)=>Promise<number>;settle?:number;firstSettle?:number}={}){this.run=options.run??command;this.target=options.target??new Simulators(this.run);this.cache=options.cache??process.env.EXACT_DESIGN_NATIVE_CACHE??join(root,'.exact/native-previews');}
+  constructor(readonly options:{target?:NativeTarget;run?:Runner;cache?:string;apps?:string[];fetch?:typeof fetch;free?: (dir:string)=>Promise<number>;settle?:number;firstSettle?:number;stable?:number;interval?:number}={}){this.run=options.run??command;this.target=options.target??new Simulators(this.run);this.cache=options.cache??process.env.EXACT_DESIGN_NATIVE_CACHE??join(root,'.exact/native-previews');}
   versions(){return this.version??=Promise.all([this.run(['git','-C',join(root,'.exact-sdk'),'rev-parse','HEAD']),this.target instanceof Simulators?this.target.xcodeVersion():this.run(['xcodebuild','-version'])]).then(v=>v.join('\n'));}
   async project(project:string){if(!localPreview(project)||new URL(project).origin!==project)throw new Error('Choose a local http project origin.');const cached=this.mappings.get(project);if(cached&&cached.until>Date.now())return this.app(cached.dir);
     const unknown='No unique registered native app matches this project. Set EXACT_DESIGN_NATIVE_APPS to its app directory.';
@@ -52,8 +52,17 @@ export class AppPreviews {
   snapshot(frames:NativeFrame[],origin='http://127.0.0.1:5175'){return {state:this.state,phase:this.phase,message:this.message,error:this.error,done:this.done,total:this.total,frames:frames.map(f=>{const key=frameKey(f),shot=this.disk.shots[key],status=this.statuses.get(key);return {id:f.id,state:status?.state==='ready'||!status?(shot?(shot.signature===this.signature?'ready':'stale'):'empty'):status.state,shot:shot?`${origin}/native/shot/${this.key}/${shot.file}?v=${shot.capturedAt}`:'',width:shot?.width??0,height:shot?.height??0,capturedAt:shot?.capturedAt??0,error:status?.error??''};})};}
   start(token:string,frames:NativeFrame[]){if(!token||this.tokens.has(token))return this.tail;this.tokens.add(token);const copy=frames.map(f=>({...f}));this.tail=this.tail.then(()=>this.job(copy));return this.tail;}
   finished(){return this.tail;}
+  /** Capture until two screenshots a second apart match, so a sheet or a slow first draw has finished; an animated screen
+   *  never matches and is taken at the deadline (EXACT_DESIGN_NATIVE_STABLE_MS, default 12 s after the settle wait). */
+  private async settled(id:string,path:string,app:{name:string;app:{id:string}},route:string){
+    const target=this.service.target,deadline=Date.now()+(this.service.options.stable??Number(process.env.EXACT_DESIGN_NATIVE_STABLE_MS??12000));
+    const take=async()=>{if(!await target.capture(id,path,app.app.id))throw new Error(`${app.name} quit while opening ${route}`);return readFile(path);};
+    let png=await take();
+    while(Date.now()<deadline){await Bun.sleep(this.service.options.interval??1000);const next=await take();if(next.equals(png))break;png=next;}
+    return png;
+  }
   private progress(phase:string,text:string){this.phase=phase;this.message=text;this.publish();}
-  private async job(frames:NativeFrame[]){this.state='working';this.error='';this.done=0;this.total=frames.length;for(const f of frames)this.statuses.set(frameKey(f),{state:'queued',error:''});this.publish();
+  private async job(frames:NativeFrame[]){this.state='working';this.phase='';this.message='Preparing native previews…';this.error='';this.done=0;this.total=frames.length;for(const f of frames)this.statuses.set(frameKey(f),{state:'queued',error:''});this.publish();
     try{
       try{await this.service.target.available();}catch(e){this.state='unavailable';throw e;}
       const app=JSON.parse(await readFile(join(this.appDir,'app.json'),'utf8'));const handler=app.protocol_handlers?.find((h:any)=>typeof h.protocol==='string'&&!['http','https'].includes(h.protocol.toLowerCase())&&!h.distribution_only&&typeof h.url==='string'&&h.url.includes('%s'));
@@ -70,9 +79,12 @@ export class AppPreviews {
       const worker=async()=>{while(index<devices.length){const slug=devices[index++],group=frames.filter(f=>f.device===slug),device=nativeDevice(slug)!;const name=device.name.replace(/^Native /,'');
         try{const id=await this.service.target.destination(name,device.simulator!);this.progress('boot',`Starting ${name}…`);let first=await this.service.target.boot(id);
           if(this.disk.installed[id]!==signature){this.progress('install',`Installing ${app.name} on ${name}…`);await this.service.target.install(id,this.disk.app!);this.disk.installed[id]=signature;first=true;}
+          // The first launch after a boot or install can take longer than any fixed wait, especially on a busy Mac, and
+          // capture the home screen. Launch once at the root and wait, so every capture below is a warm launch.
+          if(first){this.progress('boot',`Opening ${app.name} on ${name}…`);await this.service.target.launch(id,app.app.id,`${handler.protocol}://`);await Bun.sleep(this.service.options.firstSettle??Number(process.env.EXACT_DESIGN_NATIVE_FIRST_SETTLE_MS??6000));first=false;}
           for(const f of group){const key=frameKey(f);this.statuses.set(key,{state:'capturing',error:''});this.progress('capture',`Capturing ${this.done+1} of ${this.total}…`);
-            try{await this.service.target.launch(id,app.app.id,`${handler.protocol}://${f.route.slice(1)}`);await Bun.sleep(first?(this.service.options.firstSettle??Number(process.env.EXACT_DESIGN_NATIVE_FIRST_SETTLE_MS??6000)):(this.service.options.settle??Number(process.env.EXACT_DESIGN_NATIVE_SETTLE_MS??2500)));first=false;
-              const file=`${key}.png`,path=join(this.dir,'shots',`${key}.pending.png`);if(!await this.service.target.capture(id,path,app.app.id))throw new Error(`${app.name} quit while opening ${f.route}`);const png=await readFile(path);if(png.length<24||png.toString('hex',0,8)!=='89504e470d0a1a0a')throw new Error('Simulator returned an invalid PNG.');await rename(path,join(this.dir,'shots',file));this.disk.shots[key]={signature,file,width:png.readUInt32BE(16),height:png.readUInt32BE(20),capturedAt:Date.now()};this.statuses.set(key,{state:'ready',error:''});
+            try{await this.service.target.launch(id,app.app.id,`${handler.protocol}://${f.route.slice(1)}`);await Bun.sleep(this.service.options.settle??Number(process.env.EXACT_DESIGN_NATIVE_SETTLE_MS??2500));
+              const file=`${key}.png`,path=join(this.dir,'shots',`${key}.pending.png`);const png=await this.settled(id,path,app,f.route);if(png.length<24||png.toString('hex',0,8)!=='89504e470d0a1a0a')throw new Error('Simulator returned an invalid PNG.');await rename(path,join(this.dir,'shots',file));this.disk.shots[key]={signature,file,width:png.readUInt32BE(16),height:png.readUInt32BE(20),capturedAt:Date.now()};this.statuses.set(key,{state:'ready',error:''});
             }catch(e){this.statuses.set(key,{state:'error',error:brief(e)});}finally{await unlink(join(this.dir,'shots',`${key}.pending.png`)).catch(()=>{});}this.done++;this.publish();}
         }catch(e){for(const f of group)this.statuses.set(frameKey(f),{state:'error',error:brief(e)});this.done+=group.length;this.publish();}
       }};
