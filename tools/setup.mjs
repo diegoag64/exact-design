@@ -18,3 +18,8 @@ const current=spawnSync('git',['rev-parse','HEAD'],{cwd:sdk,encoding:'utf8'}).st
 if(current !== revision) throw new Error(`Exact checkout differs from ${revision}. Preserve any local changes and use that revision before setup.`);
 run(process.execPath,['install','--frozen-lockfile'],sdk);
 run(process.execPath,['scripts/exact.mjs','setup'],sdk);
+// Layout validation runs the Contract compiler directly, so build it at the pinned toolchain in the SDK's own target.
+const toolchain=Bun.TOML.parse(await Bun.file(resolve(sdk,'rust-toolchain.toml')).text()).toolchain.channel;
+const {RUSTUP_TOOLCHAIN,CARGO_TARGET_DIR,...cargoEnv}=env;
+const compiler=spawnSync('cargo',[`+${toolchain}`,'build','-q','--manifest-path',resolve(sdk,'Cargo.toml'),'-p','contract'],{cwd:sdk,env:cargoEnv,stdio:'inherit'});
+if(compiler.status !== 0) process.exit(compiler.status ?? 1);

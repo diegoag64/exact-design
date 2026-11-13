@@ -1,6 +1,6 @@
 # Development reference
 
-The root [package.json](../package.json) defines the development commands. [tools/setup.mjs](../tools/setup.mjs) pins the Exact SDK revision and rejects a checkout at another revision. Runtime adapters depend on that pin.
+The root [package.json](../package.json) defines the development commands. [tools/setup.mjs](../tools/setup.mjs) pins the Exact SDK revision, rejects a checkout at another revision, and builds the Contract compiler that validates source writes. Runtime adapters depend on that pin.
 
 ## Commands
 
