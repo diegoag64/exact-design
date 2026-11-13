@@ -1,5 +1,5 @@
 import {spawn} from 'node:child_process';
-import {cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile} from 'node:fs/promises';
+import {cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile} from 'node:fs/promises';
 import {createWriteStream} from 'node:fs';
 import {resolve, dirname} from 'node:path';
 import {homedir} from 'node:os';
@@ -29,13 +29,29 @@ export async function configureCopy(directory, helperOrigin, fixtureOrigin) {
   for (const file of ['studio/app.ts', 'studio/app.test.contract']) {
     const path = resolve(directory, file);
     const text = await readFile(path, 'utf8');
-    await writeFile(path, text.replaceAll('http://127.0.0.1:5175', helperOrigin).replaceAll('http://127.0.0.1:5176', fixtureOrigin));
+    const replaced = text.replaceAll('http://127.0.0.1:5175', helperOrigin).replaceAll('http://127.0.0.1:5176', fixtureOrigin);
+    if (replaced === text) throw new Error(`Isolation refused: no expected origin found in ${file}`);
+    await writeFile(path, replaced);
   }
+  await checkPrivateOrigins(resolve(directory, 'studio'));
   const path = resolve(directory, 'studio/app.json');
   const manifest = JSON.parse(await readFile(path, 'utf8'));
   // The runner owns the helper and fixture for the entire audit, including concurrent tours.
   if (manifest.commands) delete manifest.commands.server;
   await writeFile(path, JSON.stringify(manifest, null, 2) + '\n');
+}
+
+// Fail closed when another authored module or Contract test introduces a dev port.
+async function checkPrivateOrigins(directory) {
+  for (const entry of await readdir(directory, {withFileTypes:true})) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) await checkPrivateOrigins(path);
+    else if (!entry.name.endsWith('.test.ts') && /\.(ts|js|mjs|json|contract|tamber)$/.test(entry.name)) {
+      if (/:(5175|5176)\b/.test(await readFile(path, 'utf8'))) {
+        throw new Error(`Isolation refused: development port remains in ${path}`);
+      }
+    }
+  }
 }
 
 export async function runIsolated(args, root = repositoryRoot) {
@@ -44,9 +60,16 @@ export async function runIsolated(args, root = repositoryRoot) {
   await mkdir(resolve(root, '.exact/verification'), {recursive:true});
   const output = await mkdtemp(resolve(root, '.exact/verification/run-'));
   const workspace = resolve(output, 'workspace');
-  let helper, fixture, bridges, child, interrupted;
+  let helper, fixture, bridges, child, interrupted, groupStopped = false;
   const signalGroup = signal => {
-    if (child?.pid) try { process.kill(-child.pid, signal); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+    if (!child?.pid || groupStopped) return;
+    try {
+      process.kill(-child.pid, signal);
+      if (signal === 'SIGKILL') groupStopped = true;
+    } catch (error) {
+      if (error.code !== 'ESRCH') throw error;
+      groupStopped = true;
+    }
   };
   let killTimer;
   const stop = signal => {
@@ -76,13 +99,11 @@ export async function runIsolated(args, root = repositoryRoot) {
     }
     report.helper = helper.url.origin; report.fixture = fixture.url.origin;
     await configureCopy(workspace, report.helper, report.fixture);
-    const launcher = resolve(output, 'launch.mjs');
-    await writeFile(launcher, `import {run} from ${JSON.stringify(resolve(root, '.exact-sdk/scripts/app-cli.mjs'))}; process.exit(await run({dir:${JSON.stringify(resolve(workspace, 'studio'))},name:'Exact Design',exact2:${JSON.stringify(resolve(root, '.exact-sdk'))},args:${JSON.stringify(args)}}));\n`);
     await writeFile(resolve(output, 'result.json'), JSON.stringify(report, null, 2));
     if (interrupted) throw new Error(`Interrupted by ${interrupted}`);
-    child = spawn(process.execPath, [launcher], {
+    child = spawn(process.execPath, [resolve(workspace, 'studio/exact.mjs'), ...args], {
       cwd:resolve(workspace, 'studio'), detached:true, stdio:['ignore', 'pipe', 'pipe'],
-      env:{...process.env, PATH:`${resolve(homedir(), '.cargo/bin')}:${process.env.PATH}`, EXACT_FEEDBACK:'0', EXACT_DESIGN_TEST:'1'},
+      env:{...process.env, PATH:`${resolve(homedir(), '.cargo/bin')}:${process.env.PATH}`, EXACT_FEEDBACK:'0', EXACT_DESIGN_TEST:'1', EXACT2:resolve(root, '.exact-sdk')},
     });
     const log = createWriteStream(resolve(output, 'output.log'));
     child.stdout.on('data', data => {process.stdout.write(data); log.write(data);});
@@ -107,7 +128,6 @@ export async function runIsolated(args, root = repositoryRoot) {
     clearTimeout(killTimer);
     signalGroup('SIGKILL');
     helper?.stop(true); fixture?.stop(true); bridges?.stopElementBridges();
-    process.off('SIGINT', onInt); process.off('SIGTERM', onTerm);
     // Preserve SDK reports and captures, then remove copied source and build output.
     const shots = resolve(workspace, 'studio/.exact/verify');
     try {
@@ -117,11 +137,12 @@ export async function runIsolated(args, root = repositoryRoot) {
       report.status = 'failed'; report.exitCode = 1;
     } finally {
       await rm(workspace, {recursive:true, force:true});
-      await rm(resolve(output, 'launch.mjs'), {force:true});
     }
     report.finishedAt = new Date().toISOString();
     if (interrupted) report.exitCode = interrupted === 'SIGINT' ? 130 : 143;
     await writeFile(resolve(output, 'result.json'), JSON.stringify(report, null, 2) + '\n');
+    clearTimeout(killTimer);
+    process.off('SIGINT', onInt); process.off('SIGTERM', onTerm);
     console.log(`Verification ${report.status}: ${output}`);
   }
   return report.exitCode;

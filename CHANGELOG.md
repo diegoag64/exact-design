@@ -28,7 +28,6 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 ### Changed
 
 - `test:ui` and `verify` now use isolated source copies and private ports, preserving running studio sessions and retaining verification logs.
-
 - Below 15% zoom, live canvas previews omit backdrop blur, which is only a few pixels wide at that size. Idle and pan with many visible previews no longer re-render each blur on every frame.
 - Shortened the root README and separated usage and development documentation.
 - Added repository-wide agent instructions, PR title and description requirements, a PR template, and a changelog maintenance convention.
