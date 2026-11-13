@@ -55,6 +55,8 @@ Select a viewport, click **Edit app**, and change a property. Click **Review** t
 
 Browser previews run the web build, including at iPhone and iPad sizes. Native iOS previews are read-only Simulator screenshots that you refresh by hand; live native mirroring and macOS previews are not implemented. Figma file import, structural source editing, and rollback of applied drafts are not implemented. Enlarged system text still needs accessibility work.
 
+Native capture techniques draw on [Expo Explore](https://github.com/expo/explore), by Expo and its contributors. See the [attribution and source references](docs/development.md#attribution).
+
 ## License
 
 Exact Design is released under the [MIT License](LICENSE). Vendored icons keep their own licenses: [Lucide](studio/assets/lucide/LICENSE) in the studio and [Phosphor](examples/ember/assets/icons/LICENSE) in Ember.

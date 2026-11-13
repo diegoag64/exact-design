@@ -114,6 +114,16 @@ The canvas keeps separate preview layers. A shared transformed parent reduced Ex
 
 Native frames show screenshots of the app's native build running in the iOS Simulator. The studio helper (`tools/discovery-server.ts`) owns the pipeline in `tools/native-previews.ts`; under the test launchers (`EXACT_DESIGN_TEST=1`) it serves the canned states in `tools/native-fixture.ts` instead, so no Xcode is needed for `test:ui` or `verify`. The device catalog in `studio/devices.ts` names each native device's CoreSimulator device type.
 
+### Attribution
+
+The native capture loop draws on ideas and techniques from [Expo Explore](https://github.com/expo/explore), by Expo and its contributors. We consulted revision [`1de4213`](https://github.com/expo/explore/tree/1de4213db59dba306a2f9c930d514e83594b4455), particularly:
+
+- [Local Simulator helpers](https://github.com/expo/explore/blob/1de4213db59dba306a2f9c930d514e83594b4455/src/capture/local-simulator.ts): approve the app's link scheme once and switch appearance through `simctl`.
+- [Root-link resets](https://github.com/expo/explore/blob/1de4213db59dba306a2f9c930d514e83594b4455/src/capture/route-reset.ts): keep the app running and return to its root before opening each route.
+- [Route capture](https://github.com/expo/explore/blob/1de4213db59dba306a2f9c930d514e83594b4455/src/capture/route-capture.ts) and [readiness](https://github.com/expo/explore/blob/1de4213db59dba306a2f9c930d514e83594b4455/src/capture/readiness.ts): observe the accessibility tree to decide when a screen is ready to capture.
+
+Exact Design implements these techniques with the Exact SDK and local Simulator tools. Explore is a design reference, not a runtime dependency. The Exact-specific readiness checks, pixel fallback, frame cache, and memory guards are implemented in this repository.
+
 ### Pipeline
 
 1. **Find the app.** The studio sends only the project URL. The helper reads that server's `manifest.json` and matches it, by `name` and `protocol_handlers`, against registered app folders: `examples/ember` and each entry of `EXACT_DESIGN_NATIVE_APPS` (separated by `:`, absolute or relative to the repository). The helper never builds a folder named by a request.
