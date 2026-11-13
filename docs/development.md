@@ -4,7 +4,7 @@ The root [package.json](../package.json) defines the development commands. [tool
 
 ## Develop on Windows with WSL2
 
-Run the studio and its helper in Ubuntu on WSL2. Open the studio in your Windows browser. Native Windows execution is unsupported by the pinned SDK, whose source-editing server requires Unix filesystem operations. The root launchers stop with these instructions before starting a native Windows build or helper.
+Run the studio and its helper in Ubuntu on WSL2. Open the studio in your Windows browser. The pinned SDK's compiler and source-editing server fail on native Windows. The compiler can overflow its stack, and the editing server requires Unix filesystem operations. The root launchers stop with these instructions before starting a native Windows build or helper.
 
 1. In an administrator PowerShell, install Ubuntu:
 
