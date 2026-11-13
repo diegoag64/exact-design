@@ -116,6 +116,7 @@ shape DeviceOption
   name: string
   slug: string
   kind: string
+  platform: string
   width: number
   height: number
   label: string
