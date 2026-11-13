@@ -4,7 +4,25 @@
     "id": "dev.exactdesign.ember",
     "name": "Ember"
   },
+  "protocol_handlers": [
+    {
+      "protocol": "web+ember",
+      "url": "/open?u=%s"
+    }
+  ],
   "host": {
-    "web": {}
+    "web": {},
+    "ios": {
+      "minimumOS": "17.0",
+      "deviceFamily": [
+        "iphone",
+        "ipad"
+      ]
+    }
+  },
+  "deploy": {
+    "store": {
+      "ios": "0"
+    }
   }
 }

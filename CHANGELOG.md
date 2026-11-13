@@ -6,6 +6,8 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Added
 
+- Native iOS frames. The **Native iOS** viewport set adds iPhone SE, iPhone 17, iPhone 17 Pro Max and iPad Pro 11 frames that show the app's native build running in the iOS Simulator, with its UIKit tab bar, sheets and Liquid Glass controls. **Refresh all native previews** builds the app when its source changed, opens each route through its deep link, and captures the frames whose screenshot is missing or stale, and **Refresh preview** captures one frame again; frames show progress, stale screenshots and errors such as missing Xcode or low disk space. Native frames are read-only screenshots. Refreshes keep the app running between captures and reuse current screenshots and builds.
+- Ember opens any route from a `web+ember://` link, and the first native build records its iOS host in `app.json`.
 - Setup links accept `show`, a list of screen names or routes that start visible. The link still adds every screen, but the others start hidden and don't load their previews. The Ember link printed by `bun run demo` shows Today, Welcome and Onboarding Goal.
 - An MIT license and open-source project files: a contributing guide, a security policy, a code of conduct, issue forms, and a pull request template with before-and-after screenshots.
 - Tooltips for every icon button. They appear quickly on hover or keyboard focus, show the keyboard shortcut, and explain what the button does.
@@ -15,6 +17,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Fixed
 
+- Native refreshes retain the pre-build source signature, retry failed Xcode checks, and serialize jobs across projects. Shutdown waits for accessibility cleanup and skips queued work. Projects sharing a bundle ID reinstall the correct build when switching. Capture errors keep the previous screenshot visible and show details in the inspector.
 - Windows setup now points to the supported Ubuntu/WSL2 workflow and rejects native execution before starting SDK builds or the helper.
 - Preserve resource identity across launches while still passing the page timestamp to the data sources. Loading-indicator frames use stable keys, and spacing labels and draft-count badges scale with browser text settings.
 
@@ -27,6 +30,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Changed
 
+- Screen discovery no longer lists a protocol handler's landing route, such as Ember's `/open`, as a screen.
 - `test:ui` and `verify` now use isolated source copies and private ports, preserving running studio sessions and retaining verification logs.
 - Below 15% zoom, live canvas previews omit backdrop blur, which is only a few pixels wide at that size. Idle and pan with many visible previews no longer re-render each blur on every frame.
 - Shortened the root README and separated usage and development documentation.

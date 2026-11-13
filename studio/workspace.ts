@@ -3,9 +3,9 @@ import { hasRouteParameters } from './discovery';
 import { snapMove, FRAME_GAP } from './snapping';
 import { Editor, initial, validate, exportContract, resolveLayer, type Layer } from './model';
 export type Screen = { id: string; name: string; source: string; route: string; layers: Layer[]; hidden?: boolean };
-export type View = { id: string; screenId: string; name: string; x: number; y: number; width: number; height: number; heightMode?: 'content'|'fixed'; hidden?: boolean };
+export type View = { id: string; screenId: string; name: string; x: number; y: number; width: number; height: number; heightMode?: 'content'|'fixed'; hidden?: boolean; platform?: 'ios' };
 export type Workspace = { version: 2; name: string; project: Project; screens: Screen[]; views: View[] };
-import { presets, deviceSets, resolveDevices } from './devices';
+import { presets, deviceSets, resolveDevices, nativeDevice, slug } from './devices';
 export { presets } from './devices';
 export type NewScreen = { name: string; route: string };
 export const createWorkspace = (): Workspace => ({ version: 2, name: 'Untitled', project: {name: '', url: ''}, screens: [{ id: 'screen-1', name: 'Home', source: '', route: '', layers: initial().layers.map(n => n.kind === 'button' ? n : {...n, widthMode: 'fill', right: 720 - n.x - n.width, fontSize: n.id === 'title' ? 28 : n.id === 'card-title' ? 18 : n.fontSize, height: n.id === 'card-title' ? 44 : n.id === 'card-copy' ? 48 : n.height}) }], views: [{ id: 'view-1', screenId: 'screen-1', name: 'Custom', x: 0, y: 0, width: 720, height: 520 }] });
@@ -29,6 +29,8 @@ export function loadWorkspace(value: unknown): Workspace {
   }
   for (const v of d.views) {
     if (!v || typeof v.id !== 'string' || !v.id || ids.has(v.id) || typeof v.name !== 'string' || !d.screens.some(s => s.id === v.screenId)) throw new Error('Invalid viewport');
+    if(v.platform!==undefined&&v.platform!=='ios')throw new Error('Invalid viewport platform');
+    if(v.platform==='ios'){const device=nativeDevice(slug(v.name));if(!device||!d.project.url||!d.screens.find(s=>s.id===v.screenId)?.route)throw new Error('Native previews need a connected project route.');v.width=device.width;v.height=device.height;v.heightMode='fixed';}
     ids.add(v.id);
     if(v.hidden!==undefined&&typeof v.hidden!=='boolean')throw new Error('Invalid viewport visibility');
     if(v.heightMode!==undefined&&!['content','fixed'].includes(v.heightMode))throw new Error('Invalid viewport height mode');
@@ -40,7 +42,7 @@ export function loadWorkspace(value: unknown): Workspace {
 export class WorkspaceEditor {
   document = createWorkspace(); active = 'view-1'; selected = ''; past: Workspace[] = []; future: Workspace[] = []; private settling = false;
   contentSizes=new Map<string,{source:string;width:number;viewportHeight:number;height:number}>();
-  get frames(){return this.document.views.map(v=>{const screen=this.document.screens.find(s=>s.id===v.screenId)!,source=screenSource(screen,this.document.project),size=this.contentSizes.get(v.id);return source&&v.heightMode!=='fixed'&&size?.source===source&&size.width===v.width&&size.viewportHeight===v.height?{...v,height:size.height}:v;});}
+  get frames(){return this.document.views.map(v=>{const screen=this.document.screens.find(s=>s.id===v.screenId)!,source=screenSource(screen,this.document.project),size=this.contentSizes.get(v.id);return v.platform!=='ios'&&source&&v.heightMode!=='fixed'&&size?.source===source&&size.width===v.width&&size.viewportHeight===v.height?{...v,height:size.height}:v;});}
   /** Frames drawn on the canvas: a viewport is shown when neither it nor its screen is hidden. */
   get shownFrames(){return this.frames.filter(v=>this.isShown(v.id));}
   isShown(viewId: string){const v=this.document.views.find(v=>v.id===viewId);return !!v&&!v.hidden&&!this.document.screens.find(s=>s.id===v.screenId)?.hidden;}
@@ -76,13 +78,15 @@ export class WorkspaceEditor {
   private id(prefix: string) { let i=1; const ids=[...this.document.views,...this.document.screens].map(n=>n.id); while(ids.includes(`${prefix}-${i}`)) i++; return `${prefix}-${i}`; }
   addView(preset: string, independent = false, duplicate = false) {
     if(this.document.views.length >= 200 || (independent && this.document.screens.length >= 100)) return;
+    const platform=presets[preset]?resolveDevices(preset)[0]?.platform:this.view.platform;
+    if(platform==='ios'&&(!this.document.project.url||!this.screen.route||(independent&&!duplicate)))throw new Error('Native previews need a connected project route.');
     const id=this.id('view'), screenId=independent?this.id('screen'):this.view.screenId;
     const [width,height]=presets[preset] ?? [this.view.width,this.view.height];
     const x=Math.max(...this.frames.map(v=>v.x+v.width))+FRAME_GAP, y=this.view.y;
     const source=structuredClone(this.screen);
     this.change(d=>{
       if(independent) d.screens.push({id:screenId,name:duplicate?`${source.name} copy`:`Screen ${d.screens.length+1}`,source:duplicate?source.source:'',route:duplicate?source.route:'',layers:duplicate?source.layers:[]});
-      d.views.push({id,screenId,name:presets[preset]?preset:this.view.name,x,y,width,height,heightMode:presets[preset]?'content':this.view.heightMode});
+      d.views.push({id,screenId,name:presets[preset]?preset:this.view.name,x,y,width,height,...(platform==='ios'?{platform:'ios' as const}:{}),heightMode:platform==='ios'?'fixed':presets[preset]?'content':this.view.heightMode});
     });
     this.active=id; this.selected=id;
   }
@@ -101,6 +105,8 @@ export class WorkspaceEditor {
   disconnectProject() {
     this.change(d=>{
       for(const screen of d.screens) if(screen.route) {screen.source=screenSource(screen,d.project);screen.route='';}
+      // Native frames need the project's app, so they become web frames of the same size.
+      for(const view of d.views) if(view.platform) {delete view.platform;view.heightMode='fixed';}
       d.project={name:'',url:''};
     });
   }
@@ -108,6 +114,7 @@ export class WorkspaceEditor {
   /** Add screens in one undo step: one row each, with a viewport per device in the chosen device or set. */
   addScreens(items: NewScreen[], choice: string, linked: boolean) {
     const sizes = resolveDevices(choice), list = sizes.length ? sizes : [{name: 'Custom', width: 720, height: 520}];
+    if(list.some(size=>resolveDevices(size.name)[0]?.platform==='ios')&&!linked)throw new Error('Native previews need a connected project route.');
     if(!items.length) throw new Error('There are no screens to add.');
     if(linked && !this.document.project.url) throw new Error('Connect a project first.');
     if(this.document.screens.length+items.length>100 || this.document.views.length+items.length*list.length>200) throw new Error(items.length*list.length>1?`That adds ${items.length*list.length} viewports; a workspace holds 200. Choose fewer sizes or screens.`:'This workspace is full.');
@@ -126,7 +133,7 @@ export class WorkspaceEditor {
         let x=0;
         for(const size of list) {
           const id=this.nextId(d,'view'); first||=id;
-          d.views.push({id,screenId,name:size.name,x,y,width:size.width,height:size.height}); x+=size.width+FRAME_GAP;
+          d.views.push({id,screenId,name:size.name,x,y,width:size.width,height:size.height,...(resolveDevices(size.name)[0]?.platform==='ios'?{platform:'ios' as const,heightMode:'fixed' as const}:{})}); x+=size.width+FRAME_GAP;
         }
         y+=Math.max(...list.map(size=>size.height))+FRAME_GAP;
       }
@@ -136,12 +143,13 @@ export class WorkspaceEditor {
   /** Add each device of a set to the active screen that it does not already show, in one undo step. */
   addViews(choice: string) {
     if(!deviceSets[choice]) return this.addView(choice);
+    if(resolveDevices(choice).some(s=>s.platform==='ios')&&(!this.document.project.url||!this.screen.route))throw new Error('Native previews need a connected project route.');
     const screenId=this.view.screenId,shown=this.document.views.filter(v=>v.screenId===screenId);
-    const fresh=resolveDevices(choice).filter(size=>!shown.some(v=>v.width===size.width&&v.height===size.height));
+    const fresh=resolveDevices(choice).filter(size=>!shown.some(v=>v.width===size.width&&v.height===size.height&&(v.platform??'web')===(size.platform??'web')));
     if(!fresh.length) return;
     if(this.document.views.length+fresh.length>200) throw new Error('This workspace is full.');
     let x=Math.max(...this.frames.map(v=>v.x+v.width))+FRAME_GAP; const y=this.view.y; let first='';
-    this.change(d=>{for(const size of fresh){const id=this.nextId(d,'view');first||=id;d.views.push({id,screenId,name:size.name,x,y,width:size.width,height:size.height,heightMode:'content'});x+=size.width+FRAME_GAP;}});
+    this.change(d=>{for(const size of fresh){const id=this.nextId(d,'view');first||=id;d.views.push({id,screenId,name:size.name,x,y,width:size.width,height:size.height,...(size.platform==='ios'?{platform:'ios' as const}:{}),heightMode:size.platform==='ios'?'fixed':'content'});x+=size.width+FRAME_GAP;}});
     this.active=first;this.selected=first;
   }
   /** Tidy up: one row per screen in library order, using each frame's displayed height so loaded content never overlaps.
@@ -216,17 +224,20 @@ export class WorkspaceEditor {
       } else this.layerEdit(e=>e.property(key,value));
       return;
     }
+    if(key==='preset'&&resolveDevices(value)[0]?.platform==='ios'&&(!this.document.project.url||!this.screen.route))throw new Error('Native previews need a connected project route.');
+    if(this.view.platform==='ios'&&['width','height','heightMode','source'].includes(key))return;
     const id=this.active;
     this.change(d=>{ const v=d.views.find(v=>v.id===id)!;
       if(key==='source' && validSource(value.trim())) { const s=d.screens.find(s=>s.id===v.screenId)!; s.source=value.trim();s.route=''; }
       if(key==='route' && d.project.url) d.screens.find(s=>s.id===v.screenId)!.route=screenRoute(value);
       if(key==='name' && value.trim()) d.screens.find(s=>s.id===v.screenId)!.name=value.trim().slice(0,120);
-      if(key==='preset' && presets[value]) { [v.width,v.height]=presets[value]; v.name=value;v.heightMode='content'; }
+      if(key==='preset' && presets[value]) { [v.width,v.height]=presets[value]; v.name=value;if(resolveDevices(value)[0]?.platform==='ios'){v.platform='ios';v.heightMode='fixed';}else{delete v.platform;v.heightMode='content';} }
       if(key==='heightMode'&&['content','fixed'].includes(value))v.heightMode=value as 'content'|'fixed';
       if(['x','y','width','height'].includes(key) && value.trim() && Number.isFinite(Number(value))) { const k=key as 'x'|'y'|'width'|'height'; v[k]=Math.round(Math.max(k==='x'||k==='y'?-10000:100,Math.min(10000,Number(value)))); if(k==='width'||k==='height') v.name='Custom';if(k==='height')v.heightMode='fixed'; }
     });
   }
   move(x: number,y: number,resize=false,snapZoom=0) {
+    if(resize&&this.view.platform==='ios')return;
     if(!Number.isFinite(x+y)) return;
     if (!resize && snapZoom > 0 && this.selected === this.active) { const snapped=snapMove(this.frame,this.shownFrames,x,y,snapZoom); x=snapped.dx; y=snapped.dy; }
     const id=this.selected, active=this.active,frameHeight=this.frame.height;
@@ -238,7 +249,7 @@ export class WorkspaceEditor {
   hit(x: number,y: number, tolerance=9): boolean {
     const v=this.frame,n=this.isShown(v.id)?(this.selected===v.id?v:this.target):undefined;
     const ox=this.selected===v.id?0:v.x, oy=this.selected===v.id?0:v.y;
-    if(n && Math.abs(x-ox-n.x-n.width)<tolerance && Math.abs(y-oy-n.y-n.height)<tolerance) return true;
+    if(v.platform!=='ios' && n && Math.abs(x-ox-n.x-n.width)<tolerance && Math.abs(y-oy-n.y-n.height)<tolerance) return true;
     for(const f of [...this.shownFrames].reverse()) {
       if(x<f.x || x>f.x+f.width || y<f.y-tolerance*3 || y>f.y+f.height) continue;
       this.active=f.id;

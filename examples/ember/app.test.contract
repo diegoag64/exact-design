@@ -148,3 +148,33 @@ test "reset asks first, then restores the sample week"
   clock settle
   tap "tab-today"
   expect text "water-count" == "5 of 8 · 1.25 L"
+
+test "a cold deep link opens the screen it names"
+  epoch "2026-11-11T21:00:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  at "/open?u=web%2Bember%3A%2F%2Fdiary%2Fadd"
+  clock data
+  clock settle
+  expect tree has "add-cancel"
+  expect tree missing "opening"
+  tap "add-cancel"
+  clock settle
+  expect tree has "fab-diary"
+
+test "a warm deep link moves the running app"
+  epoch "2026-11-11T21:00:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  clock data
+  expect text "remaining" == "1,287"
+  type "app" "/open?u=web%2Bember%3A%2F%2F%2Factivity%2Flog"
+  clock data
+  clock settle
+  expect tree has "save-workout"
+  expect tree missing "opening"
+  type "app" "/open?u=web%2Bember%3A%2F%2F"
+  clock data
+  clock settle
+  expect state nav.tab == "today"
+  expect text "remaining" == "1,287"

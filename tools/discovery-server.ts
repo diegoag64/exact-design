@@ -25,8 +25,17 @@ export async function readRoutes(origin: string, request: typeof fetch = fetch) 
   } finally { await reader.cancel().catch(()=>{}); }
   let body: unknown;
   try { body=JSON.parse(text); } catch { throw new Error('This server did not return an Exact route manifest.'); }
-  return parseRoutes(body);
+  const routes=parseRoutes(body);
+  try {
+    const {manifest}=await import('./native-previews');
+    const app=await manifest(projectUrl(origin),request);
+    const landing=new Set((app.protocol_handlers??[]).map((h:any)=>new URL(h.url,origin).pathname));
+    return routes.filter(route=>!landing.has(route.route));
+  } catch { return routes; }
 }
+/** Native previews: `native-previews.ts` drives Xcode's simulators; the test launchers use `native-fixture.ts` instead. */
+type NativeModule={nativeScreens(body:unknown,request:Request):Response;nativeShot(path:string):Response};
+const nativeModule=():Promise<NativeModule>=>process.env.EXACT_DESIGN_TEST==='1'?import('./native-fixture'):import('./native-previews');
 export function startDiscoveryServer(port=5175) {
   return Bun.serve({hostname:'127.0.0.1',port,maxRequestBodySize:524288,idleTimeout:255,
     async fetch(req) {
@@ -34,16 +43,23 @@ export function startDiscoveryServer(port=5175) {
       if(url.hostname!=='127.0.0.1' || (origin && !localOrigin(origin))) return new Response('Forbidden',{status:403});
       const headers = { 'access-control-allow-origin':origin??'http://127.0.0.1:5173', 'access-control-allow-methods':'GET, POST, OPTIONS', 'access-control-allow-headers':'content-type', 'cache-control':'no-store', vary:'Origin' };
       if(url.pathname==='/health' && req.method==='GET') return Response.json({service:'exact-design-discovery'},{headers});
+      // Native screenshots: the real service, or a canned fixture under the test launchers.
+      if(url.pathname.startsWith('/native/shot/')&&req.method==='GET'){
+        const response=(await nativeModule()).nativeShot(url.pathname.slice('/native/shot/'.length));
+        for(const [key,value]of Object.entries(headers))response.headers.set(key,value);
+        return response;
+      }
       if(url.pathname==='/design/events'&&req.method==='GET'){
         const response=designEvents(url.searchParams.get('session')??'',req);
         for(const [key,value]of Object.entries(headers))response.headers.set(key,value);
         return response;
       }
-      if(!['/discover','/design','/previews'].includes(url.pathname)) return new Response(null,{status:404,headers});
+      if(!['/discover','/design','/previews','/native'].includes(url.pathname)) return new Response(null,{status:404,headers});
       if(req.method==='OPTIONS') return new Response(null,{status:204,headers});
       if(req.method!=='POST' || !req.headers.get('content-type')?.startsWith('application/json')) return new Response(null,{status:405,headers});
       try {
         const body=await req.json();
+        if(url.pathname==='/native'){const response=(await nativeModule()).nativeScreens(body,req);for(const [key,value]of Object.entries(headers))response.headers.set(key,value);return response;}
         if(url.pathname==='/previews'){const response=previewScreens(body,req);for(const [key,value]of Object.entries(headers))response.headers.set(key,value);return response;}
         if(url.pathname==='/design') {
           try {return Response.json({ok:true,error:'',...await designRequest(body)},{headers});}

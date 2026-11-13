@@ -42,6 +42,23 @@ For local previews, use **Auto** beside Height to expand frames to their rendere
 
 Use **Preview** to interact with the app. Local previews share supported app data and root state, while navigation and scroll remain separate for each frame.
 
+## Preview on the iOS Simulator
+
+Web frames approximate an iPhone or iPad. On iOS, an Exact app's tab bar, sheets and glass buttons are UIKit controls, so the studio can also show **Native** frames: screenshots of the app's native build running in the iOS Simulator. Native frames are read-only.
+
+You need a Mac with Xcode and an iOS Simulator runtime. The first build takes several minutes and about 20 GB of free disk space; later refreshes reuse it.
+
+1. Give your app a deep link for each route. Add a protocol handler to `app.json`, such as `"protocol_handlers": [{"protocol": "web+myapp", "url": "/open?u=%s"}]`, and an `/open` route that opens `web+myapp://<route>` at that route. [Ember's README](../examples/ember/README.md#deep-links) shows both.
+2. Tell the helper where the app's folder is: start the studio with `EXACT_DESIGN_NATIVE_APPS=/path/to/app bun run dev`. Separate several folders with `:`. Ember is registered already.
+3. Add screens with the **Native iOS** viewport set, or add one native device from **+** beside Viewport.
+4. Select a native frame and click **Refresh all native previews** in the inspector, or choose it from the frame's context menu.
+
+The helper builds the app once, starts its own simulators (named `Exact Design …`), opens each route through its deep link, and captures it. The status toast shows each step. **Refresh all native previews** captures only frames whose screenshot is missing, stale or failed; when every frame is current, the toast says the previews are up to date. A frame marked **Stale** shows a screenshot from before the app's source last changed. **Refresh preview** captures the selected frame again even when it is current. Refresh skips the build when nothing changed. If a refresh fails, an existing screenshot stays visible with a failure notice. Select the frame to read the error details in the inspector.
+
+The first refresh boots the simulators and can take a few minutes. Later refreshes keep the app running and reuse its build. Four simulators can cause swapping on a 16 GB Mac; use fewer devices if captures are slow. The simulators run with Reduce Motion on, so animated screens hold still for the screenshot; they look the same otherwise.
+
+The first native build adds `ios` to the app's `app.json` hosts, as `bun exact.mjs ios` does. The simulators stay running while the studio is open and shut down when you stop `bun run dev`.
+
 ## Review and apply edits
 
 1. Select a connected viewport and click **Edit app**.

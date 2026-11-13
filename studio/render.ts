@@ -62,7 +62,7 @@ export function render(args: unknown[], c: Ctx2D, frame: Frame) {
       const w=frameSelected?vw:n!.width, h=frameSelected?vh:n!.height;
       c.strokeStyle = '#0d99ff'; c.lineWidth = 1 / zoom; c.strokeRect(x,y,w,h);
       const hx=x+w,hy=y+h;
-      c.fillStyle='#ffffff'; c.fillRect(hx-3/zoom,hy-3/zoom,6/zoom,6/zoom); c.strokeRect(hx-3/zoom,hy-3/zoom,6/zoom,6/zoom);
+      if(view.platform!=='ios'){c.fillStyle='#ffffff'; c.fillRect(hx-3/zoom,hy-3/zoom,6/zoom,6/zoom); c.strokeRect(hx-3/zoom,hy-3/zoom,6/zoom,6/zoom);}
     }
     c.restore();
     if (frameSelected && snapping) {
