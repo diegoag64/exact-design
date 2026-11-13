@@ -1,10 +1,10 @@
 // Only the browser test launcher starts this app-shaped fixture.
-export function startDiscoveryFixture() {
+export function startDiscoveryFixture(port=5176) {
   let mode='normal',short=false;
   let visits=0,markedVisits=0;
   let inspecting=false,version=0,color='#ffffff',seq=0;let events:any[]=[];
   const files=()=>({'app.contract':'fixture-'+version});
-  return Bun.serve({hostname:'127.0.0.1',port:5176,fetch:async req=>{
+  return Bun.serve({hostname:'127.0.0.1',port,fetch:async req=>{
     const url=new URL(req.url);
     if(url.pathname==='/mode' && req.method==='POST') {mode=(await req.json()).mode;short=false;inspecting=false;version=0;color='#ffffff';seq=0;events=[];return Response.json({ok:true});}
     if(mode==='full-height'){
