@@ -1,5 +1,6 @@
 import { test, expect } from 'bun:test';
 import { WorkspaceEditor, loadWorkspace } from './workspace';
+import { resolveDevices } from './devices';
 import { initial } from './model';
 test('old documents migrate without losing edits',()=>{ const d=initial();d.layers[0].text='Saved';const w=loadWorkspace(d);expect(w.screens[0].layers[0].text).toBe('Saved');expect(loadWorkspace(w)).toEqual(w); });
 test('variants share content but retain independent geometry',()=>{const e=new WorkspaceEditor();e.addView('Phone');expect(e.document.screens.length).toBe(1);expect(e.view.width).toBe(390);e.selected='title';e.property('text','Shared');e.select('view-1');expect(e.screen.layers[0].text).toBe('Shared');expect(e.view.width).toBe(720);});
@@ -150,31 +151,16 @@ test('showing a viewport inside a hidden screen shows only that viewport',()=>{
 });
 test('invalid visibility flags are rejected',()=>{const e=new WorkspaceEditor();(e.document.views[0] as any).hidden='yes';expect(()=>loadWorkspace(e.document)).toThrow();});
 
-test('native sets retain platform, fixed sizes, history and visibility',()=>{
+test('native devices are not viewport presets',()=>{
   const e=new WorkspaceEditor();e.setupProject('App','http://127.0.0.1:5176',[{name:'Home',route:'/'}],'Native iOS');
-  expect(e.document.views).toHaveLength(4);expect(e.document.views.every(v=>v.platform==='ios'&&v.heightMode==='fixed')).toBe(true);
-  const before=structuredClone(e.view);e.move(50,70,true);e.property('width','800');e.property('height','900');e.property('heightMode','content');expect(e.view).toEqual(before);
-  e.contentSizes.set(e.active,{source:e.source,width:e.view.width,viewportHeight:e.view.height,height:2000});expect(e.frame.height).toBe(before.height);
-  e.setHidden(e.active,true);expect(e.shownFrames).toHaveLength(3);e.undo();expect(e.shownFrames).toHaveLength(4);e.redo();expect(e.shownFrames).toHaveLength(3);
-  e.arrange();expect(loadWorkspace(e.document)).toEqual(e.document);
+  expect(e.document.views.every(v=>!('platform' in v))).toBe(true);
+  expect(resolveDevices('Every size').some(d=>d.name.startsWith('Native'))).toBe(false);
+  e.addView('Native iPhone 17');expect(e.view.name).not.toBe('Native iPhone 17');expect('platform' in e.view).toBe(false);
 });
-test('native presets switch platforms and dedupe independently of web dimensions',()=>{
-  const e=new WorkspaceEditor();e.setupProject('App','http://127.0.0.1:5176',[{name:'Home',route:'/'}],'iPhone SE');
-  e.addViews('Native iOS');expect(e.document.views).toHaveLength(5);e.addViews('Native iOS');expect(e.document.views).toHaveLength(5);
-  e.property('preset','Phone');expect(e.view.platform).toBeUndefined();expect(e.view.heightMode).toBe('content');
-  e.property('preset','Native iPhone SE');expect(e.view.platform).toBe('ios');expect(e.view.width).toBe(375);expect(e.view.heightMode).toBe('fixed');
-  e.addView('Native iPhone 17');expect(e.view.platform).toBe('ios');
-});
-test('native validation refuses local screens and unsupported platforms without migrating old web frames',()=>{
-  const e=new WorkspaceEditor();expect(loadWorkspace(e.document)).toEqual(e.document);
-  expect(()=>e.addScreens([{name:'Blank',route:''}],'Native iOS',false)).toThrow('connected project route');
-  expect(()=>e.addView('Native iPhone SE')).toThrow('connected project route');expect(()=>e.addViews('Native iOS')).toThrow('connected project route');
-  e.select(e.active);expect(()=>e.property('preset','Native iPhone SE')).toThrow('connected project route');
-  const bad=structuredClone(e.document);(bad.views[0] as any).platform='android';expect(()=>loadWorkspace(bad)).toThrow('platform');
-});
-test('disconnecting a project turns native viewports into fixed web frames',()=>{
-  const e=new WorkspaceEditor();e.setupProject('App','http://127.0.0.1:5176',[{name:'Home',route:'/'}],'Native iOS');
-  e.disconnectProject();expect(e.document.views.every(v=>v.platform===undefined&&v.heightMode==='fixed')).toBe(true);
-  expect(e.document.screens[0].source).toBe('http://127.0.0.1:5176/');expect(loadWorkspace(e.document)).toEqual(e.document);
-  e.undo();expect(e.document.views.every(v=>v.platform==='ios')).toBe(true);
+test('saved native canvas frames load as editable web frames of the same size',()=>{
+  const e=new WorkspaceEditor();e.setupProject('App','http://127.0.0.1:5176',[{name:'Home',route:'/'}],'Phone');
+  const saved=structuredClone(e.document) as any;Object.assign(saved.views[0],{name:'Native iPhone 17',width:402,height:874,platform:'ios',heightMode:'fixed'});
+  const view=loadWorkspace(saved).views[0]!;
+  expect('platform' in view).toBe(false);expect(view).toMatchObject({name:'iPhone 17',width:402,height:874,heightMode:'fixed'});
+  expect(loadWorkspace(structuredClone(loadWorkspace(saved)))).toEqual(loadWorkspace(saved));
 });

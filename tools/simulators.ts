@@ -1,8 +1,10 @@
 import {spawn} from 'node:child_process';
-export type Runner=(args:string[],env?:Record<string,string>)=>Promise<string>;
-export const command:Runner=(args,env={})=>new Promise((resolve,reject)=>{
+/** Runs a command and resolves with its output. `onOutput` receives the output as it arrives, for progress. */
+export type Runner=(args:string[],env?:Record<string,string>,onOutput?:(text:string)=>void)=>Promise<string>;
+export const command:Runner=(args,env={},onOutput)=>new Promise((resolve,reject)=>{
   const child=spawn(args[0],args.slice(1),{env:{...process.env,...env}});let output='';
-  child.stdout.on('data',b=>output+=b);child.stderr.on('data',b=>output+=b);
+  const take=(b:Buffer)=>{const text=String(b);output+=text;onOutput?.(text);};
+  child.stdout.on('data',take);child.stderr.on('data',take);
   child.on('error',reject);child.on('close',code=>code===0?resolve(output):reject(new Error(output.trim()||`${args[0]} exited ${code}`)));
 });
 export type Runtime={identifier:string;version:string;isAvailable:boolean;supportedDeviceTypes?:{identifier:string}[]};

@@ -9,7 +9,7 @@ import { screenSource,localPreview,projectUrl } from './project';
 import { parseRoutes, type DiscoveredScreen } from './discovery';
 import { snapTargets } from './snapping';
 import { render } from './render';
-import { deviceOptions, slug } from './devices';
+import { deviceOptions, nativeDevice, DEFAULT_NATIVE_DEVICE } from './devices';
 const catalog=deviceOptions();
 const editor = new WorkspaceEditor();
 const persistence = new WorkspacePersistence(editor);
@@ -60,17 +60,17 @@ const snapshot = () => {
       views:frames.filter(v=>v.screenId===screen.id).map(({id,name,x,y,width,height})=>({id,name,x,y,width,height,hidden:!editor.isShown(id)})),
       layers:editor.screen.id===screen.id && !screen.source ? editor.layers : []})),
     name: document.name,
-    platform:editor.view.platform??'web',
-    nativeRequests:shown.some(v=>v.platform==='ios')?JSON.stringify({project:document.project.url,frames:shown.filter(v=>v.platform==='ios').map(v=>({id:v.id,device:slug(v.name),route:screens.get(v.screenId)!.route,appearance:'light'}))}):'',
-    previewRequests:JSON.stringify(document.views.flatMap(v=>{const screen=screens.get(v.screenId)!;return v.platform!=='ios'&&screen.source&&editor.isShown(v.id)?[{id:scoped(v.id),url:screen.source,width:v.width,height:v.height,auto:localPreview(screen.source)&&v.heightMode!=='fixed'}]:[];})),
+    // Screens the native preview drawer can capture: each connected screen with a route, keyed by screen id.
+    nativeScreens:document.project.url?JSON.stringify({project:document.project.url,screens:document.screens.filter(s=>s.route).map(s=>({id:s.id,route:s.route}))}):'',
+    previewRequests:JSON.stringify(document.views.flatMap(v=>{const screen=screens.get(v.screenId)!;return screen.source&&editor.isShown(v.id)?[{id:scoped(v.id),url:screen.source,width:v.width,height:v.height,auto:localPreview(screen.source)&&v.heightMode!=='fixed'}]:[];})),
     layers: editor.layers,
     views: frames.map(view => {
       const screen = screens.get(view.screenId)!;
-      const previewSource=view.platform==='ios'?'':framePreview(screen.source,view.id,document.views.find(v=>v.id===view.id)!.height,view.heightMode!=='fixed',true);
+      const previewSource=framePreview(screen.source,view.id,document.views.find(v=>v.id===view.id)!.height,view.heightMode!=='fixed',true);
       const {heightMode,hidden:_,...geometry}=view;
-      return {...geometry,platform:view.platform??'web',canAutoHeight:view.platform!=='ios'&&localPreview(screen.source),autoHeight:view.platform!=='ios'&&localPreview(screen.source)&&view.heightMode!=='fixed', source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name, hidden: !editor.isShown(view.id)};
+      return {...geometry,canAutoHeight:localPreview(screen.source),autoHeight:localPreview(screen.source)&&view.heightMode!=='fixed', source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name, hidden: !editor.isShown(view.id)};
     }),
-    previewSource:editor.view.platform==='ios'?'':framePreview(editor.source,'preview-'+editor.active,editor.view.height,editor.view.heightMode!=='fixed',false),
+    previewSource:framePreview(editor.source,'preview-'+editor.active,editor.view.height,editor.view.heightMode!=='fixed',false),
     active: editor.active, screenId: editor.screen.id, source: editor.source,
     frameSelected: editor.selected === editor.active,
     width: editor.view.width, height: editor.frame.height, screenName: editor.screen.name,
@@ -79,7 +79,7 @@ const snapshot = () => {
     maxX: Math.max(...bounds.map(view => view.x + view.width)),
     maxY: Math.max(...bounds.map(view => view.y + view.height)),
     selected: editor.selected, canUndo: editor.past.length > 0, canRedo: editor.future.length > 0,
-    code: editor.code(), status: persistence.error || status, resizing, devices: catalog.devices, deviceSets: catalog.sets,
+    code: editor.code(), status: persistence.error || status, resizing, devices: catalog.devices, nativeDevices: catalog.native, deviceSets: catalog.sets,
   };
 };
 const reply = (fit=false,error='') => {
@@ -93,16 +93,22 @@ async function logWorkspace(storage:any,before:string,kind:string,target:string,
 const sources: Sources = {
   history: async ([project],_store,storage)=>{try{await history.load(storage.fs);return {entries:history.view(project),error:''};}catch(error){return {entries:[],error:error instanceof Error?error.message:'Could not load timeline.'};}},
   scene: ([,,since]) => {setScope(since);return snapshot();},
-  // `capture` is a comma-separated list of frame ids; empty asks the helper to refresh every frame that is not current.
-  native: ([requests,run,capture]) => {
-    let latest={state:'idle',phase:'',message:'',error:'',done:0,total:0,frames:[] as {id:string;state:string;shot:string;width:number;height:number;capturedAt:number;error:string}[]};
-    if(!requests)return latest;
+  // The native preview drawer asks for one frame per connected screen, on the chosen device and appearance; frame ids are
+  // screen ids. `capture` is a comma-separated list of screen ids; empty asks the helper to refresh every frame that is not current.
+  native: ([screens,device,appearance,run,capture]) => {
+    let latest={state:'idle',phase:'',message:'',error:'',done:0,total:0,progress:-1,elapsed:0,estimate:0,steps:[] as {id:string;label:string;state:string;detail:string}[],frames:[] as {id:string;state:string;shot:string;width:number;height:number;capturedAt:number;error:string}[]};
+    if(!screens)return latest;
     const unavailable=()=>({...latest,state:'unavailable',error:'Native previews need the studio helper. Run bun run dev.'});
-    return fetch(`${DISCOVERY_API}/native`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...JSON.parse(requests),run,capture:capture?capture.split(','):[]}),exactStream:event=>{
+    const {project,screens:list}=JSON.parse(screens) as {project:string;screens:{id:string;route:string}[]};
+    const slug=nativeDevice(device)?device:DEFAULT_NATIVE_DEVICE,mode=appearance==='dark'?'dark':'light';
+    const frames=list.map(s=>({id:s.id,device:slug,route:s.route,appearance:mode}));
+    if(!frames.length)return latest;
+    return fetch(`${DISCOVERY_API}/native`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({project,frames,run,capture:capture?capture.split(','):[]}),exactStream:event=>{
       if(event.type==='error')return unavailable();
       if(event.type!=='message'||typeof event.data!=='string')return latest;
       const value=JSON.parse(event.data);
-      return latest={state:value.state,phase:value.phase,message:value.message,error:value.error,done:value.done,total:value.total,frames:value.frames.map((f:any)=>({id:f.id,state:f.state,shot:f.shot,width:f.width,height:f.height,capturedAt:f.capturedAt,error:f.error}))};
+      const steps=Array.isArray(value.steps)?value.steps.map((s:any)=>({id:String(s.id),label:String(s.label),state:String(s.state),detail:String(s.detail??'')})):[];
+      return latest={state:value.state,phase:value.phase,message:value.message,error:value.error,done:value.done,total:value.total,progress:typeof value.progress==='number'?value.progress:-1,elapsed:Number(value.elapsed)||0,estimate:Number(value.estimate)||0,steps,frames:value.frames.map((f:any)=>({id:f.id,state:f.state,shot:f.shot,width:f.width,height:f.height,capturedAt:f.capturedAt,error:f.error}))};
     }}).catch(unavailable);
   },
   previews: ([requests]) => {

@@ -118,6 +118,10 @@ The studio scopes each frame id it sends to the helper to the page (`<page>~view
 
 **Reduce preview effects** (`reducedEffects`, a persisted Contract state) drops backdrop filters at every zoom and removes CSS animations with `animation: none`, so animated elements show their resting style. The view writes it to `data-preview-effects` on the hatch element, and the hatch relays it to each canvas preview with the zoom detail level. Switching restyles every visible preview at once, which costs a single long frame; turning it off restarts the previews' CSS animations.
 
+## Native preview drawer
+
+The drawer floats over the right edge of the canvas, like the other floating chrome, and leaves the canvas frames mounted and editable. The bottom toolbar's phone button, **Preview on iOS** under a project screen's route, and the canvas context menu toggle it; `nativeOpen`, the device and the appearance persist in the Contract. It follows the active screen. The drawer sizes the simulator's screen from the viewport height so the screenshot keeps its aspect ratio, and hides while a sidebar overlays the canvas. **Refresh** is the drawer's primary action. During a job, a step card floats over the screenshot area: each step shows a check, a spinner or a pending dot, the active step shows a timer and a progress bar that is determinate only when the helper sends a real fraction, and reduced motion stops the spinner and sliding bar. The job's message, completion and errors appear in a line under the actions, not in a canvas toast. While the app editor holds unapplied drafts, a notice above the actions says the native build does not include them.
+
 ## Context menus
 
 Canvas and tree rows share the `studio-menu` popover. Right-clicking a tree row first selects that row. Canvas hit testing uses the camera coordinates. App inspection offers parent selection, draft undo, finish editing, viewport navigation, and panel actions. Local screens additionally offer duplication, viewport variants, and deletion. Unsupported source restructuring commands are omitted.

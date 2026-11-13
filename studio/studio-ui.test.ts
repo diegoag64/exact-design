@@ -131,7 +131,7 @@ test('studio icons, context menus and canvas gestures share the desktop interact
   }finally{await page?.context().close();await suite?.browser.close();child.kill('SIGTERM');await child.exited;await rm(temp,{recursive:true,force:true});}
 },60000);
 
-test('native screenshots load cross origin and fill their frame in both themes',async()=>{
+test('the native drawer loads screenshots cross origin beside a live web frame in both themes',async()=>{
   const root=resolve(import.meta.dir,'..');await mkdir(resolve(root,'.exact'),{recursive:true});
   const temp=await mkdtemp(resolve(root,'.exact/studio-ui-'));
   for(const e of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(e.isFile()&&!e.name.includes('.test.')&&!e.name.endsWith('.d.ts')&&/\.(ts|contract|json|tamber)$/.test(e.name))await cp(resolve(root,'studio',e.name),resolve(temp,e.name));
@@ -161,18 +161,22 @@ test('native screenshots load cross origin and fill their frame in both themes',
   try{
     const end=Date.now()+25000;for(;;){try{if((await fetch('http://127.0.0.1:'+port)).ok)break;}catch{}if(Date.now()>end)throw Error(await Bun.file(resolve(temp,'errors.log')).text());await new Promise(r=>setTimeout(r,100));}
     suite=await suiteBrowser();page=await suite.newPage({viewport:{width:1440,height:1000},colorScheme:'dark'});page.on('pageerror',(e:Error)=>errors.push(e.message));
-    await page.goto('http://127.0.0.1:'+port+'/?connect=http://127.0.0.1:5176&name=Native&viewports=Native%20iPhone%20SE',{waitUntil:'load'});
+    await page.goto('http://127.0.0.1:'+port+'/?connect=http://127.0.0.1:5176&name=Native&viewports=Phone',{waitUntil:'load'});
+    await page.locator('[data-testid="toggle-native"]:not([disabled])').click({timeout:10000});
     const refresh=page.locator('[data-testid="native-refresh"]');await refresh.waitFor({timeout:10000});
-    expect(await page.locator('iframe').count()).toBe(0);
-    expect(await page.locator('[data-testid="frame-width"]').isDisabled()).toBe(true);
+    // The canvas keeps its editable web frame while the drawer is open.
+    expect(await page.locator('[data-testid="frame-view-2"] iframe').count()).toBe(1);
+    expect(await page.locator('[data-testid="frame-width"]').isDisabled()).toBe(false);
     await refresh.click();
-    const shot=page.locator('[data-testid="view-2-native-shot"]');await shot.waitFor();
+    const shot=page.locator('[data-testid="native-shot"]');await shot.waitFor();
     for(const colorScheme of ['light','dark'] as const){
       await page.emulateMedia({colorScheme});
-      await page.waitForFunction(()=>{const image=document.querySelector('[data-testid="view-2-native-shot"]') as HTMLImageElement;return image?.complete&&image.naturalWidth>0;});
+      await page.waitForFunction(()=>{const image=document.querySelector('[data-testid="native-shot"]') as HTMLImageElement;return image?.complete&&image.naturalWidth>0;});
       const geometry=await shot.evaluate((image:HTMLImageElement)=>{const box=image.getBoundingClientRect(),frame=image.parentElement!.getBoundingClientRect();return {width:image.naturalWidth,height:image.naturalHeight,src:image.src,boxWidth:box.width,boxHeight:box.height,frameWidth:frame.width,frameHeight:frame.height};});
-      expect(geometry.width).toBe(375);expect(geometry.height).toBe(667);expect(geometry.src).toContain('http://127.0.0.1:'+helper.port+'/native/shot/');
-      expect(geometry.boxWidth).toBeCloseTo(geometry.frameWidth,1);expect(geometry.boxHeight).toBeCloseTo(geometry.frameHeight,1);
+      expect(geometry.width).toBe(402);expect(geometry.height).toBe(874);expect(geometry.src).toContain('http://127.0.0.1:'+helper.port+'/native/shot/');
+      // The device frame keeps the simulator's aspect ratio (iPhone 17, 402 × 874) and fits inside the drawer.
+      expect(geometry.frameWidth/geometry.frameHeight).toBeCloseTo(402/874,1);expect(geometry.boxWidth).toBeLessThanOrEqual(geometry.frameWidth+0.5);
+      const drawer=await page.locator('[data-testid="native-drawer"]').boundingBox();expect(drawer!.width).toBeLessThanOrEqual(321);
     }
     // The only frame is current, so refreshing all captures nothing and says so.
     await page.locator('[data-testid="native-refresh-all"]:not([disabled])').click();
@@ -180,17 +184,17 @@ test('native screenshots load cross origin and fill their frame in both themes',
     for(const failure of ['frame','job'] as const){
       failureMode=failure;
       await refresh.click();
-      await page.locator('[data-testid="view-2-native-error"]').waitFor();
-      expect(await page.locator('[data-testid="view-2-native-state"]').count()).toBe(0);
+      await page.locator('[data-testid="native-error"]').waitFor();
+      expect(await page.locator('[data-testid="native-state"]').count()).toBe(0);
       const detail=page.locator('[data-testid="native-frame-error-detail"]');
       expect(await detail.isVisible()).toBe(true);
       expect(await detail.textContent()).toBe('Fixture refresh failed.');
       // The error occupies a compact chip rather than a frame-sized opaque panel.
-      const chip=await page.locator('[data-testid="view-2-native-error"]').evaluate((text:HTMLElement)=>{const panel=text.parentElement!,frame=panel.parentElement!;return {panel:panel.getBoundingClientRect().height,frame:frame.getBoundingClientRect().height};});
+      const chip=await page.locator('[data-testid="native-error"]').evaluate((text:HTMLElement)=>{const panel=text.parentElement!,frame=panel.parentElement!;return {panel:panel.getBoundingClientRect().height,frame:frame.getBoundingClientRect().height};});
       expect(chip.panel).toBeLessThan(chip.frame/2);
       failureMode=undefined;
       await refresh.click();
-      await page.locator('[data-testid="view-2-native-error"]').waitFor({state:'detached'});
+      await page.locator('[data-testid="native-error"]').waitFor({state:'detached'});
       await page.locator('[data-testid="native-refresh"]:not([disabled])').waitFor();
     }
     expect(errors).toEqual([]);

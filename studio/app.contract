@@ -15,6 +15,7 @@ shape SnapTarget
 
 fn propertyIcon(property: string, value: string): string = property == "flex-direction" ? (value.startsWith("row") ? "columns-2" : "rows-2") : property == "align-items" ? (value == "flex-start" ? "align-vertical-justify-start" : value == "center" ? "align-vertical-justify-center" : value == "flex-end" ? "align-vertical-justify-end" : value == "stretch" ? "move-vertical" : "align-vertical-justify-end") : value == "flex-start" ? "align-horizontal-justify-start" : value == "center" ? "align-horizontal-justify-center" : value == "flex-end" ? "align-horizontal-justify-end" : "between-horizontal-start"
 
+fn duration(s: number): string = s < 60 ? `${s} s` : `${floor(s / 60)}:${s % 60 < 10 ? "0" : ""}${s % 60}`
 fn deviceIcon(name: string): string = name.includes("Phone") or name == "Android" ? "smartphone" : name.includes("iPad") or name == "Tablet" ? "tablet" : "monitor"
 fn propertyPrefix(property: string): string = property == "left" ? "X" : property == "top" ? "Y" : property == "width" ? "W" : property == "height" ? "H" : ""
 fn propertyGlyph(property: string): string = property == "rotate" ? "rotate-cw" : property == "opacity" ? "blend" : property == "border-radius" ? "radius" : property == "font-size" ? "a-large-small" : property == "line-height" ? "baseline" : property == "letter-spacing" ? "whole-word" : property == "z-index" ? "layers" : property == "border-width" ? "minus" : property == "gap" or property == "row-gap" or property == "column-gap" ? "between-horizontal-start" : ""
@@ -52,6 +53,15 @@ shape NativeShot
   capturedAt: number
   error: string
 
+// One step of a native capture job: build, prepare simulator, capture. `state` is pending, active, done, skipped or failed.
+shape NativeStep
+  id: string
+  label: string
+  state: string
+  detail: string
+
+// `progress` is the active step's real fraction (Swift targets built, screens captured), or -1 when the helper has none.
+// `elapsed` is the active step's seconds so far; `estimate` the last comparable build's seconds, or 0.
 shape NativeStatus
   state: string
   phase: string
@@ -59,10 +69,13 @@ shape NativeStatus
   error: string
   done: number
   total: number
+  progress: number
+  elapsed: number
+  estimate: number
+  steps: NativeStep[]
   frames: NativeShot[]
 
 shape CanvasView
-  platform: string
   canAutoHeight: bool
   autoHeight: bool
   source: string
@@ -97,8 +110,7 @@ shape ScreenGroup
   layers: Layer[]
 
 shape Document
-  platform: string
-  nativeRequests: string
+  nativeScreens: string
   previewSource: string
   previewRequests: string
   projectName: string
@@ -131,13 +143,13 @@ shape Document
   status: string
   resizing: bool
   devices: DeviceOption[]
+  nativeDevices: DeviceOption[]
   deviceSets: DeviceSet[]
 
 shape DeviceOption
   name: string
   slug: string
   kind: string
-  platform: string
   width: number
   height: number
   label: string
@@ -324,6 +336,12 @@ keyframes veilIn
   from opacity=0
 keyframes veilOut
   to opacity=0 animation-timing-function="ease-in"
+keyframes nativeSlide
+  from translate="-100% 0px"
+  to translate="250% 0px"
+keyframes nativeSpin
+  from rotate="0deg"
+  to rotate="360deg"
 keyframes framePulse
   0% opacity=0.25 translate="0px 0px"
   35% opacity=1 translate="0px -3px"
@@ -338,13 +356,32 @@ component Studio
   resource viewport = exactViewport() as shape Viewport
   resource doc = document() with time.epochAtZero as shape Document else empty(name="Untitled")
   state discoveryRevision = 0
-  // Each press sends a fresh run token. nativeCapture lists the frame ids to capture again
-  // (comma-separated); empty refreshes every frame that is not current.
+  // The native preview drawer shows the active screen as the app's native iOS build renders it, beside the editable
+  // web canvas. It asks the helper only while open. Each press sends a fresh run token. nativeCapture lists the screen
+  // ids to capture again (comma-separated); empty refreshes every connected screen that is not current.
+  state nativeOpen = false persist
+  state nativeDevice = "native-iphone-17" persist
+  state nativeAppearance = "light" persist
   state nativeRun = ""
   state nativeCapture = ""
   state nativeSeen = ""
-  resource native = native(doc.nativeRequests, nativeRun, nativeCapture) as shape NativeStatus else empty()
-  derive nativeFrameError = native.error != "" ? native.error : match first(native.frames.filter(f => f.id == doc.active)) { case some(f) => f.error, case none => "" }
+  resource native = native((nativeOpen ? doc.nativeScreens : ""), nativeDevice, nativeAppearance, nativeRun, nativeCapture) as shape NativeStatus else empty()
+  derive nativeShot = match first(native.frames.filter(f => f.id == doc.screenId)) { case some(f) => f, case none => NativeShot(id=doc.screenId, state="empty", shot="", width=0, height=0, capturedAt=0, error="") }
+  derive nativeFrameError = native.error != "" ? native.error : nativeShot.error
+  derive nativeSize = match first(doc.nativeDevices.filter(d => d.slug == nativeDevice)) { case some(d) => d, case none => DeviceOption(name="iPhone 17", slug="native-iphone-17", kind="phone", width=402, height=874, label="") }
+  // Fit the simulator's screen in the drawer: 288px wide inside its padding, and the drawer's height less its header,
+  // device controls, actions and padding (about 210px, plus room for a status or error line).
+  derive nativeFit = min(288 / nativeSize.width, max(120, viewport.height - (rightOpen ? 12 : 64) - (viewport.width >= 1000 ? 64 : 120) - 210 - (nativeFrameError != "" or native.state == "working" or nativeDone ? 36 : 0) - (nativeDrafts > 0 ? 52 : 0)) / nativeSize.height)
+  derive nativeDrafts = editing ? (match designChanged { case some(r) => r.draftCount, case none => 0 }) : 0
+  derive nativeBusy = native.state == "working" or native.state == "unavailable"
+  action toggleNative
+    nativeOpen = not nativeOpen
+  action chooseNativeDevice(value: string)
+    nativeDevice = value
+    nativeRun = ""
+  action chooseNativeAppearance(value: string)
+    nativeAppearance = value
+    nativeRun = ""
   action refreshNative
     nativeRun = `${time.epochAtZero + performanceNow()}`
     nativeCapture = ""
@@ -426,15 +463,14 @@ component Studio
   derive appCanUndo = match designChanged { case some(r) => r.canUndo, case none => false }
   state designError = ""
   action startEditing
-    if doc.platform != "ios"
-      booting = false
-      hand = false
-      collapsedElements = [""]
-      revealedLayerRevision = -1
-      previewUpdateSeen = -1
-      designWriting = true
-      rightPanel = "open"
-      send designChanged = design("open", "", doc.source, 0, doc.active, "", time.epochAtZero + performanceNow())
+    booting = false
+    hand = false
+    collapsedElements = [""]
+    revealedLayerRevision = -1
+    previewUpdateSeen = -1
+    designWriting = true
+    rightPanel = "open"
+    send designChanged = design("open", "", doc.source, 0, doc.active, "", time.epochAtZero + performanceNow())
   action finishEditing
     reviewOpen = false
     spacingProperty = ""
@@ -936,11 +972,8 @@ component Studio
           MenuItem(label="Select parent", icon="corner-up-left", shortcut="", disabled=selectingElement, destructive=false, menu="studio-menu", testId="menu-parent", press=selectParent)
           MenuItem(label="Finish editing", icon="check", shortcut="Esc", disabled=designWriting, destructive=false, menu="studio-menu", testId="menu-finish", press=finishEditing)
         else
-          if doc.source != "" and doc.platform != "ios"
+          if doc.source != ""
             MenuItem(label="Edit app design", icon="mouse-pointer-2", shortcut="", disabled=designWriting, destructive=false, menu="studio-menu", testId="menu-edit", press=startEditing)
-          if doc.platform == "ios"
-            MenuItem(label="Refresh preview", icon="refresh-cw", shortcut="", disabled=(native.state == "working"), destructive=false, menu="studio-menu", testId="menu-native-refresh", press=refreshNativeFrame(doc.active))
-            MenuItem(label="Refresh all native previews", icon="refresh-cw", shortcut="", disabled=(native.state == "working"), destructive=false, menu="studio-menu", testId="menu-native-refresh-all", press=refreshNative)
           if doc.frameSelected
             MenuItem(label="Duplicate screen", icon="copy", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-duplicate", press=command("duplicate", ""))
             for preset in ["Phone", "Tablet", "Desktop"] key=preset
@@ -950,6 +983,8 @@ component Studio
               MenuItem(label=(v.hidden ? "Show viewport" : "Hide viewport"), icon=(v.hidden ? "eye" : "eye-off"), shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-visibility", press=setVisibility(v.id, not v.hidden))
           if doc.selected != ""
             MenuItem(label="Delete", icon="trash-2", shortcut="⌫", disabled=doc.frameSelected and doc.views.length == 1, destructive=true, menu="studio-menu", testId="menu-delete", press=command("delete", ""))
+        if doc.route != ""
+          MenuItem(label=(nativeOpen ? "Hide native preview" : "Show native preview"), icon="smartphone", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-native", press=toggleNative)
         MenuDivider()
         if not editing
           MenuItem(label="Tidy up", icon="layout-grid", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-tidy", press=tidyUp)
@@ -1020,10 +1055,7 @@ component Studio
               column id="canvas-stage" outline="none" tabindex=-1 contextmenu=canvasMenu contextPopover="studio-menu" testId="canvas-stage" wheel=wheel flex=1 min-width=0 min-height=0 position="relative" overflow="clip" background-color="surface.canvas"
                 for v in scene.views.filter(v => not v.hidden) key=v.id
                   column position="absolute" left=0 top=0 translate=`${(hand ? cameraX + dx * zoom : cameraX) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragX : 0)) * zoom}px ${(hand ? cameraY + dy * zoom : cameraY) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragY : 0)) * zoom}px` width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragX : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragY : 0)) scale=zoom transform-origin="top left" pointer-events=(editing and not hand and v.source.startsWith(designOrigin + "/") ? "auto" : "none") inert=(not editing or hand or not v.source.startsWith(designOrigin + "/")) background-color="paper" border="none" box-shadow="none" testId=`frame-${v.id}`
-                    if v.platform == "ios"
-                      NativeFrame(id=v.id, name=v.name, status=native)
-                    else
-                      ScreenView(source=v.previewSource, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
+                    ScreenView(source=v.previewSource, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
                 canvas pointer-events=(editing and not hand ? "none" : "auto") surface=design(scene.drawing, doc.selected, zoom, (hand ? cameraX + dx * zoom : cameraX), (hand ? cameraY + dy * zoom : cameraY), (hand ? 0 : dragX), (hand ? 0 : dragY), doc.resizing, snapping) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up cursor=(hand ? (dragging ? "grabbing" : "grab") : (dragging ? (doc.resizing ? "nwse-resize" : "move") : "default")) touch-action="none" testId="canvas" aria-label="Design canvas"
                 if booting
                   column position="absolute" inset=0 z-index=1 display="flex" flex-direction="column" align-items="center" justify-content="center" background-color="surface.canvas" role="status" aria-label="Loading screens" pointerdown=finishBoot testId="canvas-loading" -exact-exit-animation=(still or previews.total == 0 ? "none" : "veilOut 280ms ease-in both")
@@ -1069,10 +1101,59 @@ component Studio
                   if not rightOpen
                     column class=FloatingBar align-items="stretch" margin-left="auto" max-width="100%" flex-shrink=0 padding=0 pointer-events="auto"
                       ActionBar(compact=true, narrow=(viewport.width < 700), minimal=(leftOpen and viewport.width < 700), canUndo=(editing ? appCanUndo : doc.canUndo), canRedo=(not editing and doc.canRedo), canExport=(doc.source == ""), canPreview=not editing, open=false, undo=command("undo", ""), redo=command("redo", ""), save=command("save", ""), preview=togglePreview, exportCode=toggleCode, toggle=toggleRight)
-                if native.state == "working" or native.error != "" or nativeDone
-                  row class=FloatingBar position="absolute" bottom=148 left="50%" translate="-50% 0" padding="8px 12px" gap=8 max-width="calc(100% - 32px)" z-index=2 role="status"
-                    Icon(name=(native.error != "" ? "circle-alert" : native.state == "working" ? "refresh-cw" : "check"), size=14, angle=0)
-                    text (native.error != "" ? native.error : native.message) font="type.body" testId="native-progress"
+                if nativeOpen and doc.projectUrl != ""
+                  column class=FloatingBar position="absolute" top=(rightOpen ? 12 : 64) right=12 bottom=(viewport.width >= 1000 ? 64 : 120) width=320 max-width="calc(100% - 24px)" align-items="stretch" padding=0 gap=0 z-index=2 overflow="hidden" display=(panelOverlay ? "none" : "flex") role="complementary" aria-label="Native preview" testId="native-drawer"
+                    row height=40 flex-shrink=0 box-sizing="border-box" align-items="center" gap=8 padding="0 4px 0 12px" border-bottom="1px solid line.subtle"
+                      column color="ink.secondary" flex-shrink=0
+                        Icon(name="smartphone", size=14, angle=0)
+                      text "Native preview" font="type.body" font-weight=600 flex=1 min-width=0
+                      SmallButton(icon="x", label="Close native preview", hint="Close native preview", selected=false, disabled=false, testId="native-close", press=toggleNative)
+                    column flex-shrink=0 gap=8 padding="12px 12px 12px 12px" border-bottom="1px solid line.subtle"
+                      row gap=8 align-items="baseline" min-width=0
+                        text doc.screenName font="type.body" font-weight=500 min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" testId="native-screen"
+                        text doc.route font="type.mono" color="ink.muted" flex=1 min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" testId="native-route"
+                      row gap=8 align-items="center"
+                        row class=FieldShell flex=1 min-width=0
+                          row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" pointer-events="none" aria-hidden=true
+                            Icon(name=(nativeSize.kind == "tablet" ? "tablet" : "smartphone"), size=14, angle=0)
+                          select value=nativeDevice change=chooseNativeDevice class=Field flex=1 min-width=0 background-color="transparent" padding-left=0 aria-label="Simulator device" testId="native-device"
+                            for device in doc.nativeDevices key=device.slug
+                              option device.name value=device.slug
+                        row class=Segmented width=104 flex-shrink=0 role="group" aria-label="Appearance"
+                          button press=chooseNativeAppearance("light") class=Segment aria-pressed=(nativeAppearance == "light") aria-label="Light appearance" testId="native-light"
+                            text "Light"
+                          button press=chooseNativeAppearance("dark") class=Segment aria-pressed=(nativeAppearance == "dark") aria-label="Dark appearance" testId="native-dark"
+                            text "Dark"
+                    column position="relative" flex=1 min-height=0 align-items="center" justify-content="center" padding=16 overflow="hidden" background-color="surface.canvas"
+                      if doc.route == ""
+                        column align-items="center" gap=8 max-width=220 color="ink.secondary" testId="native-no-route"
+                          Icon(name="route", size=24, angle=0)
+                          text "This screen has no route" font="type.body" font-weight=500 color="ink.primary" text-align="center"
+                          text "Native previews open a project route in the iOS Simulator. Select a screen from your project." font="type.caption" text-align="center"
+                      else
+                        NativeScreen(id=doc.screenId, name=`${doc.screenName} on ${nativeSize.name}`, width=round(nativeSize.width * nativeFit), height=round(nativeSize.height * nativeFit), frame=nativeShot, error=nativeFrameError)
+                      if native.state == "working" and native.steps.length > 0
+                        NativeProgress(status=native, still=still)
+                    column flex-shrink=0 gap=8 padding=12 border-top="1px solid line.subtle"
+                      if nativeDrafts > 0
+                        row gap=8 align-items="flex-start" padding="6px 8px" border-radius="radius.control" background-color="surface.notice" color="ink.secondary" testId="native-drafts"
+                          column flex-shrink=0 padding-top=1
+                            Icon(name="info", size=14, angle=0)
+                          text `${nativeDrafts} unapplied ${nativeDrafts == 1 ? "change isn't" : "changes aren't"} in the native build. Apply to code, then refresh.` font="type.caption" color="ink.primary" flex=1 min-width=0
+                      row gap=8
+                        button press=refreshNativeFrame(doc.screenId) disabled=(nativeBusy or doc.route == "") class=PrimaryButton flex=1 aria-label="Refresh native preview" data-tip="Refresh · Build if the app changed, then capture this screen in the iOS Simulator" testId="native-refresh"
+                          Icon(name="refresh-cw", size=14, angle=0)
+                          text (nativeShot.shot == "" ? "Capture" : "Refresh")
+                        button press=refreshNative disabled=nativeBusy class=SecondaryButton flex=1 aria-label="Refresh all native screens" data-tip="Refresh all screens · Capture every connected screen whose preview is missing or stale" testId="native-refresh-all"
+                          text "Refresh all"
+                      if nativeFrameError != ""
+                        row gap=6 align-items="flex-start" color="ink.danger"
+                          Icon(name="circle-alert", size=14, angle=0)
+                          text nativeFrameError role="alert" flex=1 min-width=0 font="type.caption" color="ink.primary" testId="native-frame-error-detail"
+                      else if native.state == "working" or nativeDone
+                        row gap=6 align-items="flex-start" color="ink.secondary" role="status"
+                          Icon(name=(native.state == "working" ? "refresh-cw" : "check"), size=14, angle=0)
+                          text native.message flex=1 min-width=0 font="type.caption" color="ink.primary" testId="native-progress"
                 if doc.status != "" and doc.status != statusSeen
                   row class=FloatingBar position="absolute" bottom=68 left="50%" translate="-50% 0" height=32 padding="0 12px" gap=8 max-width="calc(100% - 32px)" min-width=0 z-index=2 role="status" color=(doc.status == "Saved" ? "ink.secondary" : "ink.danger")
                     Icon(name=(doc.status == "Saved" ? "check" : "circle-alert"), size=14, angle=0)
@@ -1100,6 +1181,7 @@ component Studio
                     ToolbarButton(icon="rectangle-horizontal", label="Button", hint="Button · Add a button to this screen", shortcut="", selected=false, disabled=(doc.source != ""), testId="add-button", press=command("add", "button"))
                   Divider()
                   ToolbarButton(icon="history", label="Timeline", hint="Design timeline · Browse the history of design edits", shortcut="", selected=timelineOpen, disabled=false, testId="toggle-timeline", press=toggleTimeline)
+                  ToolbarButton(icon="smartphone", label="Native preview", hint=(doc.projectUrl == "" ? "Native preview · Connect a project to see its screens in the iOS Simulator" : nativeOpen ? "Hide native preview" : "Native preview · See the selected screen in the app's native iOS build"), shortcut="", selected=nativeOpen, disabled=(doc.projectUrl == ""), testId="toggle-native", press=toggleNative)
                 row class=FloatingBar display=(panelOverlay ? "none" : "flex") position="absolute" right=16 bottom=(viewport.width >= 1000 ? 16 : 72) z-index=2
                   SmallButton(icon="zap", label="Reduce preview effects", hint=(reducedEffects ? "Restore preview effects · Show blur and animations in canvas previews again" : "Reduce preview effects · Hide blur and animations in canvas previews to save GPU and battery · Full-screen Preview is unchanged"), selected=reducedEffects, disabled=false, testId="reduce-effects", press=toggleReducedEffects)
                   Divider()
@@ -1113,7 +1195,7 @@ component Studio
                     ActionBar(compact=false, narrow=(viewport.width < 700), minimal=false, canUndo=(editing ? appCanUndo : doc.canUndo), canRedo=(not editing and doc.canRedo), canExport=(doc.source == ""), canPreview=not editing, open=true, undo=command("undo", ""), redo=command("redo", ""), save=command("save", ""), preview=togglePreview, exportCode=toggleCode, toggle=toggleRight)
                     row height=40 flex-shrink=0 box-sizing="border-box" align-items="center" gap=8 padding="0 12px 0 16px" border-bottom="1px solid line.subtle"
                       text "Design" font="type.body" font-weight=600 flex=1
-                      if (doc.source != "" and doc.platform != "ios") or editing
+                      if doc.source != "" or editing
                         if editing
                           button press=toggleEditing disabled=designWriting class=PrimaryButton height=24 padding="0 8px" aria-label="Finish editing app" data-tip="Finish editing (Esc)" testId="edit-app"
                             Icon(name="check", size=14, angle=0)
@@ -1298,6 +1380,9 @@ component Studio
                               FieldLabel(label=(doc.route != "" ? "Route" : "Preview URL"))
                               if doc.route != ""
                                 InlineField(prefix="", icon="route", value=doc.route, accessibleLabel="Screen route", hint="Route in the connected project", testId="screen-route", disabled=false, change=prop("route"))
+                                button press=toggleNative class=RowButton height=26 color=(nativeOpen ? "ink.selected" : "ink.secondary") aria-pressed=nativeOpen data-tip=(nativeOpen ? "Hide native preview" : "Show native preview · See this screen in the app's native iOS build") testId="screen-native"
+                                  Icon(name="smartphone", size=14, angle=0)
+                                  text (nativeOpen ? "Hide native preview" : "Preview on iOS")
                               else
                                 row class=FieldShell
                                   row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" pointer-events="none" aria-hidden=true
@@ -1333,25 +1418,11 @@ component Studio
                                 for device in doc.devices key=device.slug
                                   option device.label value=device.name
                             row gap=8 align-items="center"
-                              if v.platform == "ios"
-                                InlineField(prefix="W", icon="", value=`${v.width}`, accessibleLabel="Viewport width", hint="Viewport width · Fixed by the simulator's screen", testId="frame-width", disabled=true, change=prop("width"))
-                                InlineField(prefix="H", icon="", value=`${v.height}`, accessibleLabel="Viewport height", hint="Viewport height · Fixed by the simulator's screen", testId="frame-height", disabled=true, change=prop("height"))
-                              else
-                                PropertyField(label="W", accessibleLabel="Viewport width", value=`${v.width}`, change=prop("width"), testId="frame-width")
-                                PropertyField(label="H", accessibleLabel="Viewport height", value=`${v.height}`, change=prop("height"), testId="frame-height")
+                              PropertyField(label="W", accessibleLabel="Viewport width", value=`${v.width}`, change=prop("width"), testId="frame-width")
+                              PropertyField(label="H", accessibleLabel="Viewport height", value=`${v.height}`, change=prop("height"), testId="frame-height")
                               if v.canAutoHeight
                                 button press=prop("heightMode", "content") class=SmallTool width=28 height=28 aria-label="Fit screen height to content" aria-pressed=v.autoHeight data-tip=(v.autoHeight ? "Height fits content · enter a height to fix it" : "Fit height to content") background-color=(v.autoHeight ? "surface.selected" : "surface.field") color=(v.autoHeight ? "ink.selected" : "ink.secondary") testId="auto-height"
                                   Icon(name="fold-vertical", size=14, angle=0)
-                            if v.platform == "ios"
-                              column gap=4
-                                button press=refreshNativeFrame(v.id) disabled=(native.state == "working") class=SecondaryButton data-tip="Refresh preview · Capture this frame again in the iOS Simulator" testId="native-refresh"
-                                  Icon(name="refresh-cw", size=16, angle=0)
-                                  text "Refresh preview"
-                                button press=refreshNative disabled=(native.state == "working") class=RowButton color="ink.secondary" data-tip="Refresh all native previews · Capture frames whose screenshot is missing or stale" testId="native-refresh-all"
-                                  Icon(name="refresh-cw", size=14, angle=0)
-                                  text "Refresh all native previews"
-                                if nativeFrameError != ""
-                                  text nativeFrameError role="alert" font="type.caption" color="ink.danger" testId="native-frame-error-detail"
                       for n in doc.layers.filter(n => n.id == doc.selected) key=n.id
                         column class=PanelSection
                           row class=SectionHead gap=8
@@ -1526,10 +1597,7 @@ component Studio
                   IconButton(icon="x", label="Close preview", hint="Close preview", shortcut="", selected=false, disabled=editing, testId="close-preview", press=togglePreview)
                 scroll width="100%" max-width=doc.width height=doc.height max-height="80%" overflow-x="scroll" border-radius="radius.panel" box-shadow="shadow.menu"
                   column position="relative" width=doc.width height=doc.height overflow="hidden" background-color="paper" testId="live-screen"
-                    if doc.platform == "ios"
-                      NativeFrame(id=doc.active, name="Native preview", status=native)
-                    else
-                      ScreenView(source=doc.previewSource, layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick)
+                    ScreenView(source=doc.previewSource, layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick)
         if entry.name == "project" or entry.name == "addScreen"
           column navigationKey=`${entry.id}` navigationPresentation="fullscreen" position="absolute" inset=0 background-color="surface.scrim" align-items="center" justify-content="center" padding=20 box-sizing="border-box"
             column class=Dialog width=420
@@ -1763,29 +1831,63 @@ component ScreenLayer
       else
         column position="absolute" left=x top=y width=w height=h background-color=n.fill border-radius=n.radius testId=`${prefix}-${n.id}`
 
-component NativeFrame
+component NativeProgress
+  props
+    status: NativeStatus
+    still: bool
+  view
+    column class=FloatingBar position="absolute" left=12 right=12 bottom=12 align-items="stretch" padding=12 gap=10 role="status" aria-label="Native preview progress" testId="native-steps"
+      for step in status.steps key=step.id
+        row gap=8 align-items="flex-start" min-width=0 testId=`native-step-${step.id}`
+          column width=16 height=16 flex-shrink=0 align-items="center" justify-content="center" color=(step.state == "failed" ? "ink.danger" : step.state == "active" ? "accent" : step.state == "pending" ? "ink.muted" : "ink.secondary") aria-hidden=true
+            if step.state == "active"
+              column display="flex" animation=(still ? "none" : "nativeSpin 1s linear infinite")
+                Icon(name="refresh-cw", size=14, angle=0)
+            else if step.state == "done" or step.state == "skipped"
+              Icon(name="check", size=14, angle=0)
+            else if step.state == "failed"
+              Icon(name="circle-alert", size=14, angle=0)
+            else
+              column width=8 height=8 box-sizing="border-box" border-radius=4 border="1.5px solid line.strong"
+          column flex=1 min-width=0 gap=2
+            row gap=8 align-items="baseline" min-width=0
+              text step.label font="type.body" font-weight=(step.state == "active" ? 600 : 400) color=(step.state == "pending" ? "ink.muted" : "ink.primary") flex=1 min-width=0
+              if step.state == "active"
+                text duration(status.elapsed) font="type.caption" color="ink.muted" font-variant-numeric="tabular-nums" flex-shrink=0 testId="native-elapsed"
+            if step.detail != ""
+              text step.detail font="type.caption" color="ink.secondary" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" testId=`native-step-${step.id}-detail`
+            if step.state == "active"
+              column height=4 margin-top=4 border-radius=2 background-color="line.subtle" overflow="hidden" aria-hidden=true
+                if status.progress >= 0
+                  column height=4 width="100%" flex-shrink=0 border-radius=2 background-color="accent" translate=`${round((max(0.03, status.progress) - 1) * 100)}% 0px` transition=(still ? "none" : "translate 240ms ease-out") testId="native-progress-bar"
+                else
+                  column height=4 width="40%" border-radius=2 background-color="accent" opacity=(still ? 0.5 : 1) animation=(still ? "none" : "nativeSlide 1.2s ease-in-out infinite") testId="native-progress-indeterminate"
+              if step.id == "build" and status.estimate > 0
+                text `Last build took ${duration(status.estimate)}` font="type.caption" color="ink.muted" testId="native-estimate"
+
+component NativeScreen
   props
     id: string
     name: string
-    status: NativeStatus
-  derive frame = match first(status.frames.filter(f => f.id == id)) { case some(f) => f, case none => NativeShot(id=id, state="empty", shot="", width=0, height=0, capturedAt=0, error="") }
-  derive error = status.error != "" ? status.error : frame.error
+    width: number
+    height: number
+    frame: NativeShot
+    error: string
   view
-    column position="relative" width="100%" height="100%" overflow="hidden" background-color="surface.panel" color="ink.secondary" testId=`${id}-native`
+    column position="relative" flex-shrink=0 width=width height=height overflow="hidden" border-radius="radius.panel" border="1px solid line.subtle" box-sizing="border-box" background-color="surface.panel" color="ink.secondary" testId="native-screen-frame"
       if frame.shot != ""
-        image frame.shot width="100%" height="100%" object-fit="fill" alt=name testId=`${id}-native-shot`
+        image frame.shot width="100%" height="100%" object-fit="contain" alt=name testId="native-shot"
       if frame.shot == ""
-        column position="absolute" inset=0 align-items="center" justify-content="center" padding=24 gap=12 background-color="surface.panel"
-          Icon(name=(error != "" ? "circle-alert" : deviceIcon(name)), size=32, angle=0)
-          text "Native preview" font="type.heading" color="ink.primary"
-          text (error != "" ? error : frame.state == "queued" or frame.state == "capturing" ? "Waiting for the iOS build…" : "Not captured yet") font="type.body" text-align="center" testId=`${id}-native-state`
+        column position="absolute" inset=0 align-items="center" justify-content="center" padding=20 gap=10
+          Icon(name=(error != "" ? "circle-alert" : "smartphone"), size=28, angle=0)
+          text (error != "" ? "Capture failed" : frame.state == "capturing" ? "Capturing…" : frame.state == "queued" ? "Waiting to capture" : "Not captured yet") font="type.body" font-weight=500 color="ink.primary" text-align="center" testId="native-state"
           if error == "" and frame.state == "empty"
-            text "Select Refresh preview to capture." font="type.caption" text-align="center"
+            text "Capture builds the app once, then opens this route in the iOS Simulator." font="type.caption" text-align="center"
       if error != "" and frame.shot != ""
-        row class=FloatingBar position="absolute" top=12 left=12 right=12 padding="4px 8px" gap=8 color="ink.danger"
+        row class=FloatingBar position="absolute" top=8 left=8 right=8 padding="4px 8px" gap=6 color="ink.danger"
           Icon(name="circle-alert", size=14, angle=0)
-          text "Refresh failed · previous capture" font="type.caption" testId=`${id}-native-error`
-      if error == "" and (frame.state == "queued" or frame.state == "capturing" or frame.state == "stale")
-        row class=FloatingBar position="absolute" top=12 left=12 padding="4px 8px" gap=8
+          text "Refresh failed · previous capture" font="type.caption" testId="native-error"
+      if error == "" and frame.shot != "" and (frame.state == "queued" or frame.state == "capturing" or frame.state == "stale")
+        row class=FloatingBar position="absolute" top=8 left=8 padding="4px 8px" gap=6
           Icon(name=(frame.state == "stale" ? "history" : "refresh-cw"), size=14, angle=0)
-          text (frame.state == "stale" ? "Stale · the app changed" : "Capturing…") font="type.caption" testId=`${id}-native-chip`
+          text (frame.state == "stale" ? "Stale · the app changed" : "Capturing…") font="type.caption" testId="native-chip"
