@@ -130,3 +130,36 @@ test('studio icons, context menus and canvas gestures share the desktop interact
     expect(errors).toEqual([]);
   }finally{await page?.context().close();await suite?.browser.close();child.kill('SIGTERM');await child.exited;await rm(temp,{recursive:true,force:true});}
 },60000);
+
+test('native screenshots load cross origin and fill their frame in both themes',async()=>{
+  const root=resolve(import.meta.dir,'..');await mkdir(resolve(root,'.exact'),{recursive:true});
+  const temp=await mkdtemp(resolve(root,'.exact/studio-ui-'));
+  for(const e of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(e.isFile()&&!e.name.includes('.test.')&&!e.name.endsWith('.d.ts')&&/\.(ts|contract|json|tamber)$/.test(e.name))await cp(resolve(root,'studio',e.name),resolve(temp,e.name));
+  for(const name of ['assets','modules'])await cp(resolve(root,'studio',name),resolve(temp,name),{recursive:true});
+  const fixture=await import('../tools/native-fixture');
+  const helper=Bun.serve({hostname:'127.0.0.1',port:0,fetch:async request=>{const headers={'access-control-allow-origin':'*','access-control-allow-headers':'content-type','access-control-allow-methods':'POST, GET, OPTIONS'};if(request.method==='OPTIONS')return new Response(null,{headers});const respond=(response:Response)=>{for(const [k,v]of Object.entries(headers))response.headers.set(k,v);return response;};const url=new URL(request.url);if(url.pathname.startsWith('/native/shot/'))return fixture.nativeShot(url.pathname.slice('/native/shot/'.length));if(url.pathname==='/native')return respond(fixture.nativeScreens(await request.json(),request));if(url.pathname==='/discover')return respond(Response.json({routes:[{name:'Home',route:'/',pattern:'/'}],error:''}));return Response.json({});}});
+  const appPath=resolve(temp,'app.ts');await writeFile(appPath,(await readFile(appPath,'utf8')).replaceAll('http://127.0.0.1:5175','http://127.0.0.1:'+helper.port));
+  const manifest=JSON.parse(await readFile(resolve(temp,'app.json'),'utf8'));delete manifest.commands;delete manifest.server;await writeFile(resolve(temp,'app.json'),JSON.stringify(manifest));
+  const probe=Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response()});const port=probe.port;probe.stop(true);
+  await writeFile(resolve(temp,'launch.mjs'),`import {run} from ${JSON.stringify(resolve(root,'.exact-sdk/scripts/app-cli.mjs'))};process.exit(await run({dir:${JSON.stringify(temp)},name:'studio-ui',exact2:${JSON.stringify(resolve(root,'.exact-sdk'))},args:['web','--port','${port}']}));`);
+  const child=Bun.spawn([process.execPath,resolve(temp,'launch.mjs')],{cwd:root,env:{...process.env,PATH:resolve(homedir(),'.cargo/bin')+':'+process.env.PATH,EXACT_FEEDBACK:'0'},stdout:Bun.file(resolve(temp,'server.log')),stderr:Bun.file(resolve(temp,'errors.log'))});
+  let suite:any,page:any;const errors:string[]=[];
+  try{
+    const end=Date.now()+25000;for(;;){try{if((await fetch('http://127.0.0.1:'+port)).ok)break;}catch{}if(Date.now()>end)throw Error(await Bun.file(resolve(temp,'errors.log')).text());await new Promise(r=>setTimeout(r,100));}
+    suite=await suiteBrowser();page=await suite.newPage({viewport:{width:1440,height:1000},colorScheme:'dark'});page.on('pageerror',(e:Error)=>errors.push(e.message));
+    await page.goto('http://127.0.0.1:'+port+'/?connect=http://127.0.0.1:5176&name=Native&viewports=Native%20iPhone%20SE',{waitUntil:'load'});
+    const refresh=page.locator('[data-testid="native-refresh"]');await refresh.waitFor({timeout:10000});
+    expect(await page.locator('iframe').count()).toBe(0);
+    expect(await page.locator('[data-testid="frame-width"]').isDisabled()).toBe(true);
+    await refresh.click();
+    const shot=page.locator('[data-testid="view-2-native-shot"]');await shot.waitFor();
+    for(const colorScheme of ['light','dark'] as const){
+      await page.emulateMedia({colorScheme});
+      await page.waitForFunction(()=>{const image=document.querySelector('[data-testid="view-2-native-shot"]') as HTMLImageElement;return image?.complete&&image.naturalWidth>0;});
+      const geometry=await shot.evaluate((image:HTMLImageElement)=>{const box=image.getBoundingClientRect(),frame=image.parentElement!.getBoundingClientRect();return {width:image.naturalWidth,height:image.naturalHeight,src:image.src,boxWidth:box.width,boxHeight:box.height,frameWidth:frame.width,frameHeight:frame.height};});
+      expect(geometry.width).toBe(375);expect(geometry.height).toBe(667);expect(geometry.src).toContain('http://127.0.0.1:'+helper.port+'/native/shot/');
+      expect(geometry.boxWidth).toBeCloseTo(geometry.frameWidth,1);expect(geometry.boxHeight).toBeCloseTo(geometry.frameHeight,1);
+    }
+    expect(errors).toEqual([]);
+  }finally{await page?.context().close();await suite?.browser.close();child.kill('SIGTERM');await child.exited;helper.stop(true);await rm(temp,{recursive:true,force:true});}
+},60000);

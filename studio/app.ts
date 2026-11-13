@@ -9,7 +9,7 @@ import { screenSource,localPreview,projectUrl } from './project';
 import { parseRoutes, type DiscoveredScreen } from './discovery';
 import { snapTargets } from './snapping';
 import { render } from './render';
-import { deviceOptions } from './devices';
+import { deviceOptions, slug } from './devices';
 const catalog=deviceOptions();
 const editor = new WorkspaceEditor();
 const persistence = new WorkspacePersistence(editor);
@@ -60,15 +60,17 @@ const snapshot = () => {
       views:frames.filter(v=>v.screenId===screen.id).map(({id,name,x,y,width,height})=>({id,name,x,y,width,height,hidden:!editor.isShown(id)})),
       layers:editor.screen.id===screen.id && !screen.source ? editor.layers : []})),
     name: document.name,
-    previewRequests:JSON.stringify(document.views.flatMap(v=>{const screen=screens.get(v.screenId)!;return screen.source&&editor.isShown(v.id)?[{id:scoped(v.id),url:screen.source,width:v.width,height:v.height,auto:localPreview(screen.source)&&v.heightMode!=='fixed'}]:[];})),
+    platform:editor.view.platform??'web',
+    nativeRequests:shown.some(v=>v.platform==='ios')?JSON.stringify({project:document.project.url,frames:shown.filter(v=>v.platform==='ios').map(v=>({id:v.id,device:slug(v.name),route:screens.get(v.screenId)!.route}))}):'',
+    previewRequests:JSON.stringify(document.views.flatMap(v=>{const screen=screens.get(v.screenId)!;return v.platform!=='ios'&&screen.source&&editor.isShown(v.id)?[{id:scoped(v.id),url:screen.source,width:v.width,height:v.height,auto:localPreview(screen.source)&&v.heightMode!=='fixed'}]:[];})),
     layers: editor.layers,
     views: frames.map(view => {
       const screen = screens.get(view.screenId)!;
-      const previewSource=framePreview(screen.source,view.id,document.views.find(v=>v.id===view.id)!.height,view.heightMode!=='fixed',true);
+      const previewSource=view.platform==='ios'?'':framePreview(screen.source,view.id,document.views.find(v=>v.id===view.id)!.height,view.heightMode!=='fixed',true);
       const {heightMode,hidden:_,...geometry}=view;
-      return {...geometry,canAutoHeight:localPreview(screen.source),autoHeight:localPreview(screen.source)&&view.heightMode!=='fixed', source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name, hidden: !editor.isShown(view.id)};
+      return {...geometry,platform:view.platform??'web',canAutoHeight:view.platform!=='ios'&&localPreview(screen.source),autoHeight:view.platform!=='ios'&&localPreview(screen.source)&&view.heightMode!=='fixed', source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name, hidden: !editor.isShown(view.id)};
     }),
-    previewSource:framePreview(editor.source,'preview-'+editor.active,editor.view.height,editor.view.heightMode!=='fixed',false),
+    previewSource:editor.view.platform==='ios'?'':framePreview(editor.source,'preview-'+editor.active,editor.view.height,editor.view.heightMode!=='fixed',false),
     active: editor.active, screenId: editor.screen.id, source: editor.source,
     frameSelected: editor.selected === editor.active,
     width: editor.view.width, height: editor.frame.height, screenName: editor.screen.name,
@@ -91,6 +93,17 @@ async function logWorkspace(storage:any,before:string,kind:string,target:string,
 const sources: Sources = {
   history: async ([project],_store,storage)=>{try{await history.load(storage.fs);return {entries:history.view(project),error:''};}catch(error){return {entries:[],error:error instanceof Error?error.message:'Could not load timeline.'};}},
   scene: ([,,since]) => {setScope(since);return snapshot();},
+  native: ([requests,run]) => {
+    let latest={state:'idle',phase:'',message:'',error:'',done:0,total:0,frames:[] as {id:string;state:string;shot:string;width:number;height:number;capturedAt:number;error:string}[]};
+    if(!requests)return latest;
+    const unavailable=()=>({...latest,state:'unavailable',error:'Native previews need the studio helper. Run bun run dev.'});
+    return fetch(`${DISCOVERY_API}/native`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...JSON.parse(requests),run}),exactStream:event=>{
+      if(event.type==='error')return unavailable();
+      if(event.type!=='message'||typeof event.data!=='string')return latest;
+      const value=JSON.parse(event.data);
+      return latest={state:value.state,phase:value.phase,message:value.message,error:value.error,done:value.done,total:value.total,frames:value.frames.map((f:any)=>({id:f.id,state:f.state,shot:f.shot,width:f.width,height:f.height,capturedAt:f.capturedAt,error:f.error}))};
+    }}).catch(unavailable);
+  },
   previews: ([requests]) => {
     if(!requests||requests==='[]')return {ready:true,signature:'[]',requests,loaded:0,total:0};
     const total=JSON.parse(requests).length;

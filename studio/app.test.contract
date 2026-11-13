@@ -993,3 +993,34 @@ test "a setup link to an unreachable app explains the failure"
   expect state doc.projectUrl == ""
   tap "setup-dismiss"
   expect tree missing "setup-error"
+
+test "native viewports are read only and capture screenshots"
+  size 1440x900
+  at "/?connect=http://127.0.0.1:5176&name=Native%20app&viewports=Native%20iOS"
+  clock data
+  clock settle
+  expect state doc.platform == "ios"
+  expect state doc.previewRequests == "[]"
+  expect tree has "view-2-native"
+  expect text "view-2-native-state" == "Not captured yet"
+  expect tree missing "edit-app"
+  expect tree missing "auto-height"
+  tap "native-refresh"
+  clock data
+  clock +3000 real
+  clock data
+  expect tree has "view-2-native-shot"
+  type "screen-route" "/fail"
+  type "screen-route" key "Enter"
+  clock data
+  tap "native-refresh"
+  clock +3000 real
+  clock data
+  expect text "view-2-native-state" == "Fixture capture failed."
+  type "screen-route" "/stale"
+  type "screen-route" key "Enter"
+  clock data
+  tap "native-refresh"
+  clock +3000 real
+  clock data
+  expect text "view-2-native-chip" == "Stale · the app changed"
