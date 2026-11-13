@@ -25,7 +25,13 @@ export async function readRoutes(origin: string, request: typeof fetch = fetch) 
   } finally { await reader.cancel().catch(()=>{}); }
   let body: unknown;
   try { body=JSON.parse(text); } catch { throw new Error('This server did not return an Exact route manifest.'); }
-  return parseRoutes(body);
+  const routes=parseRoutes(body);
+  try {
+    const {manifest}=await import('./native-previews');
+    const app=await manifest(projectUrl(origin),request);
+    const landing=new Set((app.protocol_handlers??[]).map((h:any)=>new URL(h.url,origin).pathname));
+    return routes.filter(route=>!landing.has(route.route));
+  } catch { return routes; }
 }
 /** Native previews: `native-previews.ts` drives Xcode's simulators; the test launchers use `native-fixture.ts` instead. */
 type NativeModule={nativeScreens(body:unknown,request:Request):Response;nativeShot(path:string):Response};
