@@ -30,7 +30,7 @@ To set it up by hand instead, open **Add screen**, set **Viewports** to **Core**
 
 Thirty live frames is a comfortable load. **Every size** on all ten screens is 130 running copies of the app, so add it to the screens you are checking.
 
-These are web frames. On iOS, Ember's tab bar, sheets and + button are UIKit controls with Liquid Glass, so the web frames approximate them. To see the real controls, add screens with the **Native iOS** viewport set and click **Refresh all native previews**: the studio builds Ember for the iOS Simulator and shows a screenshot of each route ([Preview on the iOS Simulator](../../docs/use-the-studio.md#preview-on-the-ios-simulator)). Native macOS previews are not part of the editor yet.
+These are web frames. On iOS, Ember's tab bar, sheets and + button are UIKit controls with Liquid Glass, so the web frames approximate them. To see the real controls, open the **Native preview** drawer from the bottom toolbar and click **Capture**: the studio builds Ember for the iOS Simulator and shows a screenshot of the selected screen ([Preview on the iOS Simulator](../../docs/use-the-studio.md#preview-on-the-ios-simulator)). Native macOS previews are not part of the editor yet.
 
 ## Screens
 

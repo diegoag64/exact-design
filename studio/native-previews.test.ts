@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {mkdtemp,writeFile,mkdir,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {NativePreviews,nativeScreens,nativeShot,nativeRequest,frameKey,type NativeOptions} from '../tools/native-previews';
+import {NativePreviews,BuildProgress,nativeScreens,nativeShot,nativeRequest,frameKey,type NativeOptions} from '../tools/native-previews';
 import {Simulators,selectRuntime,availableMemory,deviceParallelism,BOOT_MEMORY,type Runner} from '../tools/simulators';
 import {NativeReadiness,parseBmp,pixelChange,identity,type Readiness,type Outcome,type Mark,type TouchSession} from '../tools/native-readiness';
 import {readRoutes} from '../tools/discovery-server';
@@ -24,11 +24,11 @@ async function fixture(options:{noXcode?:boolean;low?:boolean;buildFail?:boolean
   const dir=await mkdtemp(join(tmpdir(),'native-test-'));temps.push(dir);const appDir=join(dir,'app'),bundle=join(dir,'Ember.app');await mkdir(appDir);await mkdir(bundle);
   const config={name:'Ember',app:{id:'dev.test.ember'},protocol_handlers:options.handler===false?[]:[{protocol:'web+ember',url:'/open?u=%s'}]};await writeFile(join(appDir,'app.json'),JSON.stringify(config));await writeFile(join(appDir,'app.contract'),'first');
   const calls:Call[]=[];const booted=new Set<string>();const sim={running:false,appearance:'light',reduceMotion:undefined as string|undefined};
-  const runner:Runner=async(args,env)=>{calls.push({args,env});const s=args.join(' '),sub=args[0]===SIMCTL?args.slice(1):[];
+  const runner:Runner=async(args,env,onOutput)=>{calls.push({args,env});const s=args.join(' '),sub=args[0]===SIMCTL?args.slice(1):[];
     if(s==='xcrun --find simctl'){if(options.noXcode)throw new Error('Xcode missing');return `${SIMCTL}\n`;}
     if(args[0]==='xcrun')throw new Error('simctl must run directly');
     if(sub[0]==='boot'){if(booted.has(sub[1]))throw new Error('Unable to boot device in current state: Booted');booted.add(sub[1]);}
-    if(s.includes('native-build.mjs')){if(options.buildFail)throw new Error('noise\nerror: compilation failed\nnoise');if(options.rewrite)await writeFile(join(appDir,'app.json'),JSON.stringify({...config,host:{ios:{}}}));return `host/apple: ${bundle} (cargo foo); built and signed`;}
+    if(s.includes('native-build.mjs')){for(const chunk of ['   Compiling exact-core v0.1.0\n','host/apple: baked L=0; Swift embedded composition\n','[2 / 21] ExactCore\n[26 / 30] ExactIOS-product\nBuild complete! (6.43 sec)\n'])onOutput?.(chunk);if(options.buildFail)throw new Error('noise\nerror: compilation failed\nnoise');if(options.rewrite)await writeFile(join(appDir,'app.json'),JSON.stringify({...config,host:{ios:{}}}));return `host/apple: ${bundle} (cargo foo); built and signed`;}
     if(s.includes('list runtimes'))return JSON.stringify({runtimes});
     if(s.includes('list devices'))return JSON.stringify({devices:{[runtimes[1].identifier]:[{name:'Doom Exact iPhone',deviceTypeIdentifier:type,isAvailable:true,udid:'foreign',state:'Booted'},{name:'Exact Design iPhone 17',deviceTypeIdentifier:type,isAvailable:true,udid:'owned',state:booted.has('owned')?'Booted':'Shutdown'}]}});
     if(s.includes('screenshot')){const png=Buffer.alloc(24);Buffer.from('89504e470d0a1a0a','hex').copy(png);png.writeUInt32BE(1206,16);png.writeUInt32BE(2622,20);await writeFile(args.at(-1)!,png);}
@@ -337,7 +337,7 @@ test('app exit marks capture error and relaunches for the next screen',async()=>
   expect(opened(g.calls)).toEqual(['web+ember://diary/add','web+ember://','web+ember://diary/add']);});
 test('project registry resolves exact match and rejects unknown and remote projects',async()=>{const f=await fixture();expect(await f.service.project('http://localhost:1234')).toBe(f.app);await expect(f.service.project('https://example.com')).rejects.toThrow('local');const unknown=new NativePreviews({apps:[],fetch:(async()=>Response.json({name:'Other'})) as typeof fetch});await expect(unknown.project('http://localhost:1234')).rejects.toThrow('EXACT_DESIGN_NATIVE_APPS');});
 test('shot paths reject traversal and missing files',()=>{for(const p of ['../state.json','a'.repeat(16)+'/../x.png','a'.repeat(16)+'/x.png','%2e%2e/foo'])expect(nativeShot(p).status).toBe(404);});
-test('invalid requests return an error SSE snapshot without throwing',async()=>{const abort=new AbortController(),response=nativeScreens(null,new Request('http://127.0.0.1:5999/native',{signal:abort.signal}));expect(response.headers.get('content-type')).toBe('text/event-stream');const reader=response.body!.getReader(),{value}=await reader.read();const snapshot=JSON.parse(new TextDecoder().decode(value).slice(6));expect(snapshot).toEqual({state:'error',phase:'',message:'Invalid native preview request.',error:'Invalid native preview request.',done:0,total:0,frames:[]});abort.abort();});
+test('invalid requests return an error SSE snapshot without throwing',async()=>{const abort=new AbortController(),response=nativeScreens(null,new Request('http://127.0.0.1:5999/native',{signal:abort.signal}));expect(response.headers.get('content-type')).toBe('text/event-stream');const reader=response.body!.getReader(),{value}=await reader.read();const snapshot=JSON.parse(new TextDecoder().decode(value).slice(6));expect(snapshot).toEqual({state:'error',phase:'',message:'Invalid native preview request.',error:'Invalid native preview request.',done:0,total:0,steps:[],progress:-1,elapsed:0,estimate:0,frames:[]});abort.abort();});
 test('requests carry capture ids and per-frame appearance',()=>{
   expect(nativeRequest({project:'http://127.0.0.1:5174',run:'',frames})).toEqual({project:'http://127.0.0.1:5174',run:'',capture:[],frames:frames.map(f=>({...f,appearance:'light'}))});
   expect(nativeRequest({project:'p',run:'r',capture:['two'],frames:[{...frames[1],appearance:'dark'}]}).frames[0].appearance).toBe('dark');
@@ -481,3 +481,47 @@ test.skipIf(!e2e)('real Ember iPhone 17 captures',async()=>{
     expect(app.snapshot(frames)).toMatchObject({state:'idle',message:'Native previews are up to date.',done:0,total:0});expect(commands.slice(before).some(c=>c.args.includes('screenshot')||c.args.includes('openurl')||c.args.includes('launch'))).toBe(false);
   }finally{await service.stop();}
 },600000);
+
+test('build output names crates as they compile, then Swift and packaging',()=>{
+  const p=new BuildProgress();expect(p.detail).toBe('Compiling the Contract…');
+  expect(p.feed('warning: ember: app.contract:1:1 warning\n   Compiling exact-core v0.1.0 (/sdk)\n   Compiling ember-')).toBe(true);
+  expect(p.detail).toBe('Compiling Rust · exact-core · 1 crate');
+  // A line split across chunks is read once it is whole.
+  expect(p.feed('apple v0.1.0\n')).toBe(true);expect(p.detail).toBe('Compiling Rust · ember-apple · 2 crates');
+  expect(p.feed('host/apple: baked L=0; Swift embedded composition\n')).toBe(true);expect(p.detail).toBe('Compiling Swift…');
+  // The SDK replays swift-build's counts in one batch after Swift finishes; they carry no live progress.
+  expect(p.feed('[2 / 21] ExactCore\n[26 / 30] ExactIOS-product\n')).toBe(false);
+  p.feed('Build complete! (6.43 sec)\n');expect(p.detail).toBe('Packaging the app…');
+});
+test('a capture job reports build, simulator and capture steps with real progress',async()=>{
+  const f=await fixture();const seen:any[]=[];f.app.subscribe(()=>seen.push(structuredClone(f.app.snapshot(frames))));
+  await f.app.start('a',frames);
+  const building=seen.filter(s=>s.steps[0]?.state==='active');
+  expect(building[0].message).toBe('Building Ember for iOS. The first build in this checkout takes several minutes.');
+  expect(building.map(s=>s.steps[0].detail)).toEqual(expect.arrayContaining(['Compiling Rust · exact-core · 1 crate','Compiling Swift…','Packaging the app…']));
+  expect(building.every(s=>s.progress===-1)).toBe(true);
+  // One step is active at a time, even when a capture has to launch the app first.
+  expect(seen.every(s=>s.steps.filter((x:any)=>x.state==='active').length<=1)).toBe(true);
+  expect(seen.some(s=>s.steps[1]?.state==='active'&&s.steps[1].detail.startsWith('Starting iPhone 17'))).toBe(true);
+  const capturing=seen.filter(s=>s.steps[2]?.state==='active');
+  expect(capturing[0].steps[0]).toMatchObject({state:'done'});expect(capturing[0].steps[0].detail).toMatch(/^Built in \d+ s$/);
+  expect(capturing.map(s=>s.steps[2].detail)).toEqual(expect.arrayContaining(['1 of 2','2 of 2']));expect(capturing.map(s=>s.progress)).toContain(0.5);
+  expect(seen.at(-1).steps).toEqual([]);expect(seen.at(-1).message).toBe('Native previews updated.');
+  // A source change rebuilds and says so; an unchanged app skips the build and the warm device needs no preparing.
+  await writeFile(join(f.appDir,'app.contract'),'second');seen.length=0;await f.app.start('b',frames);
+  expect(seen.find(s=>s.steps[0]?.state==='active').message).toBe('Rebuilding Ember with your changes…');
+  seen.length=0;await f.app.start('c',frames,['one']);
+  const steps=seen.find(s=>s.steps[2]?.state==='active').steps;
+  expect(steps[0]).toMatchObject({state:'skipped',detail:'Up to date'});expect(steps[1]).toMatchObject({state:'skipped',detail:'Already running'});
+});
+test('a failed build marks its step failed',async()=>{
+  const f=await fixture({buildFail:true});const seen:any[]=[];f.app.subscribe(()=>seen.push(structuredClone(f.app.snapshot(frames))));
+  await f.app.start('a',frames);expect(seen.some(s=>s.steps[0]?.state==='failed')).toBe(true);expect(seen.at(-1).state).toBe('error');expect(seen.at(-1).steps).toEqual([]);
+});
+test('earlier iOS build output in the checkout makes a build warm: 10 GB is enough and it is not called a first build',async()=>{
+  const cold=await fixture({service:{free:async()=>15*1024**3}});await cold.app.start('a',frames);
+  expect(cold.app.snapshot(frames).error).toBe('Only 15.0 GB free. Native builds need 20 GB free.');
+  const warm=await fixture({service:{free:async()=>15*1024**3}});await mkdir(join(warm.appDir,'target','aarch64-apple-ios-sim'),{recursive:true});
+  const seen:string[]=[];warm.app.subscribe(()=>seen.push(warm.app.message));await warm.app.start('a',frames);
+  expect(seen).toContain('Building Ember for iOS…');expect(seen.some(m=>m.includes('first build'))).toBe(false);expect(warm.app.snapshot(frames).state).toBe('idle');
+});

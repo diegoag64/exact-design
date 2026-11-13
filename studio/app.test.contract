@@ -994,99 +994,140 @@ test "a setup link to an unreachable app explains the failure"
   tap "setup-dismiss"
   expect tree missing "setup-error"
 
-test "native viewports are read only and capture screenshots"
+test "the native preview drawer shows the selected screen beside editable web frames"
   size 1440x900
-  at "/?connect=http://127.0.0.1:5176&name=Native%20app&viewports=Native%20iOS"
+  at "/?connect=http://127.0.0.1:5176&name=Native%20app&viewports=Phone"
   request POST "http://127.0.0.1:5175/native" {"mode":"reset"}
   clock data
   clock settle
-  expect state doc.platform == "ios"
-  expect state doc.previewRequests == "[]"
-  expect tree has "view-2-native"
-  expect text "view-2-native-state" == "Not captured yet"
-  expect tree missing "edit-app"
-  expect tree missing "auto-height"
+  expect tree missing "native-drawer"
+  expect state native.state == "idle"
+  expect tree has "edit-app"
+  tap "toggle-native"
+  clock data
+  expect tree has "native-drawer"
+  expect text "native-route" == "/"
+  expect text "native-state" == "Not captured yet"
+  expect text "native-refresh" == "Capture"
+  expect tree has "edit-app"
+  expect tree has "frame-view-2"
   tap "native-refresh"
   clock data
-  clock +3000 real
+  expect state native.total == 1
+  expect tree has "native-steps"
+  expect text "native-step-build-detail" == "Compiling Swift…"
+  expect tree has "native-progress-indeterminate"
+  expect text "native-step-device-detail" == "Already running"
+  clock until state native.phase == "capture" within 3000
+  expect text "native-step-build-detail" == "Built in 1 s"
+  expect text "native-step-capture-detail" == "1 of 1"
+  expect tree has "native-progress-bar"
+  clock until state native.message == "Native previews updated." within 5000
+  expect tree missing "native-steps"
+  expect tree has "native-shot"
+  expect text "native-refresh" == "Refresh"
+  clock +100
+  tap "native-refresh"
   clock data
-  expect tree has "view-2-native-shot"
+  clock until state native.state == "working" within 2000
+  expect text "native-step-build-detail" == "Up to date"
+  clock until state native.state == "idle" within 5000
+  tap "native-close"
+  expect tree missing "native-drawer"
+  tap "screen-native"
+  clock data
+  expect tree has "native-shot"
+
+test "native preview failures and stale captures keep the screen editable"
+  size 1440x900
+  at "/?connect=http://127.0.0.1:5176&name=Native%20app&viewports=Phone"
+  request POST "http://127.0.0.1:5175/native" {"mode":"reset"}
+  clock data
+  clock settle
+  tap "toggle-native"
+  clock data
   type "screen-route" "/fail"
   type "screen-route" key "Enter"
   clock data
+  expect text "native-route" == "/fail"
   tap "native-refresh"
-  clock +3000 real
   clock data
-  expect text "view-2-native-state" == "Fixture capture failed."
+  clock until state native.state == "idle" within 5000
+  expect text "native-state" == "Capture failed"
+  expect text "native-frame-error-detail" == "Fixture capture failed."
+  expect tree has "edit-app"
   type "screen-route" "/stale"
   type "screen-route" key "Enter"
   clock data
   tap "native-refresh"
-  clock +3000 real
   clock data
-  expect text "view-2-native-chip" == "Stale · the app changed"
+  clock until state native.state == "idle" within 5000
+  expect text "native-chip" == "Stale · the app changed"
 
-test "refresh all captures missing native frames and reports when they are up to date"
+test "refresh all captures every connected screen and reports when they are up to date"
   size 1440x900
-  at "/?connect=http://127.0.0.1:5176&name=Native%20app&viewports=Native%20iOS"
+  at "/?connect=http://127.0.0.1:5176&name=Native%20app&viewports=Phone"
   request POST "http://127.0.0.1:5175/native" {"mode":"reset"}
   clock data
   clock settle
-  expect text "view-3-native-state" == "Not captured yet"
-  expect tree missing "native-progress"
+  tap "canvas-stage" contextmenu
+  clock settle
+  tap "menu-native"
+  clock data
+  expect tree has "native-drawer"
   tap "native-refresh-all"
   clock data
   expect state native.state == "working"
-  expect state native.total == 8
+  expect state native.total == 2
   expect disabled "native-refresh"
   expect disabled "native-refresh-all"
-  tap "view-view-3" contextmenu
-  clock settle
-  expect disabled "menu-native-refresh"
-  expect disabled "menu-native-refresh-all"
   clock until state native.message == "Native previews updated." within 5000
   expect text "native-progress" == "Native previews updated."
-  expect enabled "menu-native-refresh-all"
-  expect tree has "view-2-native-shot"
-  expect tree has "view-5-native-shot"
+  expect tree has "native-shot"
   clock +2500
   expect tree missing "native-progress"
-  tap "menu-native-refresh-all"
+  tap "native-refresh-all"
   clock until state native.message == "Native previews are up to date." within 3000
-  expect text "native-progress" == "Native previews are up to date."
   expect state native.total == 0
-  expect state native.done == 0
-  clock +2500
-  expect tree missing "native-progress"
+  tap "native-dark"
+  clock data
+  expect text "native-state" == "Not captured yet"
+  tap "native-light"
+  clock data
+  expect tree has "native-shot"
 
-test "refresh preview captures only the chosen native frame"
+test "the native drawer says unapplied draft changes are not in the native build"
   size 1440x900
-  at "/?connect=http://127.0.0.1:5176&name=Native%20app&viewports=Native%20iOS"
+  at "/?connect=http://127.0.0.1:5176&name=Native%20app&viewports=Phone"
   request POST "http://127.0.0.1:5175/native" {"mode":"reset"}
   clock data
   clock settle
-  tap "native-refresh"
+  request POST "http://127.0.0.1:5176/mode" {"mode":"elements"}
+  reload
   clock data
-  expect state native.total == 1
-  clock until state native.message == "Native previews updated." within 5000
-  expect tree has "view-2-native-shot"
-  expect text "view-3-native-state" == "Not captured yet"
-  expect text "view-5-native-state" == "Not captured yet"
-  tap "view-view-3" contextmenu
   clock settle
-  expect state doc.active == "view-3"
-  tap "menu-native-refresh"
+  tap "toggle-native"
   clock data
-  expect state native.total == 1
-  expect text "view-3-native-chip" == "Capturing…"
-  expect tree missing "view-2-native-chip"
-  clock until state native.state == "idle" within 5000
-  expect tree has "view-3-native-shot"
-  expect text "view-4-native-state" == "Not captured yet"
-  clock +100
-  tap "native-refresh"
+  tap "edit-app"
   clock data
-  expect text "view-3-native-chip" == "Capturing…"
-  expect tree has "view-2-native-shot"
-  clock until state native.state == "idle" within 5000
-  expect text "native-progress" == "Native previews updated."
+  clock +1800 real
+  expect tree missing "native-drafts"
+  tap "element-2"
+  clock +300 real
+  clock data
+  type "design-property-0" "#123456"
+  type "design-property-0" key "Enter"
+  clock data
+  expect tree has "apply-design"
+  expect text "native-drafts" == "1 unapplied change isn't in the native build. Apply to code, then refresh."
+  tap "edit-app"
+  clock data
+  expect tree missing "apply-design"
+  expect text "native-drafts" == "1 unapplied change isn't in the native build. Apply to code, then refresh."
+  tap "edit-app"
+  clock data
+  clock +1800 real
+  expect tree has "apply-design"
+  tap "discard-design"
+  clock data
+  expect tree missing "native-drafts"

@@ -14,7 +14,25 @@ const brief=(e:unknown)=>{const lines=message(e).trim().split('\n');return (line
 export type NativeFrame={id:string;device:string;route:string;appearance?:Appearance};
 type Shot={signature:string;file:string;width:number;height:number;capturedAt:number};
 type FrameStatus='empty'|'queued'|'capturing'|'ready'|'stale'|'error';
-type DiskState={signature?:string;app?:string;shots:Record<string,Shot>};
+/** `buildMs` is the last build's duration and `coldMs` the last build that started without an app: the drawer's estimates. */
+type DiskState={signature?:string;app?:string;buildMs?:number;coldMs?:number;shots:Record<string,Shot>};
+/** A job's progress as the drawer lists it: build the app, prepare the simulator, capture the screens. */
+export type StepState='pending'|'active'|'done'|'skipped'|'failed';
+export type Step={id:'build'|'device'|'capture';label:string;state:StepState;detail:string};
+/** Names the stage of a native build from its output as it arrives: each Rust crate as cargo compiles it, then Swift.
+ *  The output gives no fraction: cargo prints no total, and the SDK replays swift-build's `[n / m]` counts only after
+ *  Swift finishes, so a build's progress stays indeterminate. */
+export class BuildProgress {
+  private rest='';crates=0;detail='Compiling the Contract…';
+  feed(text:string){const lines=(this.rest+text).split(/\r?\n/);this.rest=lines.pop()??'';let changed=false;for(const line of lines)changed=this.line(line)||changed;return changed;}
+  private line(raw:string){
+    const line=raw.trim(),m=/^Compiling ([\w.-]+)/.exec(line);
+    if(m){this.crates++;this.detail=`Compiling Rust · ${m[1]} · ${this.crates} ${this.crates===1?'crate':'crates'}`;return true;}
+    if(line.startsWith('host/apple: baked')){this.detail='Compiling Swift…';return true;}
+    if(line.startsWith('Build complete!')){this.detail='Packaging the app…';return true;}
+    return false;
+  }
+}
 /** What this helper process has already done to a booted device, so a later job can skip it: the link approved (scheme and
  *  bundle id), the Reduce Motion value applied, the appearance, and the app known to be running. */
 export type DeviceRecord={approved?:string;reduceMotion?:boolean;appearance?:Appearance;running?:string;
@@ -124,6 +142,7 @@ export class AppPreviews {
   readonly key:string;readonly dir:string;private disk:DiskState={shots:{}};private hashes=new Map<string,{mtime:number;size:number;hash:string}>();
   private tokens=new Set<string>();private pending=0;private tail=Promise.resolve();private listeners=new Set<()=>void>();private statuses=new Map<string,{state:FrameStatus;error:string}>();
   signature='';state='idle';phase='';message='';error='';done=0;total=0;
+  steps:Step[]=[];estimate=0;private stepAt=0;private ticker?:ReturnType<typeof setInterval>;
   private constructor(readonly service:NativePreviews,readonly appDir:string){this.key=hash(appDir).slice(0,16);this.dir=join(service.cache,this.key);}
   static async open(service:NativePreviews,dir:string){const a=new AppPreviews(service,dir);await mkdir(join(a.dir,'shots'),{recursive:true});try{a.disk=JSON.parse(await readFile(join(a.dir,'state.json'),'utf8'));}catch{}return a;}
   async inputs(){const entries:string[]=[];const walk=async(dir:string,rel='')=>{for(const e of (await readdir(dir,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){if(e.isSymbolicLink())continue;const path=join(dir,e.name),name=rel+e.name;if(e.isDirectory()){if(!e.name.startsWith('.')&&!['target','node_modules','dist'].includes(e.name))await walk(path,name+'/');}else if(e.isFile()){const s=await stat(path),prev=this.hashes.get(name);const digest=prev&&prev.mtime===s.mtimeMs&&prev.size===s.size?prev.hash:hash(await readFile(path));this.hashes.set(name,{mtime:s.mtimeMs,size:s.size,hash:digest});entries.push(JSON.stringify([name,digest]));}}};await walk(this.appDir);return hash(entries.join('\n')+await this.service.versions());}
@@ -133,7 +152,11 @@ export class AppPreviews {
   private async save(){await writeFile(join(this.dir,'state.json.tmp'),JSON.stringify(this.disk));await rename(join(this.dir,'state.json.tmp'),join(this.dir,'state.json'));}
   /** A frame's state: a job's status while it runs or after it failed, else what its latest screenshot says. */
   private frameState(key:string):FrameStatus{const shot=this.disk.shots[key],status=this.statuses.get(key);return status?.state==='ready'||!status?(shot?(shot.signature===this.signature?'ready':'stale'):'empty'):status.state;}
-  snapshot(frames:NativeFrame[],origin='http://127.0.0.1:5175'){return {state:this.state,phase:this.phase,message:this.message,error:this.error,done:this.done,total:this.total,frames:frames.map(f=>{const key=frameKey(f),shot=this.disk.shots[key],status=this.statuses.get(key);return {id:f.id,state:this.frameState(key),shot:shot?`${origin}/native/shot/${this.key}/${shot.file}?v=${shot.capturedAt}`:'',width:shot?.width??0,height:shot?.height??0,capturedAt:shot?.capturedAt??0,error:status?.error??''};})};}
+  snapshot(frames:NativeFrame[],origin='http://127.0.0.1:5175'){
+    // Only capture has a real fraction: the screens done. Building and preparing a simulator report -1.
+    const capturing=this.steps.find(s=>s.id==='capture')?.state==='active',progress=capturing&&this.total?this.done/this.total:-1;
+    return {state:this.state,phase:this.phase,message:this.message,error:this.error,done:this.done,total:this.total,
+      steps:this.steps.map(s=>({...s,detail:s.id==='capture'&&s.state==='active'?`${Math.min(this.done+1,this.total)} of ${this.total}`:s.detail})),progress,elapsed:this.elapsed,estimate:this.estimate,frames:frames.map(f=>{const key=frameKey(f),shot=this.disk.shots[key],status=this.statuses.get(key);return {id:f.id,state:this.frameState(key),shot:shot?`${origin}/native/shot/${this.key}/${shot.file}?v=${shot.capturedAt}`:'',width:shot?.width??0,height:shot?.height??0,capturedAt:shot?.capturedAt??0,error:status?.error??''};})};}
   /** Starts one job per new token. `capture` empty: every frame that is not ready; ids: exactly those frames. */
   start(token:string,frames:NativeFrame[],capture:string[]=[]){
     if(this.service.stopping||!token||this.tokens.has(token))return this.tail;
@@ -142,9 +165,23 @@ export class AppPreviews {
     const copy=frames.map(f=>({...f,appearance:f.appearance??'light'})),ids=[...capture];this.tail=this.service.enqueue(()=>this.job(copy,ids)).finally(()=>{this.pending--;});return this.tail;
   }
   private waiting(){this.state='working';this.phase='queued';this.message='Waiting for native refresh…';this.error='';this.done=0;this.total=0;this.publish();}
-  private progress(phase:string,text:string){this.phase=phase;this.message=text;this.publish();}
+  private progress(phase:string,text:string){this.phase=phase;this.message=text;
+    if(phase==='boot'||phase==='install')this.step('device','active',text);
+    if(phase==='capture'){const device=this.steps.find(s=>s.id==='device');if(device?.state==='pending')this.step('device','skipped','Already running');this.step('capture','active',`${Math.min(this.done+1,this.total)} of ${this.total}`);}
+    this.publish();}
+  /** Moves a job to a step. One step is active at a time: an earlier active step is done, and a later one goes back to
+   *  pending, as when a capture has to launch the app first. */
+  private step(id:Step['id'],state:StepState,detail:string){
+    const index=this.steps.findIndex(s=>s.id===id);if(index<0)return;const step=this.steps[index]!;
+    if(state==='active'){this.steps.forEach((s,i)=>{if(i!==index&&s.state==='active')s.state=i<index?'done':'pending';});if(step.state!=='active')this.stepAt=this.service.now();}
+    step.state=state;step.detail=detail;this.publish();}
+  private startSteps(){this.steps=[{id:'build',label:'Build app',state:'pending',detail:''},{id:'device',label:'Prepare simulator',state:'pending',detail:''},{id:'capture',label:'Capture',state:'pending',detail:''}];this.estimate=0;this.stepAt=this.service.now();
+    clearInterval(this.ticker);this.ticker=setInterval(()=>this.publish(),1000);this.ticker.unref?.();}
+  private endSteps(){clearInterval(this.ticker);this.ticker=undefined;this.steps=[];this.estimate=0;}
+  /** Seconds the active step has run, for the drawer's timer. */
+  get elapsed(){return this.state==='working'&&this.steps.some(s=>s.state==='active')?Math.max(0,Math.floor((this.service.now()-this.stepAt)/1000)):0;}
   private async job(frames:NativeFrame[],capture:string[]){
-    this.service.nextJob();this.state='working';this.phase='';this.message='Preparing native previews…';this.error='';this.done=0;this.total=0;this.publish();let jobs:Job[]=[],appId='';const used:string[]=[];
+    this.service.nextJob();this.state='working';this.phase='';this.message='Preparing native previews…';this.error='';this.done=0;this.total=0;this.startSteps();this.publish();let jobs:Job[]=[],appId='';const used:string[]=[];
     try{
       this.service.checkRunning();
       try{await this.service.target.available();}catch(e){this.state='unavailable';throw e;}
@@ -157,12 +194,18 @@ export class AppPreviews {
       if(!jobs.length){this.state='idle';this.message='Native previews are up to date.';return;}
       this.total=jobs.length;for(const j of jobs)this.statuses.set(j.key,{state:'queued',error:''});this.publish();
       if(this.disk.signature!==inputSignature||!this.disk.app||!existsSync(this.disk.app)){
-        const fs=await statfs(this.appDir);const free=this.service.options.free?await this.service.options.free(this.appDir):fs.bavail*fs.bsize;const min=this.disk.app&&existsSync(this.disk.app)?10:20;
+        // Cold: neither this helper nor the SDK's CLI (`bun exact.mjs ios`, or an interrupted refresh) has built the app for
+        // the iOS Simulator in this checkout, so every crate and Swift target compiles.
+        const built=!!this.disk.app&&existsSync(this.disk.app),cold=!built&&!existsSync(join(this.appDir,'target','aarch64-apple-ios-sim'));
+        const fs=await statfs(this.appDir);const free=this.service.options.free?await this.service.options.free(this.appDir):fs.bavail*fs.bsize;const min=cold?20:10;
         if(free<min*1024**3)throw new Error(`Only ${(free/1024**3).toFixed(1)} GB free. Native builds need ${min} GB free.`);
-        this.service.checkRunning();this.progress('build',`Building ${app.name} for iOS. The first build takes several minutes.`);let output='';
-        try{output=await this.service.run([process.execPath,join(root,'tools/native-build.mjs'),this.appDir,...this.service.target.buildArgs],{PATH:`${homedir()}/.cargo/bin:${process.env.PATH}`,EXACT_FEEDBACK:'0'});await writeFile(join(this.dir,'build.log'),output);const built=/host\/apple:\s+(.+?\.app)(?:\s|$)/.exec(output)?.[1];if(!built||!existsSync(built))throw new Error('Build did not produce an app bundle.');this.disk.app=built;this.disk.signature=inputSignature;await this.save();await this.refresh();}
-        catch(e){await writeFile(join(this.dir,'build.log'),output+'\n'+message(e));throw new Error(`${brief(e)} Full log: ${join(this.dir,'build.log')}`);}
-      }
+        this.service.checkRunning();
+        this.message=cold?`Building ${app.name} for iOS. The first build in this checkout takes several minutes.`:built?`Rebuilding ${app.name} with your changes…`:`Building ${app.name} for iOS…`;this.phase='build';
+        this.estimate=Math.round(((cold?this.disk.coldMs:this.disk.buildMs)??0)/1000);
+        const reader=new BuildProgress();this.step('build','active',reader.detail);let output='';const started=this.service.now();
+        try{output=await this.service.run([process.execPath,join(root,'tools/native-build.mjs'),this.appDir,...this.service.target.buildArgs],{PATH:`${homedir()}/.cargo/bin:${process.env.PATH}`,EXACT_FEEDBACK:'0'},text=>{if(reader.feed(text))this.step('build','active',reader.detail);});await writeFile(join(this.dir,'build.log'),output);const built=/host\/apple:\s+(.+?\.app)(?:\s|$)/.exec(output)?.[1];if(!built||!existsSync(built))throw new Error('Build did not produce an app bundle.');this.disk.app=built;this.disk.signature=inputSignature;const took=this.service.now()-started;this.disk.buildMs=took;if(cold)this.disk.coldMs=took;await this.save();await this.refresh();this.estimate=0;this.step('build','done',`Built in ${Math.max(1,Math.round(took/1000))} s`);}
+        catch(e){await writeFile(join(this.dir,'build.log'),output+'\n'+message(e));this.step('build','failed','Build failed');throw new Error(`${brief(e)} Full log: ${join(this.dir,'build.log')}`);}
+      }else this.step('build','skipped','Up to date');
       this.service.checkRunning();const context={name:app.name as string,appId:app.app.id as string,scheme:handler.protocol as string,signature:this.disk.signature!};
       const fail=(group:Job[],e:unknown)=>{for(const j of group)if(this.statuses.get(j.key)?.state!=='ready'&&this.statuses.get(j.key)?.state!=='error'){this.statuses.set(j.key,{state:'error',error:brief(e)});this.done++;}this.publish();};
       // One device listing per job: which simulators exist and which are booted.
@@ -174,8 +217,8 @@ export class AppPreviews {
       const worker=async()=>{while(index<devices.length&&!this.service.stopping){const d=devices[index++];try{await this.device(d.slug,d.id,d.booted,d.group,context);}catch(e){this.service.records.delete(d.id);fail(d.group,e);}finally{this.service.starting.delete(d.id);}}};
       await Promise.all(Array.from({length:await this.service.parallelism(devices)},worker));
       this.service.checkRunning();await this.save();this.state='idle';this.message='Native previews updated.';
-    }catch(e){if(this.state!=='unavailable')this.state='error';this.error=message(e).includes('Full log:')?message(e):brief(e);this.message=this.error;for(const j of jobs)this.statuses.set(j.key,{state:'error',error:this.error});}
-    finally{if(this.pending>1&&!this.service.stopping)this.waiting();else{this.phase='';this.publish();}
+    }catch(e){for(const s of this.steps)if(s.state==='active')s.state='failed';if(this.state!=='unavailable')this.state='error';this.error=message(e).includes('Full log:')?message(e):brief(e);this.message=this.error;for(const j of jobs)this.statuses.set(j.key,{state:'error',error:this.error});}
+    finally{this.endSteps();if(this.pending>1&&!this.service.stopping)this.waiting();else{this.phase='';this.publish();}
       // So the next job starts on the tree: open runners now that this job's boots and launches are over.
       if(!this.service.stopping&&used.length&&appId)await this.service.openRunners(used,appId).catch(()=>{});}
   }
@@ -269,7 +312,7 @@ export function nativeRequest(body:unknown):{project:string;run:string;capture:s
 export function nativeScreens(body:unknown,request:Request):Response{
   let app:AppPreviews|undefined,frames:NativeFrame[]=[],error='',closed=false,last='',unsubscribe=()=>{},poll:ReturnType<typeof setInterval>,keep:ReturnType<typeof setInterval>,controller:ReadableStreamDefaultController<Uint8Array>;
   const origin=`http://127.0.0.1:${new URL(request.url).port||80}`;
-  const publish=()=>{if(closed)return;const snapshot=error?{state:'error',phase:'',message:error,error,done:0,total:frames.length,frames:frames.map(f=>({id:f.id,state:'error',shot:'',width:0,height:0,capturedAt:0,error}))}:app?.snapshot(frames,origin);if(!snapshot)return;const text=JSON.stringify(snapshot);if(text!==last){last=text;controller.enqueue(new TextEncoder().encode(`data: ${text}\n\n`));}};
+  const publish=()=>{if(closed)return;const snapshot=error?{state:'error',phase:'',message:error,error,done:0,total:frames.length,steps:[],progress:-1,elapsed:0,estimate:0,frames:frames.map(f=>({id:f.id,state:'error',shot:'',width:0,height:0,capturedAt:0,error}))}:app?.snapshot(frames,origin);if(!snapshot)return;const text=JSON.stringify(snapshot);if(text!==last){last=text;controller.enqueue(new TextEncoder().encode(`data: ${text}\n\n`));}};
   const close=()=>{if(closed)return;closed=true;clearInterval(poll);clearInterval(keep);unsubscribe();request.signal.removeEventListener('abort',close);try{controller.close();}catch{}};
   const stream=new ReadableStream<Uint8Array>({start(c){controller=c;request.signal.addEventListener('abort',close,{once:true});if(request.signal.aborted){close();return;}
     keep=setInterval(()=>{if(!closed)controller.enqueue(new TextEncoder().encode(': keepalive\n\n'));},15000);keep.unref();
