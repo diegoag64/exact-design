@@ -2,6 +2,8 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { requireSupportedHost } from './platform.mjs';
+requireSupportedHost();
 const root = resolve(import.meta.dir, '..');
 const sdk = resolve(root, '.exact-sdk');
 const revision = '336a059fd1464bee7c61640afb7124ebf276d06d';

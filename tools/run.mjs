@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { requireSupportedHost } from './platform.mjs';
+requireSupportedHost();
 const root = resolve(import.meta.dir, '..');
 const args=process.argv.slice(2);
 const helper=['web','serve'].includes(args[0]) ? (await import('./discovery-server.ts')).startDiscoveryServer() : null;

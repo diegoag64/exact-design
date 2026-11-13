@@ -2,6 +2,54 @@
 
 The root [package.json](../package.json) defines the development commands. [tools/setup.mjs](../tools/setup.mjs) pins the Exact SDK revision, rejects a checkout at another revision, and builds the Contract compiler that validates source writes. Runtime adapters depend on that pin.
 
+## Develop on Windows with WSL2
+
+Run the studio and its helper in Ubuntu on WSL2. Open the studio in your Windows browser. Native Windows execution is unsupported by the pinned SDK, whose source-editing server requires Unix filesystem operations. The root launchers stop with these instructions before starting a native Windows build or helper.
+
+1. In an administrator PowerShell, install Ubuntu:
+
+	```powershell
+	wsl --install -d Ubuntu-24.04
+	```
+
+	Restart Windows if requested. Open Ubuntu and complete its username and password setup. Use `wsl --list --verbose` to check that Ubuntu uses version 2. See Microsoft's [WSL installation guide](https://learn.microsoft.com/en-us/windows/wsl/install) for installation problems.
+
+2. Run the remaining setup commands in Ubuntu. Install the build prerequisites:
+
+	```sh
+	sudo apt-get update
+	sudo apt-get install -y --no-install-recommends build-essential pkg-config libssl-dev unzip curl git ca-certificates
+	```
+
+3. Install [Bun](https://bun.sh/docs/installation) and [Rust through rustup](https://rust-lang.org/tools/install/):
+
+	```sh
+	curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.2"
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+	export PATH="$HOME/.bun/bin:$HOME/.cargo/bin:$PATH"
+	```
+
+4. Clone into the Linux home directory and run setup:
+
+	```sh
+	git clone https://github.com/diegoag64/exact-design.git ~/exact-design
+	cd ~/exact-design
+	bun run setup
+	sudo "$HOME/.bun/bin/bun" .exact-sdk/node_modules/playwright-core/cli.js install-deps chromium
+	```
+
+	Keep the checkout in the [WSL filesystem](https://learn.microsoft.com/en-us/windows/wsl/filesystems), such as `~/exact-design`. A checkout under `/mnt/c` adds filesystem overhead and shares Windows file semantics. Keep the SDK, dependencies, and build output in the Linux checkout too. A Windows checkout and a Linux clone are separate copies; edits do not synchronize automatically.
+
+5. Start the studio from that checkout:
+
+	```sh
+	bun run dev
+	```
+
+	In a second Ubuntu terminal, run `cd ~/exact-design` and `bun run demo`. Open `http://127.0.0.1:5173` in your Windows browser, or use the setup link printed by the demo. WSL forwards the loopback ports to Windows. Keep both terminals open and press Ctrl+C to stop each server.
+
+Run the checks below in Ubuntu too. Stop the studio before `test:ui` or `verify` because they use the same helper ports. If a URL does not load, confirm both servers are running and ports 5173, 5174, and 5175 are not occupied by another Windows or WSL process. Use `127.0.0.1` consistently for the editor and demo.
+
 ## Commands
 
 Commands run from the repository root after `bun run setup`.

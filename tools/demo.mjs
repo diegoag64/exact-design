@@ -1,5 +1,7 @@
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { requireSupportedHost } from './platform.mjs';
+requireSupportedHost();
 const root = resolve(import.meta.dir, '..');
 process.env.PATH = `${resolve(homedir(), '.cargo/bin')}:${process.env.PATH}`;
 process.env.EXACT_FEEDBACK = '0';
