@@ -30,6 +30,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Changed
 
+- Upgrade the Exact SDK from `336a059f` to `114bb88f`, including upstream fixes for development reloads, canvas rendering, and native builds. Adapt shared previews to the SDK's split runtime bundles so controls and data still synchronize across viewports.
 - Screen discovery no longer lists a protocol handler's landing route, such as Ember's `/open`, as a screen.
 - `test:ui` and `verify` now use isolated source copies and private ports, preserving running studio sessions and retaining verification logs.
 - Below 15% zoom, live canvas previews omit backdrop blur, which is only a few pixels wide at that size. Idle and pan with many visible previews no longer re-render each blur on every frame.

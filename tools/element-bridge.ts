@@ -1,6 +1,6 @@
 import {scopePreviewIdentity} from './preview-identity';
 import {eventMessages} from './event-stream';
-import {sharedRuntime} from './shared-runtime';
+import {sharedBundle,sharedRuntimeChunk} from './shared-runtime';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {decodeSpacing} from '../studio/spacing';
@@ -144,7 +144,11 @@ export class ElementBridge {
         if(!base||!base.startsWith('/.exact/gen/'))return new Response(null,{status:204});
         const bundle=await fetch(new URL(base+'app.js',this.target),{signal:req.signal,redirect:'error'});
         if(!bundle.ok)return this.engineRetry();
-        if(!sharedRuntime(await bundle.text()))return new Response(null,{status:204});
+        if(!await sharedBundle(await bundle.text(),async path=>{
+          const chunk=await fetch(new URL(path,new URL(base+'app.js',this.target)),{signal:req.signal,redirect:'error'});
+          if(!chunk.ok)throw new Error('Runtime chunk unavailable');
+          return chunk.text();
+        }))return new Response(null,{status:204});
         const safe=base.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
         return new Response(`<!doctype html><html><head><base href="${safe}"><script src="/__exact_design/event-stream-client.js"></script><script src="/__exact_design/shared-state-client.js"></script></head><body><script type="module">window.__exactDesignEngineReady={};try{await import('./app.js');}catch(error){if(error!==window.__exactDesignEngineReady)throw error;}</script></body></html>`,{headers:{'content-type':'text/html','cache-control':'no-store'}});
       }catch{return this.engineRetry();}
@@ -227,7 +231,16 @@ export class ElementBridge {
         return new Response(source,{status:response.status,headers:out});
       }
       if(url.pathname.endsWith('/app.js')&&response.ok){
-        const source=await response.text(),adapted=sharedRuntime(source);
+        const source=await response.text(),adapted=await sharedBundle(source,async path=>{
+          const chunk=await fetch(new URL(path,new URL(url.pathname,this.target)),{signal:req.signal,redirect:'error'});
+          if(!chunk.ok)throw new Error('Runtime chunk unavailable');
+          return chunk.text();
+        });
+        if(adapted){out.delete('etag');out.set('cache-control','no-store');}
+        return new Response(adapted??source,{status:response.status,headers:out});
+      }
+      if(/\/rt-[\w-]+\.js$/.test(url.pathname)&&response.ok){
+        const source=await response.text(),adapted=sharedRuntimeChunk(source);
         if(adapted){out.delete('etag');out.set('cache-control','no-store');}
         return new Response(adapted??source,{status:response.status,headers:out});
       }
