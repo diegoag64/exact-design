@@ -143,7 +143,12 @@ test('native screenshots load cross origin and fill their frame in both themes',
     if(failureMode&&body.run){
       const error='Fixture refresh failed.';
       const frames=body.frames.map((f:any)=>({id:f.id,state:failureMode==='frame'?'error':'ready',shot:`${url.origin}/native/shot/375/667.png`,width:375,height:667,capturedAt:1794540000000,error:failureMode==='frame'?error:''}));
-      return respond(new Response(`data: ${JSON.stringify({state:'error',phase:'',message:error,error:failureMode==='job'?error:'',done:1,total:1,frames})}\n\n`,{headers:{'content-type':'text/event-stream'}}));
+      let closed=false;
+      const stream=new ReadableStream({start(controller){
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({state:'error',phase:'',message:error,error:failureMode==='job'?error:'',done:1,total:1,frames})}\n\n`));
+        request.signal.addEventListener('abort',()=>{if(!closed){closed=true;controller.close();}},{once:true});
+      },cancel(){closed=true;}});
+      return respond(new Response(stream,{headers:{'content-type':'text/event-stream'}}));
     }
     return respond(fixture.nativeScreens(body,request));
   }if(url.pathname==='/discover')return respond(Response.json({routes:[{name:'Home',route:'/',pattern:'/'}],error:''}));return Response.json({});}});
@@ -177,6 +182,9 @@ test('native screenshots load cross origin and fill their frame in both themes',
       await refresh.click();
       await page.locator('[data-testid="view-2-native-error"]').waitFor();
       expect(await page.locator('[data-testid="view-2-native-state"]').count()).toBe(0);
+      const detail=page.locator('[data-testid="native-frame-error-detail"]');
+      expect(await detail.isVisible()).toBe(true);
+      expect(await detail.textContent()).toBe('Fixture refresh failed.');
       // The error occupies a compact chip rather than a frame-sized opaque panel.
       const chip=await page.locator('[data-testid="view-2-native-error"]').evaluate((text:HTMLElement)=>{const panel=text.parentElement!,frame=panel.parentElement!;return {panel:panel.getBoundingClientRect().height,frame:frame.getBoundingClientRect().height};});
       expect(chip.panel).toBeLessThan(chip.frame/2);

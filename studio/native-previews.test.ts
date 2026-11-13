@@ -92,7 +92,7 @@ test('install and a Reduce Motion change relaunch the app; otherwise it keeps ru
   expect(builds(f.calls)).toHaveLength(2);expect(named(f.calls,'install')).toHaveLength(2);expect(named(f.calls,'launch')).toHaveLength(2);
   // Unchanged settings and install: the running app is reused.
   await f.app.start('c',frames,['one']);expect(named(f.calls,'launch')).toHaveLength(2);expect(named(f.calls,'terminate')).toHaveLength(0);
-  const off=new NativePreviews({...f.serviceOptions,reduceMotion:false});const app=await off.app(f.appDir);await app.start('d',frames,['one']);
+  const off=new NativePreviews({...f.serviceOptions,reduceMotion:false});for(const [key,value] of f.service.installed)off.installed.set(key,value);const app=await off.app(f.appDir);await app.start('d',frames,['one']);
   expect(f.calls.filter(c=>c.args.includes('ReduceMotionEnabled')&&c.args.includes('write')).at(-1)!.args.at(-1)).toBe('false');
   expect(named(f.calls,'terminate')).toHaveLength(1);expect(named(f.calls,'launch')).toHaveLength(3);expect(named(f.calls,'install')).toHaveLength(2);
 });
@@ -116,9 +116,9 @@ test('a device that boots or launches in a job stays on pixels until the job end
   expect(cold.filter(n=>n==='prepare')).toHaveLength(1);expect(cold.indexOf('prepare')).toBeGreaterThan(cold.lastIndexOf('io'));expect(f.app.snapshot(frames).frames.map(f=>f.state)).toEqual(['ready','ready']);
   // Known running from the last job: before the first link, and again at the job's end.
   const before=f.calls.length;await f.app.start('b',frames,['one']);const warm=f.calls.slice(before).map(op).filter(n=>['prepare','mark','launch','io'].includes(n));expect(warm.slice(0,2)).toEqual(['prepare','mark']);expect(warm.at(-1)).toBe('prepare');
-  // Found running by a new helper process: also before the first link, with no launch.
+  // A new helper cannot trust the installed bundle: reinstall and prepare after the capture.
   const next=new NativePreviews({...f.serviceOptions});const app=await next.app(f.appDir);const third=f.calls.length;await app.start('c',frames,['one']);
-  const found=f.calls.slice(third),at=found.findIndex(c=>op(c)==='prepare');expect(found[at-1].args).toContain('launchctl');expect(found.slice(0,at).some(c=>op(c)==='mark')).toBe(false);expect(found.some(c=>op(c)==='launch')).toBe(false);
+  const found=f.calls.slice(third),at=found.findIndex(c=>op(c)==='prepare');expect(at).toBeGreaterThan(found.findIndex(c=>op(c)==='io'));expect(found.some(c=>op(c)==='install')).toBe(true);expect(found.some(c=>op(c)==='launch')).toBe(true);
   // A relaunch (here after an install) makes the job cold again.
   await writeFile(join(f.appDir,'app.contract'),'changed');const fourth=f.calls.length;await f.app.start('d',frames,['one']);const relaunched=f.calls.slice(fourth).map(op);
   expect(relaunched).toContain('launch');expect(relaunched.indexOf('prepare')).toBeGreaterThan(relaunched.lastIndexOf('io'));
@@ -248,6 +248,36 @@ test('different projects serialize all simulator work through one service',async
   const secondBuild=f.calls.findIndex(c=>c.args.includes(b.appDir)&&c.args.some(a=>a.endsWith('native-build.mjs')));
   expect(secondBuild).toBeGreaterThan(f.calls.indexOf(shots(f.calls)[1]));expect(shots(f.calls)).toHaveLength(4);
 });
+test('projects sharing a bundle ID reinstall their own build when switching back',async()=>{
+  const f=await fixture(),g=await fixture();await writeFile(join(g.appDir,'app.contract'),'different app');
+  const config=JSON.parse(await readFile(join(g.appDir,'app.json'),'utf8'));config.name='Other';await writeFile(join(g.appDir,'app.json'),JSON.stringify(config));
+  let installed='';const captured:string[]=[];
+  const run:Runner=async(args,env)=>{
+    if(args.some(a=>a.endsWith('native-build.mjs')))return (args.includes(b.appDir)?g.runner:f.runner)(args,env);
+    if(args[0]===SIMCTL&&args[1]==='install')installed=args.at(-1)!;
+    if(args.includes('--type=png'))captured.push(installed);
+    return f.runner(args,env);
+  };
+  const service=new NativePreviews({...f.serviceOptions,run,target:new Simulators(run,'darwin')});
+  const a=await service.app(f.appDir),b=await service.app(g.appDir);
+  await a.start('a',frames,['one']);await b.start('b',frames,['one']);await a.start('a-again',frames,['one']);
+  expect(named(f.calls,'install')).toHaveLength(3);expect(captured).toHaveLength(3);
+  expect(captured[0]).not.toBe(captured[1]);expect(captured[2]).toBe(captured[0]);
+  expect(a.snapshot(frames).frames[0].state).toBe('ready');await service.stop();
+});
+for(const action of ['retry','switch','shutdown'] as const)test(`failed accessibility session teardown finishes before ${action}`,async()=>{
+  const entered=deferred(),finish=deferred();let opens=0,closes=0;
+  const readiness=new NativeReadiness({open:async()=>{opens++;return {ask:async()=>({error:'runner disconnected'}),close:async()=>{closes++;entered.resolve();await finish.promise;}};},shoot:async()=>bmp()});
+  readiness.prepare('device','first');await Bun.sleep(0);expect(readiness.axReady('device')).toBe(true);
+  await readiness.mark('device','first');await entered.promise;
+  let done=false;let pending:Promise<void>|undefined;
+  if(action==='retry')readiness.prepare('device','first');
+  else pending=(action==='switch'?readiness.releaseOtherApp('device','second'):readiness.close()).then(()=>{done=true;});
+  await Bun.sleep(0);expect(opens).toBe(1);expect(done).toBe(false);
+  finish.resolve();await pending;await Bun.sleep(0);
+  if(action==='retry')expect(opens).toBe(2);else expect(done).toBe(true);
+  await readiness.close();expect(closes).toBe(action==='retry'?2:1);
+});
 test('switching apps waits for the old accessibility session to close',async()=>{
   const opened=deferred(),closed=deferred();let closes=0;
   const readiness=new NativeReadiness({open:async()=>{await opened.promise;return {ask:async()=>({}),close:async()=>{closes++;await closed.promise;}};},shoot:async()=>{throw new Error('unused');}});
@@ -292,9 +322,9 @@ test('missing runtime is unavailable and unsupported device errors only its fram
   const service=new NativePreviews({target:new Simulators(noRuntime,'darwin'),run:noRuntime,readiness:fakeReadiness(f.calls),cache:join(f.appDir,'.cache')});const app=await service.app(f.appDir);await app.start('none',frames);expect(app.state).toBe('unavailable');expect(app.error).toContain('No installed iOS Simulator runtime');
   const mixed=[{id:'ipad',device:'native-ipad-pro-11',route:'/'},frames[0]];await f.app.start('unsupported',mixed);const snapshot=f.app.snapshot(mixed);expect(snapshot.frames[0].error).toContain('No installed iOS Simulator runtime supports');expect(snapshot.frames[1].state).toBe('ready');expect(snapshot).toMatchObject({done:2,total:2});
 });
-test('new tokens queue behind the active job and cached installs survive service restart',async()=>{
+test('new tokens queue behind the active job and restart retains shots but reinstalls before capture',async()=>{
   const f=await fixture();await Promise.all([f.app.start('one',frames),f.app.start('two',frames,['one','two']),f.app.start('two',frames)]);expect(shots(f.calls)).toHaveLength(4);expect(named(f.calls,'launch')).toHaveLength(1);expect(named(f.calls,'install')).toHaveLength(1);
-  const next=new NativePreviews({...f.serviceOptions});const app=await next.app(f.appDir);await app.start('three',frames);expect(app.message).toBe('Native previews are up to date.');await app.start('four',frames,['one']);expect(builds(f.calls)).toHaveLength(1);expect(named(f.calls,'install')).toHaveLength(1);expect(shots(f.calls)).toHaveLength(5);
+  const next=new NativePreviews({...f.serviceOptions});const app=await next.app(f.appDir);await app.start('three',frames);expect(app.message).toBe('Native previews are up to date.');await app.start('four',frames,['one']);expect(builds(f.calls)).toHaveLength(1);expect(named(f.calls,'install')).toHaveLength(2);expect(shots(f.calls)).toHaveLength(5);
   await next.stop();expect(f.calls.at(-1)!.args).toEqual([SIMCTL,'shutdown','owned']);expect(f.calls.findLast(c=>c.args[0]==='ready')!.args).toEqual(['ready','close']);
 });
 test('device creation ignores names with wrong type or runtime',async()=>{

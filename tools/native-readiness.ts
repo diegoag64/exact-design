@@ -95,6 +95,7 @@ async function sdkTouches(udid:string,appId:string):Promise<TouchSession>{
 type Slot={appId:string;attempts:number;opening?:Promise<void>;session?:TouchSession};
 export class NativeReadiness implements Readiness {
   private slots=new Map<string,Slot>();private pixel=new Set<string>();private settled=new Map<string,Bitmap>();private closed=false;
+  private closing=new Map<string,Promise<void>>();
   readonly poll:number;readonly pixelPoll:number;readonly stable:number;readonly unchanged:number;readonly deadline:number;
   private now:()=>number;private sleep:(ms:number)=>Promise<void>;
   constructor(readonly options:ReadinessOptions){const d=readinessDefaults();this.poll=options.poll??d.poll;this.pixelPoll=options.pixelPoll??d.pixelPoll;this.stable=options.stable??d.stable;this.unchanged=options.unchanged??d.unchanged;this.deadline=options.deadline??d.deadline;this.now=options.now??Date.now;this.sleep=options.sleep??(ms=>Bun.sleep(ms));}
@@ -105,7 +106,7 @@ export class NativeReadiness implements Readiness {
   needsOpen(udid:string,appId:string){if(this.closed||this.usesPixels(udid))return false;const slot=this.slots.get(udid);return !slot||slot.appId!==appId||(!slot.session&&!slot.opening);}
   prepare(udid:string,appId:string){
     if(this.closed||this.usesPixels(udid))return;let slot=this.slots.get(udid);
-    if(slot&&slot.appId!==appId){this.slots.delete(udid);void slot.session?.close().catch(()=>{});slot=undefined;}
+    if(slot&&slot.appId!==appId){this.retire(udid,slot);slot=undefined;}
     if(!slot){slot={appId,attempts:0};this.slots.set(udid,slot);}
     if(!slot.session&&!slot.opening)this.start(udid,slot);
   }
@@ -113,18 +114,33 @@ export class NativeReadiness implements Readiness {
    *  pixels. */
   private start(udid:string,slot:Slot){
     slot.attempts++;
-    slot.opening=(this.options.open??sdkTouches)(udid,slot.appId).then(async session=>{
-      slot.opening=undefined;if(this.closed||this.slots.get(udid)!==slot){await session.close().catch(()=>{});return;}slot.session=session;
-    },e=>{slot.opening=undefined;if(this.closed||this.slots.get(udid)!==slot)return;this.lost(udid,slot,`the accessibility runner did not open (${String(e?.message??e).split('\n')[0].slice(0,300)})`);});
+    const closing=this.closing.get(udid);
+    slot.opening=(async()=>{
+      if(closing)await closing;
+      if(this.closed||this.slots.get(udid)!==slot)return;
+      try{slot.session=await (this.options.open??sdkTouches)(udid,slot.appId);}
+      catch(e){if(!this.closed&&this.slots.get(udid)===slot)this.lost(udid,slot,`the accessibility runner did not open (${String((e as Error)?.message??e).split('\n')[0].slice(0,300)})`);}
+    })().finally(()=>{slot.opening=undefined;});
+  }
+  /** Retain teardown until it finishes; a replacement runner must wait for the device lock and settings restoration. */
+  private trackClose(udid:string,close:()=>Promise<void>){
+    const pending=(this.closing.get(udid)??Promise.resolve()).then(close).catch(()=>{});
+    this.closing.set(udid,pending);
+    void pending.then(()=>{if(this.closing.get(udid)===pending)this.closing.delete(udid);});
+    return pending;
+  }
+  private retire(udid:string,slot:Slot){
+    this.slots.delete(udid);
+    return this.trackClose(udid,async()=>{await slot.opening;await slot.session?.close();slot.session=undefined;});
   }
   /** A session that failed to open or broke: the next `prepare` opens it once more, then pixels for good. A just-booted
    *  device can fail to answer its accessibility settings; the caller prepares again only once the app has settled. */
   private lost(udid:string,slot:Slot,reason:string){
-    const session=slot.session;slot.session=undefined;void session?.close().catch(()=>{});
+    const session=slot.session;slot.session=undefined;if(session)this.trackClose(udid,()=>session.close());
     if(slot.attempts<2&&!this.closed)return;
     this.slots.delete(udid);this.pixel.add(udid);this.options.notice?.(udid,reason);
   }
-  async releaseOtherApp(udid:string,appId:string){const slot=this.slots.get(udid);if(!slot||slot.appId===appId)return;this.slots.delete(udid);this.settled.delete(udid);this.pixel.delete(udid);await slot.opening;await slot.session?.close();}
+  async releaseOtherApp(udid:string,appId:string){const slot=this.slots.get(udid);if(slot&&slot.appId!==appId){this.settled.delete(udid);this.pixel.delete(udid);this.retire(udid,slot);}await this.closing.get(udid);}
   forget(udid:string){this.settled.delete(udid);}
   private async ask(session:TouchSession,request:Record<string,unknown>){try{return await session.ask(request);}catch(e){return {error:`the touch runner failed: ${String((e as Error)?.message??e)}`};}}
   async mark(udid:string,appId:string,blank=false):Promise<Mark>{
@@ -188,6 +204,7 @@ export class NativeReadiness implements Readiness {
     }
   }
   /** Ends every touch-runner session, including ones still opening, which puts each simulator's accessibility back. */
-  async close(){this.closed=true;const slots=[...this.slots.values()];this.slots.clear();this.settled.clear();
-    await Promise.all(slots.map(async slot=>{while(slot.opening)await slot.opening.catch(()=>{});await slot.session?.close().catch(()=>{});slot.session=undefined;}));}
+  async close(){this.closed=true;this.settled.clear();
+    for(const [udid,slot] of this.slots)this.retire(udid,slot);
+    await Promise.all(this.closing.values());}
 }

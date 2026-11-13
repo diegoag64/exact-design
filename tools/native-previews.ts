@@ -14,7 +14,7 @@ const brief=(e:unknown)=>{const lines=message(e).trim().split('\n');return (line
 export type NativeFrame={id:string;device:string;route:string;appearance?:Appearance};
 type Shot={signature:string;file:string;width:number;height:number;capturedAt:number};
 type FrameStatus='empty'|'queued'|'capturing'|'ready'|'stale'|'error';
-type DiskState={signature?:string;app?:string;installed:Record<string,string>;shots:Record<string,Shot>};
+type DiskState={signature?:string;app?:string;shots:Record<string,Shot>};
 /** What this helper process has already done to a booted device, so a later job can skip it: the link approved (scheme and
  *  bundle id), the Reduce Motion value applied, the appearance, and the app known to be running. */
 export type DeviceRecord={approved?:string;reduceMotion?:boolean;appearance?:Appearance;running?:string;
@@ -54,6 +54,8 @@ export class NativePreviews {
   readonly target:NativeTarget;readonly run:Runner;readonly cache:string;readonly readiness:Readiness;
   /** Per booted device: dropped when a job's scan finds the device shut down. */
   readonly records=new Map<string,DeviceRecord>();
+  /** Installation ownership is shared by projects, keyed by device and bundle ID. Unknown after a helper restart. */
+  readonly installed=new Map<string,string>();
   /** Devices booting or launching their app now: a cold boot waits for them when memory is short. */
   readonly starting=new Set<string>();
   private noted=new Set<string>();private jobs=0;private tail=Promise.resolve();private stopped?:Promise<void>;
@@ -115,11 +117,11 @@ export class NativePreviews {
   }
   async app(dir:string){dir=await realpath(dir);let app=this.apps.get(dir);if(!app){app=AppPreviews.open(this,dir);this.apps.set(dir,app);}return app;}
   /** Stop after the active step, skip queued jobs, restore accessibility, and shut down owned simulators. */
-  stop(){this.stopping=true;return this.stopped??=(async()=>{await this.tail;try{await this.readiness.close();}finally{await this.target.stop();this.records.clear();}})();}
+  stop(){this.stopping=true;return this.stopped??=(async()=>{await this.tail;try{await this.readiness.close();}finally{await this.target.stop();this.records.clear();this.installed.clear();}})();}
 }
 type Job={key:string;frame:NativeFrame};
 export class AppPreviews {
-  readonly key:string;readonly dir:string;private disk:DiskState={installed:{},shots:{}};private hashes=new Map<string,{mtime:number;size:number;hash:string}>();
+  readonly key:string;readonly dir:string;private disk:DiskState={shots:{}};private hashes=new Map<string,{mtime:number;size:number;hash:string}>();
   private tokens=new Set<string>();private tail=Promise.resolve();private listeners=new Set<()=>void>();private statuses=new Map<string,{state:FrameStatus;error:string}>();
   signature='';state='idle';phase='';message='';error='';done=0;total=0;
   private constructor(readonly service:NativePreviews,readonly appDir:string){this.key=hash(appDir).slice(0,16);this.dir=join(service.cache,this.key);}
@@ -181,7 +183,8 @@ export class AppPreviews {
     if(!booted||!record){this.progress('boot',`Starting ${name}…`);if(!booted)await this.service.bootGate(id);this.service.checkRunning();const fresh=await target.boot(id);record={coldAt:fresh?this.service.now():record?.coldAt};this.service.records.set(id,record);}
     this.service.checkRunning();readiness.forget?.(id);
     let relaunch=false;
-    if(this.disk.installed[id]!==c.signature){this.progress('install',`Installing ${c.name} on ${name}…`);await target.install(id,this.disk.app!);this.disk.installed[id]=c.signature;relaunch=true;record={coldAt:record.coldAt};this.service.records.set(id,record);}
+    const installKey=`${id}\0${c.appId}`,buildKey=`${this.key}\0${c.signature}`;
+    if(this.service.installed.get(installKey)!==buildKey){this.progress('install',`Installing ${c.name} on ${name}…`);this.service.installed.delete(installKey);await target.install(id,this.disk.app!);this.service.installed.set(installKey,buildKey);relaunch=true;record={coldAt:record.coldAt};this.service.records.set(id,record);}
     this.service.checkRunning();const approval=`${c.scheme}\0${c.appId}`;if(record.approved!==approval){await target.approve(id,c.scheme,c.appId);record.approved=approval;}
     this.service.checkRunning();const reduce=this.service.reduceMotion;if(record.reduceMotion!==reduce){if(await target.reduceMotion(id,reduce))relaunch=true;record.reduceMotion=reduce;}
     this.service.checkRunning();const r=record;r.appearance??=await target.appearance(id);

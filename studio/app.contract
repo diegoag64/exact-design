@@ -344,6 +344,7 @@ component Studio
   state nativeCapture = ""
   state nativeSeen = ""
   resource native = native(doc.nativeRequests, nativeRun, nativeCapture) as shape NativeStatus else empty()
+  derive nativeFrameError = native.error != "" ? native.error : match first(native.frames.filter(f => f.id == doc.active)) { case some(f) => f.error, case none => "" }
   action refreshNative
     nativeRun = `${time.epochAtZero + performanceNow()}`
     nativeCapture = ""
@@ -1349,6 +1350,8 @@ component Studio
                                 button press=refreshNative disabled=(native.state == "working") class=RowButton color="ink.secondary" data-tip="Refresh all native previews · Capture frames whose screenshot is missing or stale" testId="native-refresh-all"
                                   Icon(name="refresh-cw", size=14, angle=0)
                                   text "Refresh all native previews"
+                                if nativeFrameError != ""
+                                  text nativeFrameError role="alert" font="type.caption" color="ink.danger" testId="native-frame-error-detail"
                       for n in doc.layers.filter(n => n.id == doc.selected) key=n.id
                         column class=PanelSection
                           row class=SectionHead gap=8
@@ -1779,7 +1782,7 @@ component NativeFrame
           if error == "" and frame.state == "empty"
             text "Select Refresh preview to capture." font="type.caption" text-align="center"
       if error != "" and frame.shot != ""
-        row class=FloatingBar position="absolute" top=12 left=12 right=12 padding="4px 8px" gap=8 color="ink.danger" data-tip=error aria-label=error
+        row class=FloatingBar position="absolute" top=12 left=12 right=12 padding="4px 8px" gap=8 color="ink.danger"
           Icon(name="circle-alert", size=14, angle=0)
           text "Refresh failed · previous capture" font="type.caption" testId=`${id}-native-error`
       if error == "" and (frame.state == "queued" or frame.state == "capturing" or frame.state == "stale")
