@@ -1,5 +1,7 @@
 # Exact Design
 
+> **Very experimental.** Expect bugs and breaking changes.
+
 **A visual editor for Exact apps.**
 
 Compare phone, tablet, and desktop layouts on one canvas. Edit layout and appearance in live previews, then review your draft before applying it to source.
@@ -19,7 +21,7 @@ bun run setup
 bun run dev
 ```
 
-Open [the studio](http://127.0.0.1:5173). Setup installs the pinned Exact SDK in `.exact-sdk`. The editor also uses port 5175 for its local preview helper.
+Open [the studio](http://127.0.0.1:5173) at `http://127.0.0.1:5173`. Setup installs the pinned Exact SDK in `.exact-sdk`. The editor also uses port 5175 for its local preview helper.
 
 ## Try the demo
 
