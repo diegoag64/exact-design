@@ -160,6 +160,9 @@ test('native screenshots load cross origin and fill their frame in both themes',
       expect(geometry.width).toBe(375);expect(geometry.height).toBe(667);expect(geometry.src).toContain('http://127.0.0.1:'+helper.port+'/native/shot/');
       expect(geometry.boxWidth).toBeCloseTo(geometry.frameWidth,1);expect(geometry.boxHeight).toBeCloseTo(geometry.frameHeight,1);
     }
+    // The only frame is current, so refreshing all captures nothing and says so.
+    await page.locator('[data-testid="native-refresh-all"]:not([disabled])').click();
+    await page.locator('[data-testid="native-progress"]',{hasText:'Native previews are up to date.'}).waitFor({timeout:5000});
     expect(errors).toEqual([]);
   }finally{await page?.context().close();await suite?.browser.close();child.kill('SIGTERM');await child.exited;helper.stop(true);await rm(temp,{recursive:true,force:true});}
 },60000);

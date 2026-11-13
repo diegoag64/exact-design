@@ -114,29 +114,48 @@ Native frames show screenshots of the app's native build running in the iOS Simu
 
 1. **Find the app.** The studio sends only the project URL. The helper reads that server's `manifest.json` and matches it, by `name` and `protocol_handlers`, against registered app folders: `examples/ember` and each entry of `EXACT_DESIGN_NATIVE_APPS` (separated by `:`, absolute or relative to the repository). The helper never builds a folder named by a request.
 2. **Build.** `tools/native-build.mjs` runs the SDK's per-app CLI with `ios --no-install`, as `tools/demo.mjs` does. The input signature hashes the app folder's files (skipping `.exact`, `target`, `node_modules`, `dist` and dot-folders), the SDK revision and the Xcode version. An unchanged signature skips the build and the reinstall. The signature is taken again after a build, because the first iOS build adds `host.ios` to `app.json`. A first build needs 20 GB free and any build 10 GB.
-3. **Boot.** Each device runs on the newest installed iOS runtime that supports its device type. A runtime can support only a few types; on the development Mac, iOS 27.1 runs only iPhone Duo, so iPhone 17 uses iOS 27.0. The helper creates and reuses simulators named `Exact Design <device>`, never touches others, overrides the status bar to 9:41, and keeps the ones it booted running until `bun run dev` stops.
-4. **Open and capture.** The helper relaunches the app with `SIMCTL_CHILD_EXACT_LAUNCH_URL=<scheme>://<route>`. The Exact iOS host reads that at launch like an incoming link. `simctl openurl` is not used: iOS answers it with an "Open in …?" alert that stays on screen until the simulator restarts. After a boot or an install, the first launch can take longer than any fixed wait, so the helper opens the app once at its root and waits 6 s (`EXACT_DESIGN_NATIVE_FIRST_SETTLE_MS`). Each route then waits 2.5 s (`EXACT_DESIGN_NATIVE_SETTLE_MS`) and takes screenshots with `simctl io screenshot` a second apart until two match, so a sheet has finished presenting. An animated screen never matches and is taken after 12 s (`EXACT_DESIGN_NATIVE_STABLE_MS`). After each screenshot the helper checks the app is still running. Devices run two at a time (`EXACT_DESIGN_NATIVE_PARALLEL`), and each device's routes run in turn.
+3. **Prepare devices.** Each device runs on the newest installed iOS runtime that supports its device type. A runtime can support only a few types; on the development Mac, iOS 27.1 runs only iPhone Duo, so iPhone 17 uses iOS 27.0. The helper creates and reuses simulators named `Exact Design <device>` and never touches others. Each job lists the simulators once (`simctl list devices`). A device is prepared once per helper process: boot, the 9:41 status bar, install when the build changed, approval of the app's link scheme, and Reduce Motion. A later job skips these unless the device was shut down or the app reinstalled. The helper finds simctl once with `xcrun --find simctl` and runs it directly. It keeps the simulators it booted running until `bun run dev` stops.
+4. **Open and capture.** The scheme approval (a `com.apple.launchservices.schemeapproval` default) lets `simctl openurl` open the app's links without the "Open in …?" prompt. The app keeps running between screens and jobs. It is launched only when it is not running, and relaunched only after an install or a Reduce Motion change. For each screen the helper opens the root link `<scheme>://`, which dismisses a sheet and leaves a full-screen route, waits until the screen is ready, opens `<scheme>://<route>`, waits again, and takes a PNG with `simctl io screenshot`. For `/`, the root link is the capture. A screen that does not become ready is reset and opened once more; a second miss marks that frame as an error and keeps its previous screenshot.
+5. **Readiness.** By default the helper reads the app's accessibility tree through the SDK's touch runner (`.exact-sdk/host/apple/touches.mjs`), one session per device. A screen is ready when the app is in front, shows no alert and an Exact route container (`exact-navigation-*`), and its elements (type, identifier and frame, not text) have held still for 600 ms. They must also differ from the screen before the link, or 1500 ms must have passed, for a link to the screen already shown. A transition can hold still without a route container, so stillness alone is not enough. The deadline is 8 s, twice that within 60 s of a boot or launch, one and a half times on pixels, and two and a half times for a first launch. Without a runner the helper compares BMP screenshots: ready when two in a row differ in under 0.5 % of sampled pixels and, unless 1500 ms have passed, differ from the screen before the link. Starting a runner is heavy, so runners open only between jobs, or at once when the app is already running at the start of a job; until then, and when one fails to open twice, the device uses screenshots.
+6. **Reduce Motion.** Managed simulators run with Reduce Motion on. The stills look the same, but Ember's animated backgrounds then hold still between screenshots; without it no screen ever stops changing.
+7. **Choose frames.** **Refresh all native previews** captures only frames that are not current for the build, device, route and appearance; when every frame is current the job ends at once. **Refresh preview** captures the frames it names again. Each frame has an appearance (`light` or `dark`); a device's frames are grouped by appearance, switched with `simctl ui appearance`, and the device goes back to light at the end.
+8. **Run devices in parallel.** Devices run together up to `EXACT_DESIGN_NATIVE_PARALLEL`. Booted devices go first. At the start of a job, each device that is not booted needs 2 GB of available memory (`vm_stat`: free, inactive and speculative pages). Before each cold boot, if memory is short and another device is still booting or launching, the helper waits for it (up to 90 s) and then boots anyway.
 
-The cache lives in `.exact/native-previews/<app key>/` (`EXACT_DESIGN_NATIVE_CACHE` moves it): `state.json`, `build.log`, and the latest screenshot for each device and route.
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `EXACT_DESIGN_NATIVE_APPS` | none | Extra app folders, separated by `:` |
+| `EXACT_DESIGN_NATIVE_CACHE` | `.exact/native-previews` | Cache folder |
+| `EXACT_DESIGN_NATIVE_PARALLEL` | 4 | Devices at once, before the memory guard |
+| `EXACT_DESIGN_NATIVE_REDUCE_MOTION` | on | `0` turns Reduce Motion off |
+| `EXACT_DESIGN_NATIVE_READINESS` | `ax` | `pixel` uses screenshots only and never opens a touch runner |
+| `EXACT_DESIGN_NATIVE_POLL_MS` | 300 | Accessibility tree poll interval |
+| `EXACT_DESIGN_NATIVE_STABLE_MS` | 600 | How long a screen's elements must hold still |
+| `EXACT_DESIGN_NATIVE_READY_MS` | 8000 | Readiness deadline before multipliers |
+| `EXACT_DESIGN_NATIVE_AX_MIN_GB` | 0 | Available memory each touch runner needs to start; 0 means no check |
 
-Measured with Ember on the development Mac: a cold build took 343 s and about 5.5 GB; a rebuild with no changes took 18 s; booting a new simulator took 32 s and a booted one 9 s; installing took 16 s; each route took 3–4 s. A cached refresh of two routes took 11 s. On a heavily loaded Mac, 16 frames on four devices took about 7 minutes with three cold boots, and 95 s when only capturing.
+The cache lives in `.exact/native-previews/<app key>/` (`EXACT_DESIGN_NATIVE_CACHE` moves it): `state.json`, `build.log`, and the latest screenshot for each device, route and appearance. Readiness screenshots go to `.exact/native-previews/probe/`.
 
-`studio/native-previews.test.ts` tests the pipeline with a fake command runner. Its end-to-end test runs only with `EXACT_DESIGN_NATIVE_E2E=1` on a Mac with Xcode: it captures Ember's `/` and `/diary/add` on iPhone 17.
+Measured with Ember on the development Mac: a cold build took 343 s and about 5.5 GB; a rebuild with no changes took 18 s; installing took 16 s.
+
+Measured during capture-loop development on this 16 GB Mac with 4 devices × 4 routes, at load averages of 150–900 from the simulators themselves and other work. The old loop, which relaunched the app for each screen: cold 326 s, warm full refresh 313 s (about 20 s per screen), a refresh with no changes 313 s because it recaptured everything, and no single-frame refresh. The current loop: cold 210–255 s; warm full refresh 24 s with every touch runner up, 84 s on screenshots only, and up to 146 s while runners were failing to start; a refresh with no changes is instant ("up to date"); a single frame takes 4.4–7.2 s with the accessibility tree and 21 s on screenshots. One warm device takes about 3.5 s per screen with the tree; iPhone 17 alone captured 2 screens in 7.4 s. These runs used different readiness settings and system loads, so they are not a controlled speedup comparison. Four simulators make a 16 GB Mac swap: use fewer devices, or set `EXACT_DESIGN_NATIVE_READINESS=pixel` if touch runners fail to start.
+
+`studio/native-previews.test.ts` tests the pipeline with a fake command runner, fake readiness and a fake clock. Its end-to-end test runs only with `EXACT_DESIGN_NATIVE_E2E=1` on a Mac with Xcode: it captures Ember's `/` and `/diary/add` on iPhone 17, captures them again warm, and checks that a refresh with no changes captures nothing. Run it from the repository root with `EXACT_DESIGN_NATIVE_E2E=1 bun run test`.
 
 ### macOS later
 
-`tools/simulators.ts` keeps the platform steps behind `NativeTarget`. A macOS target would build with `mac` instead of `ios --no-install`, launch the `.app` with `EXACT_LAUNCH_URL` in its environment, size its window to the frame, and capture that window with `screencapture -l <window id>`. The catalog would gain `platform: 'macos'` devices; the protocol already carries the device per frame.
+`tools/simulators.ts` keeps the platform steps behind `NativeTarget`. A macOS target would build with `mac` instead of `ios --no-install`, launch the `.app` once and open each route with its link (`open <scheme>://<route>`), size its window to the frame, and capture that window with `screencapture -l <window id>`; readiness would compare those window captures. The catalog would gain `platform: 'macos'` devices; the protocol already carries the device per frame.
 
 ### Helper protocol
 
 `POST /native` with a JSON body answers with `text/event-stream`. Each `data:` line is a complete JSON snapshot; the stream stays open and sends a new snapshot whenever anything in it changes, including a frame going stale after a source edit.
 
 ```json
-{"project":"http://127.0.0.1:5174","run":"","frames":[{"id":"view-7","device":"native-iphone-17","route":"/diary/add"}]}
+{"project":"http://127.0.0.1:5174","run":"","capture":[],"frames":[{"id":"view-7","device":"native-iphone-17","route":"/diary/add","appearance":"light"}]}
 ```
 
-- `project` is the connected project's local origin. `device` is a catalog slug from `studio/devices.ts` whose platform is `ios`. `route` is the screen's route.
-- `run` is `""` to report status only. A new non-empty token captures every listed frame once, building first when the inputs changed. Repeating a token the helper has already started reports that job and never starts it again; the studio sends a fresh token for each **Refresh** press.
+- `project` is the connected project's local origin. `device` is a catalog slug from `studio/devices.ts` whose platform is `ios`. `route` is the screen's route. `appearance` is `light` or `dark`; it defaults to `light`, and a screenshot is kept per device, route and appearance.
+- `run` is `""` to report status only. A new non-empty token starts one capture job, building first when the inputs changed. Repeating a token the helper has already started reports that job and never starts it again; the studio sends a fresh token for each press.
+- `capture` chooses what that job captures. Empty or absent (**Refresh all native previews**): every listed frame that is not `ready`, so a frame already current for the build and its device is skipped; when every frame is current the job ends at once with "Native previews are up to date." A list of frame ids (**Refresh preview**): exactly those frames, captured again even when current. `capture` without a new `run` token does nothing.
 
 ```json
 {"state":"working","phase":"build","message":"Building Ember for iOS…","error":"","done":0,"total":4,
@@ -149,7 +168,7 @@ Measured with Ember on the development Mac: a cold build took 343 s and about 5.
 | `phase` | `""`, `build`, `boot`, `install`, `capture` while `working` |
 | `message` | One short sentence for the status toast |
 | `error` | The job's failure, or why native previews are unavailable |
-| `done`, `total` | Frames captured in the current job, of those it will capture |
+| `done`, `total` | Frames captured in the current job, of those it will capture (skipped current frames are not counted) |
 | `frames[].state` | `empty` (never captured), `queued`, `capturing`, `ready`, `stale` (a screenshot exists but the app's inputs changed since), `error` |
 | `frames[].shot` | Absolute URL of the latest screenshot, or `""`. A `stale`, `queued` or `capturing` frame keeps its previous screenshot |
 | `frames[].width`, `height` | Screenshot size in device pixels, or 0 |

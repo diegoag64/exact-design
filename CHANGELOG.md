@@ -6,7 +6,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Added
 
-- Native iOS frames. The **Native iOS** viewport set adds iPhone SE, iPhone 17, iPhone 17 Pro Max and iPad Pro 11 frames that show the app's native build running in the iOS Simulator, with its UIKit tab bar, sheets and Liquid Glass controls. **Refresh native previews** builds the app when its source changed, opens each route through its deep link, and captures it; frames show progress, stale screenshots and errors such as missing Xcode or low disk space. Native frames are read-only screenshots.
+- Native iOS frames. The **Native iOS** viewport set adds iPhone SE, iPhone 17, iPhone 17 Pro Max and iPad Pro 11 frames that show the app's native build running in the iOS Simulator, with its UIKit tab bar, sheets and Liquid Glass controls. **Refresh all native previews** builds the app when its source changed, opens each route through its deep link, and captures the frames whose screenshot is missing or stale, and **Refresh preview** captures one frame again; frames show progress, stale screenshots and errors such as missing Xcode or low disk space. Native frames are read-only screenshots. Refreshes keep the app running between captures and reuse current screenshots and builds.
 - Ember opens any route from a `web+ember://` link, and the first native build records its iOS host in `app.json`.
 
 - Setup links accept `show`, a list of screen names or routes that start visible. The link still adds every screen, but the others start hidden and don't load their previews. The Ember link printed by `bun run demo` shows Today, Welcome and Onboarding Goal.

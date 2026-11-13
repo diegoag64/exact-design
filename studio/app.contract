@@ -338,10 +338,24 @@ component Studio
   resource viewport = exactViewport() as shape Viewport
   resource doc = document() with time.epochAtZero as shape Document else empty(name="Untitled")
   state discoveryRevision = 0
+  // Each press sends a fresh run token. nativeCapture lists the frame ids to capture again
+  // (comma-separated); empty refreshes every frame that is not current.
   state nativeRun = ""
-  resource native = native(doc.nativeRequests, nativeRun) as shape NativeStatus else empty()
+  state nativeCapture = ""
+  state nativeSeen = ""
+  resource native = native(doc.nativeRequests, nativeRun, nativeCapture) as shape NativeStatus else empty()
   action refreshNative
     nativeRun = `${time.epochAtZero + performanceNow()}`
+    nativeCapture = ""
+  action refreshNativeFrame(id: string)
+    nativeRun = `${time.epochAtZero + performanceNow()}`
+    nativeCapture = id
+  action dismissNative
+    nativeSeen = nativeRun
+  // A finished refresh's message ("Native previews updated.", "… up to date.") shows briefly, like Saved.
+  derive nativeDone = nativeRun != "" and nativeSeen != nativeRun and native.state == "idle" and native.message != "" and not pending(native)
+  task nativeFade when nativeDone key=nativeRun
+    after(2400, dismissNative)
   resource previews = previews(doc.previewRequests) as shape PreviewSizes else empty()
   resource renderedScene = scene(doc.drawing, previews.signature) with time.epochAtZero as shape Document else empty()
   derive scene = renderedScene.active != "" ? renderedScene : doc
@@ -924,7 +938,8 @@ component Studio
           if doc.source != "" and doc.platform != "ios"
             MenuItem(label="Edit app design", icon="mouse-pointer-2", shortcut="", disabled=designWriting, destructive=false, menu="studio-menu", testId="menu-edit", press=startEditing)
           if doc.platform == "ios"
-            MenuItem(label="Refresh native previews", icon="refresh-cw", shortcut="", disabled=(native.state == "working"), destructive=false, menu="studio-menu", testId="menu-native-refresh", press=refreshNative)
+            MenuItem(label="Refresh preview", icon="refresh-cw", shortcut="", disabled=(native.state == "working"), destructive=false, menu="studio-menu", testId="menu-native-refresh", press=refreshNativeFrame(doc.active))
+            MenuItem(label="Refresh all native previews", icon="refresh-cw", shortcut="", disabled=(native.state == "working"), destructive=false, menu="studio-menu", testId="menu-native-refresh-all", press=refreshNative)
           if doc.frameSelected
             MenuItem(label="Duplicate screen", icon="copy", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-duplicate", press=command("duplicate", ""))
             for preset in ["Phone", "Tablet", "Desktop"] key=preset
@@ -1053,9 +1068,9 @@ component Studio
                   if not rightOpen
                     column class=FloatingBar align-items="stretch" margin-left="auto" max-width="100%" flex-shrink=0 padding=0 pointer-events="auto"
                       ActionBar(compact=true, narrow=(viewport.width < 700), minimal=(leftOpen and viewport.width < 700), canUndo=(editing ? appCanUndo : doc.canUndo), canRedo=(not editing and doc.canRedo), canExport=(doc.source == ""), canPreview=not editing, open=false, undo=command("undo", ""), redo=command("redo", ""), save=command("save", ""), preview=togglePreview, exportCode=toggleCode, toggle=toggleRight)
-                if native.state == "working" or native.error != ""
+                if native.state == "working" or native.error != "" or nativeDone
                   row class=FloatingBar position="absolute" bottom=148 left="50%" translate="-50% 0" padding="8px 12px" gap=8 max-width="calc(100% - 32px)" z-index=2 role="status"
-                    Icon(name=(native.error != "" ? "circle-alert" : "refresh-cw"), size=14, angle=0)
+                    Icon(name=(native.error != "" ? "circle-alert" : native.state == "working" ? "refresh-cw" : "check"), size=14, angle=0)
                     text (native.error != "" ? native.error : native.message) font="type.body" testId="native-progress"
                 if doc.status != "" and doc.status != statusSeen
                   row class=FloatingBar position="absolute" bottom=68 left="50%" translate="-50% 0" height=32 padding="0 12px" gap=8 max-width="calc(100% - 32px)" min-width=0 z-index=2 role="status" color=(doc.status == "Saved" ? "ink.secondary" : "ink.danger")
@@ -1327,9 +1342,13 @@ component Studio
                                 button press=prop("heightMode", "content") class=SmallTool width=28 height=28 aria-label="Fit screen height to content" aria-pressed=v.autoHeight data-tip=(v.autoHeight ? "Height fits content · enter a height to fix it" : "Fit height to content") background-color=(v.autoHeight ? "surface.selected" : "surface.field") color=(v.autoHeight ? "ink.selected" : "ink.secondary") testId="auto-height"
                                   Icon(name="fold-vertical", size=14, angle=0)
                             if v.platform == "ios"
-                              button press=refreshNative disabled=(native.state == "working") class=SecondaryButton testId="native-refresh"
-                                Icon(name="refresh-cw", size=16, angle=0)
-                                text "Refresh native previews"
+                              column gap=4
+                                button press=refreshNativeFrame(v.id) disabled=(native.state == "working") class=SecondaryButton data-tip="Refresh preview · Capture this frame again in the iOS Simulator" testId="native-refresh"
+                                  Icon(name="refresh-cw", size=16, angle=0)
+                                  text "Refresh preview"
+                                button press=refreshNative disabled=(native.state == "working") class=RowButton color="ink.secondary" data-tip="Refresh all native previews · Capture frames whose screenshot is missing or stale" testId="native-refresh-all"
+                                  Icon(name="refresh-cw", size=14, angle=0)
+                                  text "Refresh all native previews"
                       for n in doc.layers.filter(n => n.id == doc.selected) key=n.id
                         column class=PanelSection
                           row class=SectionHead gap=8
@@ -1758,7 +1777,7 @@ component NativeFrame
           text "Native preview" font="type.heading" color="ink.primary"
           text (error != "" ? error : frame.state == "queued" or frame.state == "capturing" ? "Waiting for the iOS build…" : "Not captured yet") font="type.body" text-align="center" testId=`${id}-native-state`
           if error == "" and frame.state == "empty"
-            text "Select Refresh native previews to capture." font="type.caption" text-align="center"
+            text "Select Refresh preview to capture." font="type.caption" text-align="center"
       if frame.state == "queued" or frame.state == "capturing" or frame.state == "stale"
         row class=FloatingBar position="absolute" top=12 left=12 padding="4px 8px" gap=8
           Icon(name=(frame.state == "stale" ? "history" : "refresh-cw"), size=14, angle=0)

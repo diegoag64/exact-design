@@ -8,21 +8,25 @@ export function nativeScreens(body:any,request:Request):Response {
   if(body?.mode==='reset'){cache.clear();runs.clear();return Response.json({ok:true});}
   if(!body||typeof body.project!=='string'||!Array.isArray(body.frames))return new Response('Invalid native request',{status:400});
   const frames:Frame[]=body.frames.map((f:any)=>({...cache.get(key(body.project,f))??{state:'empty',shot:'',width:0,height:0,capturedAt:0,error:''},id:f.id}));
-  const run=JSON.stringify([body.project,body.run]),capture=!!body.run&&!runs.has(run);
-  if(capture)runs.add(run);
+  const run=JSON.stringify([body.project,body.run]),fresh=!!body.run&&!runs.has(run);
+  if(fresh)runs.add(run);
+  // `capture` lists frame ids to capture again even when current; empty captures every frame that is not `ready`.
+  const ids=Array.isArray(body.capture)?body.capture.filter((id:unknown)=>typeof id==='string'):[];
+  const jobs=fresh?frames.flatMap((frame,index)=>(ids.length?ids.includes(frame.id):frame.state!=='ready')?[{frame,input:body.frames[index]}]:[]):[];
   let timer:ReturnType<typeof setTimeout>|undefined,closed=false;
   const stream=new ReadableStream<Uint8Array>({start(controller){
     let done=0;
-    const emit=(working:boolean)=>{if(!closed)controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({state:working?'working':'idle',phase:working?'capture':'',message:working?`Capturing ${Math.min(done+1,frames.length)} of ${frames.length}…`:'',error:'',done,total:frames.length,frames})}\n\n`));};
+    const emit=(state:'working'|'idle',message:string)=>{if(!closed)controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({state,phase:state==='working'?'capture':'',message,error:'',done,total:jobs.length,frames})}\n\n`));};
+    const working=()=>emit('working',`Capturing ${Math.min(done+1,jobs.length)} of ${jobs.length}…`);
     const stop=()=>{closed=true;clearTimeout(timer);try{controller.close();}catch{}};
     request.signal.addEventListener('abort',stop,{once:true});
-    if(!capture){emit(false);return;}
-    frames.forEach(f=>{f.state='queued';});emit(true);
-    let index=0;
+    if(!fresh){emit('idle','');return;}
+    if(!jobs.length){emit('idle','Native previews are up to date.');return;}
+    jobs.forEach(({frame})=>{frame.state='queued';});working();
     const next=()=>{
       if(closed)return;
-      if(index===frames.length){emit(false);return;}
-      const frame=frames[index],input=body.frames[index];frame.state='capturing';emit(true);
+      if(done===jobs.length){emit('idle','Native previews updated.');return;}
+      const {frame,input}=jobs[done]!;frame.state='capturing';working();
       timer=setTimeout(()=>{
         const device=nativeDevice(input.device);
         // A route naming `fail` fails; one naming `stale` reports a screenshot older than the app's source.
@@ -32,7 +36,7 @@ export function nativeScreens(body:any,request:Request):Response {
           frame.width=device?.width??375;frame.height=device?.height??667;frame.capturedAt=1794540000000;
           frame.shot=`${new URL(request.url).origin}/native/shot/${frame.width}/${frame.height}.png`;
         }
-        cache.set(key(body.project,input),{...frame});done++;index++;emit(true);next();
+        cache.set(key(body.project,input),{...frame});done++;working();next();
       },200);
     };
     timer=setTimeout(next,200);

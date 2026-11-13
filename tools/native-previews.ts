@@ -5,16 +5,27 @@ import {resolve,join,delimiter} from 'node:path';
 import {homedir} from 'node:os';
 import {nativeDevice} from '../studio/devices';
 import {screenRoute,localPreview} from '../studio/project';
-import {command,Simulators,type Runner,type NativeTarget} from './simulators';
+import {command,Simulators,availableMemory,deviceParallelism,BOOT_MEMORY,type Runner,type NativeTarget,type Appearance} from './simulators';
+import {NativeReadiness,type Readiness,type Outcome,type Mark} from './native-readiness';
 const root=resolve(import.meta.dir,'..');
 const hash=(s:string|Buffer)=>createHash('sha256').update(s).digest('hex');
 const message=(e:unknown)=>e instanceof Error?e.message:String(e);
 const brief=(e:unknown)=>{const lines=message(e).trim().split('\n');return (lines.findLast(l=>/error:|error\[|failed/i.test(l))??lines.at(-1)??'Native preview failed.').slice(0,600);};
-export type NativeFrame={id:string;device:string;route:string};
+export type NativeFrame={id:string;device:string;route:string;appearance?:Appearance};
 type Shot={signature:string;file:string;width:number;height:number;capturedAt:number};
 type FrameStatus='empty'|'queued'|'capturing'|'ready'|'stale'|'error';
 type DiskState={signature?:string;app?:string;installed:Record<string,string>;shots:Record<string,Shot>};
-const frameKey=(f:NativeFrame)=>hash(`${f.device}\0${f.route}`).slice(0,32);
+/** What this helper process has already done to a booted device, so a later job can skip it: the link approved (scheme and
+ *  bundle id), the Reduce Motion value applied, the appearance, and the app known to be running. */
+export type DeviceRecord={approved?:string;reduceMotion?:boolean;appearance?:Appearance;running?:string;
+  /** When this process booted the device or launched the app: waits soon after get longer deadlines. */
+  coldAt?:number};
+/** A wait that starts this soon after a boot or launch gets COLD_FACTOR × its deadline; a pixel wait PIXEL_FACTOR ×. */
+export const COLD_WINDOW=60000,COLD_FACTOR=2,PIXEL_FACTOR=1.5,LAUNCH_FACTOR=2.5;
+/** A cold boot waits for memory while another device is still starting: every BOOT_POLL, up to BOOT_WAIT. */
+export const BOOT_POLL=3000,BOOT_WAIT=90000;
+/** A screenshot's key: device, route and appearance. Light keeps the key it had before appearances, so older shots stay light. */
+export const frameKey=(f:NativeFrame)=>hash(`${f.device}\0${f.route}${(f.appearance??'light')==='light'?'':`\0${f.appearance}`}`).slice(0,32);
 export async function manifest(origin:string,request:typeof fetch=fetch){
   const response=await request(`${origin}/manifest.json`,{redirect:'error',signal:AbortSignal.timeout(4000)});
   if(!response.ok||!response.body)throw new Error('Could not read project manifest.');
@@ -23,10 +34,73 @@ export async function manifest(origin:string,request:typeof fetch=fetch){
   return JSON.parse(Buffer.concat(chunks).toString());
 }
 const normalized=(v:any):string=>JSON.stringify(Array.isArray(v)?v.map(x=>JSON.parse(JSON.stringify(x,Object.keys(x).sort()))).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))):[]);
+export type NativeOptions={target?:NativeTarget;run?:Runner;cache?:string;apps?:string[];fetch?:typeof fetch;free?:(dir:string)=>Promise<number>;
+  /** How screens are judged ready; the default reads the accessibility tree and falls back to screenshots. */
+  readiness?:Readiness;
+  /** Reduce Motion on managed simulators (EXACT_DESIGN_NATIVE_REDUCE_MOTION=0 turns it off). */
+  reduceMotion?:boolean;
+  /** Devices driven at once (EXACT_DESIGN_NATIVE_PARALLEL, default 4), before the memory guard. */
+  parallel?:number;
+  /** Available memory in bytes, or undefined when unknown; the default reads vm_stat. */
+  memory?:()=>Promise<number|undefined>;
+  /** Memory a device's touch runner needs to start (EXACT_DESIGN_NATIVE_AX_MIN_GB, default 0: no gate, since runners
+   *  start only when a job is over or on a warm app). */
+  axMemory?:number;
+  /** Logs why a device reads pixels; the default writes to the console. */
+  notice?:(udid:string,reason:string)=>void;
+  now?:()=>number;sleep?:(ms:number)=>Promise<void>;
+};
 export class NativePreviews {
-  readonly target:NativeTarget;readonly run:Runner;readonly cache:string;
+  readonly target:NativeTarget;readonly run:Runner;readonly cache:string;readonly readiness:Readiness;
+  /** Per booted device: dropped when a job's scan finds the device shut down. */
+  readonly records=new Map<string,DeviceRecord>();
+  /** Devices booting or launching their app now: a cold boot waits for them when memory is short. */
+  readonly starting=new Set<string>();
+  private noted=new Set<string>();private jobs=0;
+  now(){return (this.options.now??Date.now)();}
+  sleep(ms:number){return (this.options.sleep??Bun.sleep)(ms);}
+  get axMemory(){return this.options.axMemory??Math.max(0,Number(process.env.EXACT_DESIGN_NATIVE_AX_MIN_GB)||0)*1024**3;}
+  /** Starts opening touch runners in the background for devices that have none open and retries left, while available
+   *  memory covers each one (the first needs `axMemory` free, the second twice that, and so on). False when memory ran
+   *  short. Once open, a runner is cheap; only its start is heavy. */
+  async openRunners(ids:string[],appId:string){
+    const readiness=this.readiness;if(!readiness.prepare)return true;
+    const wanted=ids.filter(id=>this.records.has(id)&&readiness.needsOpen?.(id,appId)!==false);if(!wanted.length)return true;
+    const need=this.axMemory,available=need>0?await this.memoryAvailable():undefined;let enough=true;
+    wanted.forEach((id,i)=>{
+      if(available!==undefined&&available-i*need<need){enough=false;this.notice(id,`only ${(Math.max(0,available-i*need)/1024**3).toFixed(1)} GB of memory is available and the accessibility runner needs ${(need/1024**3).toFixed(1)} GB`);}
+      else readiness.prepare!(id,appId);
+    });
+    return enough;
+  }
+  /** Starts a job's count, so each device's notice is logged once per job. */
+  nextJob(){this.jobs++;}
+  notice(udid:string,reason:string){const key=`${this.jobs}\0${udid}`;if(this.noted.has(key))return;this.noted.add(key);(this.options.notice??((u,r)=>console.warn(`Native previews: ${u} detects settled screens from screenshots: ${r}`)))(udid,reason);}
+  /** Bytes macOS can hand out now (vm_stat), or undefined when unreadable. */
+  async memoryAvailable(){try{return this.options.memory?await this.options.memory():availableMemory(await this.run(['vm_stat']));}catch{return undefined;}}
+  /** Before a cold boot: while memory is short and another device is still booting or launching, wait for it (up to
+   *  BOOT_WAIT); then boot anyway, so progress keeps moving. */
+  async bootGate(id:string){
+    const start=this.now();
+    while([...this.starting].some(other=>other!==id)&&this.now()-start<BOOT_WAIT){
+      const available=await this.memoryAvailable();if(available===undefined||available>=BOOT_MEMORY)break;
+      await this.sleep(BOOT_POLL);
+    }
+    this.starting.add(id);
+  }
   private apps=new Map<string,Promise<AppPreviews>>();private mappings=new Map<string,{dir:string;until:number}>();private version?:Promise<string>;
-  constructor(readonly options:{target?:NativeTarget;run?:Runner;cache?:string;apps?:string[];fetch?:typeof fetch;free?: (dir:string)=>Promise<number>;settle?:number;firstSettle?:number;stable?:number;interval?:number}={}){this.run=options.run??command;this.target=options.target??new Simulators(this.run);this.cache=options.cache??process.env.EXACT_DESIGN_NATIVE_CACHE??join(root,'.exact/native-previews');}
+  constructor(readonly options:NativeOptions={}){this.run=options.run??command;this.target=options.target??new Simulators(this.run);this.cache=options.cache??process.env.EXACT_DESIGN_NATIVE_CACHE??join(root,'.exact/native-previews');
+    // EXACT_DESIGN_NATIVE_READINESS=pixel never opens a touch runner.
+    this.readiness=options.readiness??new NativeReadiness({mode:process.env.EXACT_DESIGN_NATIVE_READINESS==='pixel'?'pixel':'ax',
+      shoot:async udid=>{const path=join(this.cache,'probe',`${udid.replace(/[^A-Za-z0-9-]/g,'')}.bmp`);await mkdir(join(this.cache,'probe'),{recursive:true});await this.target.screenshot(udid,path,'bmp');return readFile(path);},
+      notice:(udid,reason)=>this.notice(udid,reason),
+    });}
+  get reduceMotion(){return this.options.reduceMotion??process.env.EXACT_DESIGN_NATIVE_REDUCE_MOTION!=='0';}
+  async parallelism(devices:{booted:boolean}[]){
+    const cap=Math.max(1,Math.floor(this.options.parallel??(Number(process.env.EXACT_DESIGN_NATIVE_PARALLEL)||4)));
+    const cold=devices.filter(d=>!d.booted).length,available=cold?await this.memoryAvailable():undefined;
+    return deviceParallelism({devices:devices.length,cold,cap,available});
+  }
   versions(){return this.version??=Promise.all([this.run(['git','-C',join(root,'.exact-sdk'),'rev-parse','HEAD']),this.target instanceof Simulators?this.target.xcodeVersion():this.run(['xcodebuild','-version'])]).then(v=>v.join('\n'));}
   async project(project:string){if(!localPreview(project)||new URL(project).origin!==project)throw new Error('Choose a local http project origin.');const cached=this.mappings.get(project);if(cached&&cached.until>Date.now())return this.app(cached.dir);
     const unknown='No unique registered native app matches this project. Set EXACT_DESIGN_NATIVE_APPS to its app directory.';
@@ -36,8 +110,11 @@ export class NativePreviews {
     if(matches.length!==1)throw new Error(unknown);this.mappings.set(project,{dir:matches[0],until:Date.now()+5000});return this.app(matches[0]);
   }
   async app(dir:string){dir=await realpath(dir);let app=this.apps.get(dir);if(!app){app=AppPreviews.open(this,dir);this.apps.set(dir,app);}return app;}
-  async stop(){await Promise.all([...this.apps.values()].map(async a=>(await a).finished()));await this.target.stop();}
+  /** Waits for running jobs, ends the touch-runner sessions (restoring each simulator's accessibility settings), then shuts
+   *  down the simulators this helper booted. */
+  async stop(){await Promise.all([...this.apps.values()].map(async a=>(await a).finished()));await this.readiness.close();await this.target.stop();this.records.clear();}
 }
+type Job={key:string;frame:NativeFrame};
 export class AppPreviews {
   readonly key:string;readonly dir:string;private disk:DiskState={installed:{},shots:{}};private hashes=new Map<string,{mtime:number;size:number;hash:string}>();
   private tokens=new Set<string>();private tail=Promise.resolve();private listeners=new Set<()=>void>();private statuses=new Map<string,{state:FrameStatus;error:string}>();
@@ -49,25 +126,25 @@ export class AppPreviews {
   subscribe(fn:()=>void){this.listeners.add(fn);return ()=>this.listeners.delete(fn);}
   private publish(){for(const fn of this.listeners)fn();}
   private async save(){await writeFile(join(this.dir,'state.json.tmp'),JSON.stringify(this.disk));await rename(join(this.dir,'state.json.tmp'),join(this.dir,'state.json'));}
-  snapshot(frames:NativeFrame[],origin='http://127.0.0.1:5175'){return {state:this.state,phase:this.phase,message:this.message,error:this.error,done:this.done,total:this.total,frames:frames.map(f=>{const key=frameKey(f),shot=this.disk.shots[key],status=this.statuses.get(key);return {id:f.id,state:status?.state==='ready'||!status?(shot?(shot.signature===this.signature?'ready':'stale'):'empty'):status.state,shot:shot?`${origin}/native/shot/${this.key}/${shot.file}?v=${shot.capturedAt}`:'',width:shot?.width??0,height:shot?.height??0,capturedAt:shot?.capturedAt??0,error:status?.error??''};})};}
-  start(token:string,frames:NativeFrame[]){if(!token||this.tokens.has(token))return this.tail;this.tokens.add(token);const copy=frames.map(f=>({...f}));this.tail=this.tail.then(()=>this.job(copy));return this.tail;}
+  /** A frame's state: a job's status while it runs or after it failed, else what its latest screenshot says. */
+  private frameState(key:string):FrameStatus{const shot=this.disk.shots[key],status=this.statuses.get(key);return status?.state==='ready'||!status?(shot?(shot.signature===this.signature?'ready':'stale'):'empty'):status.state;}
+  snapshot(frames:NativeFrame[],origin='http://127.0.0.1:5175'){return {state:this.state,phase:this.phase,message:this.message,error:this.error,done:this.done,total:this.total,frames:frames.map(f=>{const key=frameKey(f),shot=this.disk.shots[key],status=this.statuses.get(key);return {id:f.id,state:this.frameState(key),shot:shot?`${origin}/native/shot/${this.key}/${shot.file}?v=${shot.capturedAt}`:'',width:shot?.width??0,height:shot?.height??0,capturedAt:shot?.capturedAt??0,error:status?.error??''};})};}
+  /** Starts one job per new token. `capture` empty: every frame that is not ready; ids: exactly those frames. */
+  start(token:string,frames:NativeFrame[],capture:string[]=[]){if(!token||this.tokens.has(token))return this.tail;this.tokens.add(token);const copy=frames.map(f=>({...f,appearance:f.appearance??'light'})),ids=[...capture];this.tail=this.tail.then(()=>this.job(copy,ids));return this.tail;}
   finished(){return this.tail;}
-  /** Capture until two screenshots a second apart match, so a sheet or a slow first draw has finished; an animated screen
-   *  never matches and is taken at the deadline (EXACT_DESIGN_NATIVE_STABLE_MS, default 12 s after the settle wait). */
-  private async settled(id:string,path:string,app:{name:string;app:{id:string}},route:string){
-    const target=this.service.target,deadline=Date.now()+(this.service.options.stable??Number(process.env.EXACT_DESIGN_NATIVE_STABLE_MS??12000));
-    const take=async()=>{if(!await target.capture(id,path,app.app.id))throw new Error(`${app.name} quit while opening ${route}`);return readFile(path);};
-    let png=await take();
-    while(Date.now()<deadline){await Bun.sleep(this.service.options.interval??1000);const next=await take();if(next.equals(png))break;png=next;}
-    return png;
-  }
   private progress(phase:string,text:string){this.phase=phase;this.message=text;this.publish();}
-  private async job(frames:NativeFrame[]){this.state='working';this.phase='';this.message='Preparing native previews…';this.error='';this.done=0;this.total=frames.length;for(const f of frames)this.statuses.set(frameKey(f),{state:'queued',error:''});this.publish();
+  private async job(frames:NativeFrame[],capture:string[]){
+    this.service.nextJob();this.state='working';this.phase='';this.message='Preparing native previews…';this.error='';this.done=0;this.total=0;this.publish();let jobs:Job[]=[],appId='';const used:string[]=[];
     try{
       try{await this.service.target.available();}catch(e){this.state='unavailable';throw e;}
       const app=JSON.parse(await readFile(join(this.appDir,'app.json'),'utf8'));const handler=app.protocol_handlers?.find((h:any)=>typeof h.protocol==='string'&&!['http','https'].includes(h.protocol.toLowerCase())&&!h.distribution_only&&typeof h.url==='string'&&h.url.includes('%s'));
-      if(!handler)throw new Error('Add protocol_handlers and an /open route to open native screens. See the Ember example.');if(!app.app?.id)throw new Error('Set app.id in app.json.');
+      if(!handler)throw new Error('Add protocol_handlers and an /open route to open native screens. See the Ember example.');if(!app.app?.id)throw new Error('Set app.id in app.json.');appId=app.app.id;
       await this.refresh();
+      // Refresh all skips frames already current for this build; a list of ids captures exactly those frames.
+      const chosen=new Map<string,Job>();for(const frame of frames){const key=frameKey(frame);if(chosen.has(key))continue;if(capture.length?capture.includes(frame.id):this.frameState(key)!=='ready')chosen.set(key,{key,frame});}
+      jobs=[...chosen.values()];
+      if(!jobs.length){this.state='idle';this.message='Native previews are up to date.';return;}
+      this.total=jobs.length;for(const j of jobs)this.statuses.set(j.key,{state:'queued',error:''});this.publish();
       if(this.disk.signature!==this.signature||!this.disk.app||!existsSync(this.disk.app)){
         const fs=await statfs(this.appDir);const free=this.service.options.free?await this.service.options.free(this.appDir):fs.bavail*fs.bsize;const min=this.disk.app&&existsSync(this.disk.app)?10:20;
         if(free<min*1024**3)throw new Error(`Only ${(free/1024**3).toFixed(1)} GB free. Native builds need ${min} GB free.`);
@@ -75,26 +152,107 @@ export class AppPreviews {
         try{output=await this.service.run([process.execPath,join(root,'tools/native-build.mjs'),this.appDir,...this.service.target.buildArgs],{PATH:`${homedir()}/.cargo/bin:${process.env.PATH}`,EXACT_FEEDBACK:'0'});await writeFile(join(this.dir,'build.log'),output);const built=/host\/apple:\s+(.+?\.app)(?:\s|$)/.exec(output)?.[1];if(!built||!existsSync(built))throw new Error('Build did not produce an app bundle.');this.disk.app=built;this.signature=await this.inputs();this.disk.signature=this.signature;await this.save();}
         catch(e){await writeFile(join(this.dir,'build.log'),output+'\n'+message(e));throw new Error(`${brief(e)} Full log: ${join(this.dir,'build.log')}`);}
       }
-      const signature=this.disk.signature!;const devices=[...new Set(frames.map(f=>f.device))];let index=0;
-      const worker=async()=>{while(index<devices.length){const slug=devices[index++],group=frames.filter(f=>f.device===slug),device=nativeDevice(slug)!;const name=device.name.replace(/^Native /,'');
-        try{const id=await this.service.target.destination(name,device.simulator!);this.progress('boot',`Starting ${name}…`);let first=await this.service.target.boot(id);
-          if(this.disk.installed[id]!==signature){this.progress('install',`Installing ${app.name} on ${name}…`);await this.service.target.install(id,this.disk.app!);this.disk.installed[id]=signature;first=true;}
-          // The first launch after a boot or install can take longer than any fixed wait, especially on a busy Mac, and
-          // capture the home screen. Launch once at the root and wait, so every capture below is a warm launch.
-          if(first){this.progress('boot',`Opening ${app.name} on ${name}…`);await this.service.target.launch(id,app.app.id,`${handler.protocol}://`);await Bun.sleep(this.service.options.firstSettle??Number(process.env.EXACT_DESIGN_NATIVE_FIRST_SETTLE_MS??6000));first=false;}
-          for(const f of group){const key=frameKey(f);this.statuses.set(key,{state:'capturing',error:''});this.progress('capture',`Capturing ${this.done+1} of ${this.total}…`);
-            try{await this.service.target.launch(id,app.app.id,`${handler.protocol}://${f.route.slice(1)}`);await Bun.sleep(this.service.options.settle??Number(process.env.EXACT_DESIGN_NATIVE_SETTLE_MS??2500));
-              const file=`${key}.png`,path=join(this.dir,'shots',`${key}.pending.png`);const png=await this.settled(id,path,app,f.route);if(png.length<24||png.toString('hex',0,8)!=='89504e470d0a1a0a')throw new Error('Simulator returned an invalid PNG.');await rename(path,join(this.dir,'shots',file));this.disk.shots[key]={signature,file,width:png.readUInt32BE(16),height:png.readUInt32BE(20),capturedAt:Date.now()};this.statuses.set(key,{state:'ready',error:''});
-            }catch(e){this.statuses.set(key,{state:'error',error:brief(e)});}finally{await unlink(join(this.dir,'shots',`${key}.pending.png`)).catch(()=>{});}this.done++;this.publish();}
-        }catch(e){for(const f of group)this.statuses.set(frameKey(f),{state:'error',error:brief(e)});this.done+=group.length;this.publish();}
-      }};
-      await Promise.all(Array.from({length:Math.min(devices.length,Math.max(1,Number(process.env.EXACT_DESIGN_NATIVE_PARALLEL)||2))},worker));await this.save();this.state='idle';this.message='Native previews updated.';
-    }catch(e){if(this.state!=='unavailable')this.state='error';this.error=message(e).includes('Full log:')?message(e):brief(e);this.message=this.error;for(const f of frames)this.statuses.set(frameKey(f),{state:'error',error:this.error});}
-    this.phase='';this.publish();
+      const context={name:app.name as string,appId:app.app.id as string,scheme:handler.protocol as string,signature:this.disk.signature!};
+      const fail=(group:Job[],e:unknown)=>{for(const j of group)if(this.statuses.get(j.key)?.state!=='ready'&&this.statuses.get(j.key)?.state!=='error'){this.statuses.set(j.key,{state:'error',error:brief(e)});this.done++;}this.publish();};
+      // One device listing per job: which simulators exist and which are booted.
+      const target=this.service.target;await target.scan();const devices:{slug:string;id:string;booted:boolean;group:Job[]}[]=[];
+      for(const slug of new Set(jobs.map(j=>j.frame.device))){const group=jobs.filter(j=>j.frame.device===slug),device=nativeDevice(slug)!;
+        try{const id=await target.destination(device.name.replace(/^Native /,''),device.simulator!),booted=await target.booted(id);if(!booted)this.service.records.delete(id);devices.push({slug,id,booted,group});used.push(id);}catch(e){fail(group,e);}}
+      // Booted devices first: they cost no memory, and a cold one waits for a free slot.
+      devices.sort((a,b)=>Number(b.booted)-Number(a.booted));let index=0;
+      const worker=async()=>{while(index<devices.length){const d=devices[index++];try{await this.device(d.slug,d.id,d.booted,d.group,context);}catch(e){this.service.records.delete(d.id);fail(d.group,e);}finally{this.service.starting.delete(d.id);}}};
+      await Promise.all(Array.from({length:await this.service.parallelism(devices)},worker));
+      await this.save();this.state='idle';this.message='Native previews updated.';
+    }catch(e){if(this.state!=='unavailable')this.state='error';this.error=message(e).includes('Full log:')?message(e):brief(e);this.message=this.error;for(const j of jobs)this.statuses.set(j.key,{state:'error',error:this.error});}
+    finally{this.phase='';this.publish();
+      // So the next job starts on the tree: open runners now that this job's boots and launches are over.
+      if(used.length&&appId)await this.service.openRunners(used,appId).catch(()=>{});}
+  }
+  /** One device's frames, warm: the app keeps running and each screen is opened with a link after a root reset. A device
+   *  this process already prepared and that is still booted skips straight to its screens. */
+  private async device(slug:string,id:string,booted:boolean,group:Job[],c:{name:string;appId:string;scheme:string;signature:string}){
+    const target=this.service.target,readiness=this.service.readiness,name=nativeDevice(slug)!.name.replace(/^Native /,'');
+    let record=this.service.records.get(id);
+    if(!booted||!record){this.progress('boot',`Starting ${name}…`);if(!booted)await this.service.bootGate(id);const fresh=await target.boot(id);record={coldAt:fresh?this.service.now():record?.coldAt};this.service.records.set(id,record);}
+    readiness.forget?.(id);
+    let relaunch=false;
+    if(this.disk.installed[id]!==c.signature){this.progress('install',`Installing ${c.name} on ${name}…`);await target.install(id,this.disk.app!);this.disk.installed[id]=c.signature;relaunch=true;record={coldAt:record.coldAt};this.service.records.set(id,record);}
+    const approval=`${c.scheme}\0${c.appId}`;if(record.approved!==approval){await target.approve(id,c.scheme,c.appId);record.approved=approval;}
+    const reduce=this.service.reduceMotion;if(record.reduceMotion!==reduce){if(await target.reduceMotion(id,reduce))relaunch=true;record.reduceMotion=reduce;}
+    const r=record;r.appearance??=await target.appearance(id);
+    // `known`: the app is running as this process left it. `atRoot`: it shows its root screen, settled.
+    // `confirmed`: the last wait read the tree, which also confirmed the app in front.
+    let known=r.running===c.appId&&!relaunch,atRoot=false,confirmed=false;
+    // A touch runner's start is heavy: on a device that boots or launches in this job it waits for the job's end
+    // (`openRunners`), and the device reads pixels until then. A warm device opens one at once, memory permitting; after
+    // too little memory it stays on pixels for this job.
+    let cold=!booted,lowMemory=false;
+    const runner=async()=>{if(cold||lowMemory)return;if(!await this.service.openRunners([id],c.appId))lowMemory=true;};
+    if(known)await runner();
+    const deadline=(readiness as {deadline?:number}).deadline??8000;
+    // Soon after a boot or launch the device is still busy, and pixels are slower than the tree: both get longer.
+    const deadlineFor=(mark:Mark)=>deadline*(this.service.now()-(r.coldAt??-Infinity)<COLD_WINDOW?COLD_FACTOR:1)*(mark.mode==='pixel'?PIXEL_FACTOR:1);
+    let used=deadline;
+    const ensure=async()=>{
+      if(known)return;let running=await target.running(id,c.appId);
+      if(running&&relaunch){readiness.forget?.(id);await target.terminate(id,c.appId);running=false;}relaunch=false;
+      if(running){known=true;r.running=c.appId;this.service.starting.delete(id);await runner();return;}
+      this.progress('boot',`Opening ${c.name} on ${name}…`);cold=true;this.service.starting.add(id);readiness.forget?.(id);const mark=await readiness.mark(id,c.appId,true);await target.launch(id,c.appId);r.coldAt=this.service.now();
+      // A first launch after a boot or install is slower than a link; it gets two and a half link deadlines. Only the tree
+      // tells the root screen from a launch screen, so pixels leave the root to the first reset.
+      const outcome=await readiness.wait(mark,deadline*LAUNCH_FACTOR);this.service.starting.delete(id);known=outcome!=='quit';r.running=known?c.appId:undefined;confirmed=mark.via==='ax';atRoot=outcome==='ready'&&confirmed;
+    };
+    const go=async(url:string):Promise<Outcome>=>{const mark=await readiness.mark(id,c.appId);await target.open(id,url);used=deadlineFor(mark);const outcome=await readiness.wait(mark,used);confirmed=mark.via==='ax';return outcome;};
+    const lose=()=>{known=false;atRoot=false;r.running=undefined;};
+    const appearances=[...new Set(group.map(j=>j.frame.appearance??'light'))].sort((a,b)=>Number(b===r.appearance)-Number(a===r.appearance));
+    try{
+      for(const appearance of appearances){
+        if(appearance!==r.appearance){
+          // A running app redraws in place: wait for it. One about to launch starts in the new appearance.
+          if(known){const mark=await readiness.mark(id,c.appId);await target.setAppearance(id,appearance);r.appearance=appearance;if(await readiness.wait(mark,deadlineFor(mark))==='quit')lose();}
+          else{readiness.forget?.(id);await target.setAppearance(id,appearance);r.appearance=appearance;}
+        }
+        // The root screen first: it needs no reset, and the next screen starts from it.
+        for(const {key,frame} of group.filter(j=>(j.frame.appearance??'light')===appearance).sort((a,b)=>Number(b.frame.route==='/')-Number(a.frame.route==='/'))){
+          this.statuses.set(key,{state:'capturing',error:''});this.progress('capture',`Capturing ${this.done+1} of ${this.total}…`);
+          const pending=join(this.dir,'shots',`${key}.pending.png`),quit=()=>new Error(`${c.name} quit while opening ${frame.route}`);
+          try{
+            await ensure();
+            for(let attempt=1;;attempt++){
+              let outcome:Outcome='ready';
+              // The root link resets the app: it dismisses a sheet and leaves a full-screen route. For `/` it is the capture.
+              if(!atRoot||attempt>1){atRoot=false;outcome=await go(`${c.scheme}://`);if(outcome==='ready')atRoot=true;}
+              if(outcome==='ready'&&frame.route!=='/'){atRoot=false;outcome=await go(`${c.scheme}://${frame.route.slice(1)}`);}
+              if(outcome==='ready')break;
+              atRoot=false;
+              if(outcome==='quit'){lose();if(attempt>=2)throw quit();await ensure();continue;}
+              if(attempt>=2)throw new Error(`${c.name} did not settle on ${frame.route} within ${Math.round(used/100)/10} s.`);
+            }
+            await target.screenshot(id,pending,'png');
+            // A tree read already confirmed the app in front; pixels cannot tell, so ask the device.
+            if(!confirmed&&!await target.running(id,c.appId)){lose();throw quit();}
+            const png=await readFile(pending);if(png.length<24||png.toString('hex',0,8)!=='89504e470d0a1a0a')throw new Error('Simulator returned an invalid PNG.');
+            const file=`${key}.png`;await rename(pending,join(this.dir,'shots',file));
+            this.disk.shots[key]={signature:c.signature,file,width:png.readUInt32BE(16),height:png.readUInt32BE(20),capturedAt:Date.now()};this.statuses.set(key,{state:'ready',error:''});
+            // On a warm device, a runner that failed to open gets its one more try once a screen has settled.
+            await runner();
+          }catch(e){atRoot=false;this.statuses.set(key,{state:'error',error:brief(e)});}
+          finally{await unlink(pending).catch(()=>{});}
+          this.done++;this.publish();
+        }
+      }
+    }finally{if(r.appearance!=='light'){readiness.forget?.(id);await target.setAppearance(id,'light').then(()=>{r.appearance='light';},()=>{r.appearance=undefined;});}}
   }
 }
 const service=new NativePreviews();
 export function nativeShot(path:string):Response{if(!/^[a-f0-9]{16}\/[a-z0-9-]+\.png$/.test(path))return new Response(null,{status:404});const [key,file]=path.split('/');try{return new Response(readFileSync(join(service.cache,key,'shots',file)),{headers:{'content-type':'image/png','cache-control':'no-store'}});}catch{return new Response(null,{status:404});}}
+/** Validates a `/native` request body: its frames (appearance defaults to light) and the `capture` ids. */
+export function nativeRequest(body:unknown):{project:string;run:string;capture:string[];frames:NativeFrame[]}{
+  const b=body as any;if(!b||typeof b.project!=='string'||typeof b.run!=='string'||b.run.length>200||!Array.isArray(b.frames)||b.frames.length>200)throw new Error('Invalid native preview request.');
+  if(b.capture!==undefined&&(!Array.isArray(b.capture)||b.capture.length>200||b.capture.some((id:unknown)=>typeof id!=='string'||id.length>100)))throw new Error('Invalid native preview request.');
+  const frames=b.frames.map((f:any)=>{if(!f||typeof f.id!=='string'||f.id.length>100||typeof f.device!=='string'||!nativeDevice(f.device)||typeof f.route!=='string'||screenRoute(f.route)!==f.route||(f.appearance!==undefined&&f.appearance!=='light'&&f.appearance!=='dark'))throw new Error('Invalid native preview frame.');return {id:f.id,device:f.device,route:f.route,appearance:f.appearance??'light'};});
+  return {project:b.project,run:b.run,capture:b.capture??[],frames};
+}
 export function nativeScreens(body:unknown,request:Request):Response{
   let app:AppPreviews|undefined,frames:NativeFrame[]=[],error='',closed=false,last='',unsubscribe=()=>{},poll:ReturnType<typeof setInterval>,keep:ReturnType<typeof setInterval>,controller:ReadableStreamDefaultController<Uint8Array>;
   const origin=`http://127.0.0.1:${new URL(request.url).port||80}`;
@@ -102,7 +260,7 @@ export function nativeScreens(body:unknown,request:Request):Response{
   const close=()=>{if(closed)return;closed=true;clearInterval(poll);clearInterval(keep);unsubscribe();request.signal.removeEventListener('abort',close);try{controller.close();}catch{}};
   const stream=new ReadableStream<Uint8Array>({start(c){controller=c;request.signal.addEventListener('abort',close,{once:true});if(request.signal.aborted){close();return;}
     keep=setInterval(()=>{if(!closed)controller.enqueue(new TextEncoder().encode(': keepalive\n\n'));},15000);keep.unref();
-    void(async()=>{try{const b=body as any;if(!b||typeof b.project!=='string'||typeof b.run!=='string'||b.run.length>200||!Array.isArray(b.frames)||b.frames.length>200)throw new Error('Invalid native preview request.');frames=b.frames.map((f:any)=>{if(!f||typeof f.id!=='string'||f.id.length>100||typeof f.device!=='string'||!nativeDevice(f.device)||typeof f.route!=='string'||screenRoute(f.route)!==f.route)throw new Error('Invalid native preview frame.');return {id:f.id,device:f.device,route:f.route};});app=await service.project(b.project);if(closed)return;unsubscribe=app.subscribe(publish);if(b.run)void app.start(b.run,frames);else {try{await service.target.available();await app.refresh();}catch(e){app.state='unavailable';app.error=message(e);}}if(closed)return;publish();let checking=false;poll=setInterval(async()=>{if(checking)return;checking=true;try{await app!.refresh();}catch{}finally{checking=false;}},2000);poll.unref();}catch(e){error=message(e);publish();}})();
+    void(async()=>{try{const b=nativeRequest(body);frames=b.frames;app=await service.project(b.project);if(closed)return;unsubscribe=app.subscribe(publish);if(b.run)void app.start(b.run,frames,b.capture);else {try{await service.target.available();await app.refresh();}catch(e){app.state='unavailable';app.error=message(e);}}if(closed)return;publish();let checking=false;poll=setInterval(async()=>{if(checking)return;checking=true;try{await app!.refresh();}catch{}finally{checking=false;}},2000);poll.unref();}catch(e){error=message(e);publish();}})();
   },cancel:close});return new Response(stream,{headers:{'content-type':'text/event-stream','cache-control':'no-store'}});
 }
 export async function stopNativePreviews(){await service.stop();}

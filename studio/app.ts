@@ -61,7 +61,7 @@ const snapshot = () => {
       layers:editor.screen.id===screen.id && !screen.source ? editor.layers : []})),
     name: document.name,
     platform:editor.view.platform??'web',
-    nativeRequests:shown.some(v=>v.platform==='ios')?JSON.stringify({project:document.project.url,frames:shown.filter(v=>v.platform==='ios').map(v=>({id:v.id,device:slug(v.name),route:screens.get(v.screenId)!.route}))}):'',
+    nativeRequests:shown.some(v=>v.platform==='ios')?JSON.stringify({project:document.project.url,frames:shown.filter(v=>v.platform==='ios').map(v=>({id:v.id,device:slug(v.name),route:screens.get(v.screenId)!.route,appearance:'light'}))}):'',
     previewRequests:JSON.stringify(document.views.flatMap(v=>{const screen=screens.get(v.screenId)!;return v.platform!=='ios'&&screen.source&&editor.isShown(v.id)?[{id:scoped(v.id),url:screen.source,width:v.width,height:v.height,auto:localPreview(screen.source)&&v.heightMode!=='fixed'}]:[];})),
     layers: editor.layers,
     views: frames.map(view => {
@@ -93,11 +93,12 @@ async function logWorkspace(storage:any,before:string,kind:string,target:string,
 const sources: Sources = {
   history: async ([project],_store,storage)=>{try{await history.load(storage.fs);return {entries:history.view(project),error:''};}catch(error){return {entries:[],error:error instanceof Error?error.message:'Could not load timeline.'};}},
   scene: ([,,since]) => {setScope(since);return snapshot();},
-  native: ([requests,run]) => {
+  // `capture` is a comma-separated list of frame ids; empty asks the helper to refresh every frame that is not current.
+  native: ([requests,run,capture]) => {
     let latest={state:'idle',phase:'',message:'',error:'',done:0,total:0,frames:[] as {id:string;state:string;shot:string;width:number;height:number;capturedAt:number;error:string}[]};
     if(!requests)return latest;
     const unavailable=()=>({...latest,state:'unavailable',error:'Native previews need the studio helper. Run bun run dev.'});
-    return fetch(`${DISCOVERY_API}/native`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...JSON.parse(requests),run}),exactStream:event=>{
+    return fetch(`${DISCOVERY_API}/native`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...JSON.parse(requests),run,capture:capture?capture.split(','):[]}),exactStream:event=>{
       if(event.type==='error')return unavailable();
       if(event.type!=='message'||typeof event.data!=='string')return latest;
       const value=JSON.parse(event.data);

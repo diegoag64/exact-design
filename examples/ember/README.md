@@ -30,7 +30,7 @@ To set it up by hand instead, open **Add screen**, set **Viewports** to **Core**
 
 Thirty live frames is a comfortable load. **Every size** on all ten screens is 130 running copies of the app, so add it to the screens you are checking.
 
-These are web frames. On iOS, Ember's tab bar, sheets and + button are UIKit controls with Liquid Glass, so the web frames approximate them. To see the real controls, add screens with the **Native iOS** viewport set and click **Refresh native previews**: the studio builds Ember for the iOS Simulator and shows a screenshot of each route ([Preview on the iOS Simulator](../../docs/use-the-studio.md#preview-on-the-ios-simulator)). Native macOS previews are not part of the editor yet.
+These are web frames. On iOS, Ember's tab bar, sheets and + button are UIKit controls with Liquid Glass, so the web frames approximate them. To see the real controls, add screens with the **Native iOS** viewport set and click **Refresh all native previews**: the studio builds Ember for the iOS Simulator and shows a screenshot of each route ([Preview on the iOS Simulator](../../docs/use-the-studio.md#preview-on-the-ios-simulator)). Native macOS previews are not part of the editor yet.
 
 ## Screens
 
@@ -59,7 +59,7 @@ Every screen opens from a `web+ember:` link. `app.json` declares the scheme, and
 xcrun simctl openurl booted 'web+ember://activity/log'
 ```
 
-iOS asks before opening a link from another app, so this command shows an "Open in Ember?" prompt. The studio launches Ember with the link instead, which skips it.
+iOS asks before opening a link from another app, so this command shows an "Open in Ember?" prompt. The studio approves the scheme on its managed simulators, then opens links in the running app without the prompt.
 
 ## Layout
 
