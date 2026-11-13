@@ -57,7 +57,7 @@ export class Simulators implements NativeTarget {
   async sim(...args:string[]){return this.run([await this.simctlPath(),...args]);}
   /** Every command that changes a simulator goes through here: only `Exact Design …` devices this helper resolved. */
   private managed(id:string){if(!this.owned.has(id))throw new Error('Refusing to use an unmanaged simulator.');return id;}
-  xcodeVersion(){return this.version??=this.run(['xcodebuild','-version']);}
+  xcodeVersion(){return this.version??=this.run(['xcodebuild','-version']).catch(e=>{this.version=undefined;throw e;});}
   /** Checks Xcode, simctl and an iOS runtime; once they are found the answer holds for the helper's lifetime. */
   async available(){if(this.platform!=='darwin')throw new Error('Native iOS previews require macOS and Xcode.');if(this.ready)return;
     try{await this.simctlPath();await this.xcodeVersion();}catch{this.version=undefined;throw new Error('Native iOS previews need Xcode with the iOS Simulator. Install Xcode, select it with xcode-select, then refresh.');}

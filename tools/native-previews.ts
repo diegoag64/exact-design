@@ -56,7 +56,11 @@ export class NativePreviews {
   readonly records=new Map<string,DeviceRecord>();
   /** Devices booting or launching their app now: a cold boot waits for them when memory is short. */
   readonly starting=new Set<string>();
-  private noted=new Set<string>();private jobs=0;
+  private noted=new Set<string>();private jobs=0;private tail=Promise.resolve();private stopped?:Promise<void>;
+  stopping=false;
+  checkRunning(){if(this.stopping)throw new Error('Native previews are stopping.');}
+  /** Apps share simulators; serialize whole app jobs while retaining each job’s device parallelism. */
+  enqueue(job:()=>Promise<void>){if(this.stopping)return this.tail;const next=this.tail.then(async()=>{if(!this.stopping)await job();});this.tail=next.catch(()=>{});return next;}
   now(){return (this.options.now??Date.now)();}
   sleep(ms:number){return (this.options.sleep??Bun.sleep)(ms);}
   get axMemory(){return this.options.axMemory??Math.max(0,Number(process.env.EXACT_DESIGN_NATIVE_AX_MIN_GB)||0)*1024**3;}
@@ -64,10 +68,10 @@ export class NativePreviews {
    *  memory covers each one (the first needs `axMemory` free, the second twice that, and so on). False when memory ran
    *  short. Once open, a runner is cheap; only its start is heavy. */
   async openRunners(ids:string[],appId:string){
-    const readiness=this.readiness;if(!readiness.prepare)return true;
+    if(this.stopping)return false;const readiness=this.readiness;if(!readiness.prepare)return true;
     const wanted=ids.filter(id=>this.records.has(id)&&readiness.needsOpen?.(id,appId)!==false);if(!wanted.length)return true;
     const need=this.axMemory,available=need>0?await this.memoryAvailable():undefined;let enough=true;
-    wanted.forEach((id,i)=>{
+    if(this.stopping)return false;wanted.forEach((id,i)=>{
       if(available!==undefined&&available-i*need<need){enough=false;this.notice(id,`only ${(Math.max(0,available-i*need)/1024**3).toFixed(1)} GB of memory is available and the accessibility runner needs ${(need/1024**3).toFixed(1)} GB`);}
       else readiness.prepare!(id,appId);
     });
@@ -81,10 +85,10 @@ export class NativePreviews {
   /** Before a cold boot: while memory is short and another device is still booting or launching, wait for it (up to
    *  BOOT_WAIT); then boot anyway, so progress keeps moving. */
   async bootGate(id:string){
-    const start=this.now();
+    this.checkRunning();const start=this.now();
     while([...this.starting].some(other=>other!==id)&&this.now()-start<BOOT_WAIT){
       const available=await this.memoryAvailable();if(available===undefined||available>=BOOT_MEMORY)break;
-      await this.sleep(BOOT_POLL);
+      await this.sleep(BOOT_POLL);this.checkRunning();
     }
     this.starting.add(id);
   }
@@ -101,7 +105,7 @@ export class NativePreviews {
     const cold=devices.filter(d=>!d.booted).length,available=cold?await this.memoryAvailable():undefined;
     return deviceParallelism({devices:devices.length,cold,cap,available});
   }
-  versions(){return this.version??=Promise.all([this.run(['git','-C',join(root,'.exact-sdk'),'rev-parse','HEAD']),this.target instanceof Simulators?this.target.xcodeVersion():this.run(['xcodebuild','-version'])]).then(v=>v.join('\n'));}
+  versions(){return this.version??=Promise.all([this.run(['git','-C',join(root,'.exact-sdk'),'rev-parse','HEAD']),this.target instanceof Simulators?this.target.xcodeVersion():this.run(['xcodebuild','-version'])]).then(v=>v.join('\n')).catch(e=>{this.version=undefined;throw e;});}
   async project(project:string){if(!localPreview(project)||new URL(project).origin!==project)throw new Error('Choose a local http project origin.');const cached=this.mappings.get(project);if(cached&&cached.until>Date.now())return this.app(cached.dir);
     const unknown='No unique registered native app matches this project. Set EXACT_DESIGN_NATIVE_APPS to its app directory.';
     let m:any;try{m=await manifest(project,this.options.fetch);}catch(e){throw new Error(`${unknown} ${brief(e)}`);}
@@ -110,9 +114,8 @@ export class NativePreviews {
     if(matches.length!==1)throw new Error(unknown);this.mappings.set(project,{dir:matches[0],until:Date.now()+5000});return this.app(matches[0]);
   }
   async app(dir:string){dir=await realpath(dir);let app=this.apps.get(dir);if(!app){app=AppPreviews.open(this,dir);this.apps.set(dir,app);}return app;}
-  /** Waits for running jobs, ends the touch-runner sessions (restoring each simulator's accessibility settings), then shuts
-   *  down the simulators this helper booted. */
-  async stop(){await Promise.all([...this.apps.values()].map(async a=>(await a).finished()));await this.readiness.close();await this.target.stop();this.records.clear();}
+  /** Stop after the active step, skip queued jobs, restore accessibility, and shut down owned simulators. */
+  stop(){this.stopping=true;return this.stopped??=(async()=>{await this.tail;try{await this.readiness.close();}finally{await this.target.stop();this.records.clear();}})();}
 }
 type Job={key:string;frame:NativeFrame};
 export class AppPreviews {
@@ -122,7 +125,7 @@ export class AppPreviews {
   private constructor(readonly service:NativePreviews,readonly appDir:string){this.key=hash(appDir).slice(0,16);this.dir=join(service.cache,this.key);}
   static async open(service:NativePreviews,dir:string){const a=new AppPreviews(service,dir);await mkdir(join(a.dir,'shots'),{recursive:true});try{a.disk=JSON.parse(await readFile(join(a.dir,'state.json'),'utf8'));}catch{}return a;}
   async inputs(){const entries:string[]=[];const walk=async(dir:string,rel='')=>{for(const e of (await readdir(dir,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))){if(e.isSymbolicLink())continue;const path=join(dir,e.name),name=rel+e.name;if(e.isDirectory()){if(!e.name.startsWith('.')&&!['target','node_modules','dist'].includes(e.name))await walk(path,name+'/');}else if(e.isFile()){const s=await stat(path),prev=this.hashes.get(name);const digest=prev&&prev.mtime===s.mtimeMs&&prev.size===s.size?prev.hash:hash(await readFile(path));this.hashes.set(name,{mtime:s.mtimeMs,size:s.size,hash:digest});entries.push(JSON.stringify([name,digest]));}}};await walk(this.appDir);return hash(entries.join('\n')+await this.service.versions());}
-  async refresh(){this.signature=await this.inputs();this.publish();}
+  async refresh(){const signature=await this.inputs();this.signature=signature;this.publish();return signature;}
   subscribe(fn:()=>void){this.listeners.add(fn);return ()=>this.listeners.delete(fn);}
   private publish(){for(const fn of this.listeners)fn();}
   private async save(){await writeFile(join(this.dir,'state.json.tmp'),JSON.stringify(this.disk));await rename(join(this.dir,'state.json.tmp'),join(this.dir,'state.json'));}
@@ -130,56 +133,58 @@ export class AppPreviews {
   private frameState(key:string):FrameStatus{const shot=this.disk.shots[key],status=this.statuses.get(key);return status?.state==='ready'||!status?(shot?(shot.signature===this.signature?'ready':'stale'):'empty'):status.state;}
   snapshot(frames:NativeFrame[],origin='http://127.0.0.1:5175'){return {state:this.state,phase:this.phase,message:this.message,error:this.error,done:this.done,total:this.total,frames:frames.map(f=>{const key=frameKey(f),shot=this.disk.shots[key],status=this.statuses.get(key);return {id:f.id,state:this.frameState(key),shot:shot?`${origin}/native/shot/${this.key}/${shot.file}?v=${shot.capturedAt}`:'',width:shot?.width??0,height:shot?.height??0,capturedAt:shot?.capturedAt??0,error:status?.error??''};})};}
   /** Starts one job per new token. `capture` empty: every frame that is not ready; ids: exactly those frames. */
-  start(token:string,frames:NativeFrame[],capture:string[]=[]){if(!token||this.tokens.has(token))return this.tail;this.tokens.add(token);const copy=frames.map(f=>({...f,appearance:f.appearance??'light'})),ids=[...capture];this.tail=this.tail.then(()=>this.job(copy,ids));return this.tail;}
+  start(token:string,frames:NativeFrame[],capture:string[]=[]){if(this.service.stopping||!token||this.tokens.has(token))return this.tail;this.tokens.add(token);const copy=frames.map(f=>({...f,appearance:f.appearance??'light'})),ids=[...capture];this.tail=this.service.enqueue(()=>this.job(copy,ids));return this.tail;}
   finished(){return this.tail;}
   private progress(phase:string,text:string){this.phase=phase;this.message=text;this.publish();}
   private async job(frames:NativeFrame[],capture:string[]){
     this.service.nextJob();this.state='working';this.phase='';this.message='Preparing native previews…';this.error='';this.done=0;this.total=0;this.publish();let jobs:Job[]=[],appId='';const used:string[]=[];
     try{
+      this.service.checkRunning();
       try{await this.service.target.available();}catch(e){this.state='unavailable';throw e;}
       const app=JSON.parse(await readFile(join(this.appDir,'app.json'),'utf8'));const handler=app.protocol_handlers?.find((h:any)=>typeof h.protocol==='string'&&!['http','https'].includes(h.protocol.toLowerCase())&&!h.distribution_only&&typeof h.url==='string'&&h.url.includes('%s'));
       if(!handler)throw new Error('Add protocol_handlers and an /open route to open native screens. See the Ember example.');if(!app.app?.id)throw new Error('Set app.id in app.json.');appId=app.app.id;
-      await this.refresh();
+      const inputSignature=await this.refresh();this.service.checkRunning();
       // Refresh all skips frames already current for this build; a list of ids captures exactly those frames.
       const chosen=new Map<string,Job>();for(const frame of frames){const key=frameKey(frame);if(chosen.has(key))continue;if(capture.length?capture.includes(frame.id):this.frameState(key)!=='ready')chosen.set(key,{key,frame});}
       jobs=[...chosen.values()];
       if(!jobs.length){this.state='idle';this.message='Native previews are up to date.';return;}
       this.total=jobs.length;for(const j of jobs)this.statuses.set(j.key,{state:'queued',error:''});this.publish();
-      if(this.disk.signature!==this.signature||!this.disk.app||!existsSync(this.disk.app)){
+      if(this.disk.signature!==inputSignature||!this.disk.app||!existsSync(this.disk.app)){
         const fs=await statfs(this.appDir);const free=this.service.options.free?await this.service.options.free(this.appDir):fs.bavail*fs.bsize;const min=this.disk.app&&existsSync(this.disk.app)?10:20;
         if(free<min*1024**3)throw new Error(`Only ${(free/1024**3).toFixed(1)} GB free. Native builds need ${min} GB free.`);
-        this.progress('build',`Building ${app.name} for iOS. The first build takes several minutes.`);let output='';
-        try{output=await this.service.run([process.execPath,join(root,'tools/native-build.mjs'),this.appDir,...this.service.target.buildArgs],{PATH:`${homedir()}/.cargo/bin:${process.env.PATH}`,EXACT_FEEDBACK:'0'});await writeFile(join(this.dir,'build.log'),output);const built=/host\/apple:\s+(.+?\.app)(?:\s|$)/.exec(output)?.[1];if(!built||!existsSync(built))throw new Error('Build did not produce an app bundle.');this.disk.app=built;this.signature=await this.inputs();this.disk.signature=this.signature;await this.save();}
+        this.service.checkRunning();this.progress('build',`Building ${app.name} for iOS. The first build takes several minutes.`);let output='';
+        try{output=await this.service.run([process.execPath,join(root,'tools/native-build.mjs'),this.appDir,...this.service.target.buildArgs],{PATH:`${homedir()}/.cargo/bin:${process.env.PATH}`,EXACT_FEEDBACK:'0'});await writeFile(join(this.dir,'build.log'),output);const built=/host\/apple:\s+(.+?\.app)(?:\s|$)/.exec(output)?.[1];if(!built||!existsSync(built))throw new Error('Build did not produce an app bundle.');this.disk.app=built;this.disk.signature=inputSignature;await this.save();await this.refresh();}
         catch(e){await writeFile(join(this.dir,'build.log'),output+'\n'+message(e));throw new Error(`${brief(e)} Full log: ${join(this.dir,'build.log')}`);}
       }
-      const context={name:app.name as string,appId:app.app.id as string,scheme:handler.protocol as string,signature:this.disk.signature!};
+      this.service.checkRunning();const context={name:app.name as string,appId:app.app.id as string,scheme:handler.protocol as string,signature:this.disk.signature!};
       const fail=(group:Job[],e:unknown)=>{for(const j of group)if(this.statuses.get(j.key)?.state!=='ready'&&this.statuses.get(j.key)?.state!=='error'){this.statuses.set(j.key,{state:'error',error:brief(e)});this.done++;}this.publish();};
       // One device listing per job: which simulators exist and which are booted.
       const target=this.service.target;await target.scan();const devices:{slug:string;id:string;booted:boolean;group:Job[]}[]=[];
-      for(const slug of new Set(jobs.map(j=>j.frame.device))){const group=jobs.filter(j=>j.frame.device===slug),device=nativeDevice(slug)!;
+      for(const slug of new Set(jobs.map(j=>j.frame.device))){this.service.checkRunning();const group=jobs.filter(j=>j.frame.device===slug),device=nativeDevice(slug)!;
         try{const id=await target.destination(device.name.replace(/^Native /,''),device.simulator!),booted=await target.booted(id);if(!booted)this.service.records.delete(id);devices.push({slug,id,booted,group});used.push(id);}catch(e){fail(group,e);}}
       // Booted devices first: they cost no memory, and a cold one waits for a free slot.
       devices.sort((a,b)=>Number(b.booted)-Number(a.booted));let index=0;
-      const worker=async()=>{while(index<devices.length){const d=devices[index++];try{await this.device(d.slug,d.id,d.booted,d.group,context);}catch(e){this.service.records.delete(d.id);fail(d.group,e);}finally{this.service.starting.delete(d.id);}}};
+      const worker=async()=>{while(index<devices.length&&!this.service.stopping){const d=devices[index++];try{await this.device(d.slug,d.id,d.booted,d.group,context);}catch(e){this.service.records.delete(d.id);fail(d.group,e);}finally{this.service.starting.delete(d.id);}}};
       await Promise.all(Array.from({length:await this.service.parallelism(devices)},worker));
-      await this.save();this.state='idle';this.message='Native previews updated.';
+      this.service.checkRunning();await this.save();this.state='idle';this.message='Native previews updated.';
     }catch(e){if(this.state!=='unavailable')this.state='error';this.error=message(e).includes('Full log:')?message(e):brief(e);this.message=this.error;for(const j of jobs)this.statuses.set(j.key,{state:'error',error:this.error});}
     finally{this.phase='';this.publish();
       // So the next job starts on the tree: open runners now that this job's boots and launches are over.
-      if(used.length&&appId)await this.service.openRunners(used,appId).catch(()=>{});}
+      if(!this.service.stopping&&used.length&&appId)await this.service.openRunners(used,appId).catch(()=>{});}
   }
   /** One device's frames, warm: the app keeps running and each screen is opened with a link after a root reset. A device
    *  this process already prepared and that is still booted skips straight to its screens. */
   private async device(slug:string,id:string,booted:boolean,group:Job[],c:{name:string;appId:string;scheme:string;signature:string}){
     const target=this.service.target,readiness=this.service.readiness,name=nativeDevice(slug)!.name.replace(/^Native /,'');
-    let record=this.service.records.get(id);
-    if(!booted||!record){this.progress('boot',`Starting ${name}…`);if(!booted)await this.service.bootGate(id);const fresh=await target.boot(id);record={coldAt:fresh?this.service.now():record?.coldAt};this.service.records.set(id,record);}
-    readiness.forget?.(id);
+    this.service.checkRunning();let record=this.service.records.get(id);
+    await readiness.releaseOtherApp?.(id,c.appId);this.service.checkRunning();
+    if(!booted||!record){this.progress('boot',`Starting ${name}…`);if(!booted)await this.service.bootGate(id);this.service.checkRunning();const fresh=await target.boot(id);record={coldAt:fresh?this.service.now():record?.coldAt};this.service.records.set(id,record);}
+    this.service.checkRunning();readiness.forget?.(id);
     let relaunch=false;
     if(this.disk.installed[id]!==c.signature){this.progress('install',`Installing ${c.name} on ${name}…`);await target.install(id,this.disk.app!);this.disk.installed[id]=c.signature;relaunch=true;record={coldAt:record.coldAt};this.service.records.set(id,record);}
-    const approval=`${c.scheme}\0${c.appId}`;if(record.approved!==approval){await target.approve(id,c.scheme,c.appId);record.approved=approval;}
-    const reduce=this.service.reduceMotion;if(record.reduceMotion!==reduce){if(await target.reduceMotion(id,reduce))relaunch=true;record.reduceMotion=reduce;}
-    const r=record;r.appearance??=await target.appearance(id);
+    this.service.checkRunning();const approval=`${c.scheme}\0${c.appId}`;if(record.approved!==approval){await target.approve(id,c.scheme,c.appId);record.approved=approval;}
+    this.service.checkRunning();const reduce=this.service.reduceMotion;if(record.reduceMotion!==reduce){if(await target.reduceMotion(id,reduce))relaunch=true;record.reduceMotion=reduce;}
+    this.service.checkRunning();const r=record;r.appearance??=await target.appearance(id);
     // `known`: the app is running as this process left it. `atRoot`: it shows its root screen, settled.
     // `confirmed`: the last wait read the tree, which also confirmed the app in front.
     let known=r.running===c.appId&&!relaunch,atRoot=false,confirmed=false;
@@ -189,36 +194,36 @@ export class AppPreviews {
     let cold=!booted,lowMemory=false;
     const runner=async()=>{if(cold||lowMemory)return;if(!await this.service.openRunners([id],c.appId))lowMemory=true;};
     if(known)await runner();
-    const deadline=(readiness as {deadline?:number}).deadline??8000;
+    const deadline=readiness.deadline??8000;
     // Soon after a boot or launch the device is still busy, and pixels are slower than the tree: both get longer.
     const deadlineFor=(mark:Mark)=>deadline*(this.service.now()-(r.coldAt??-Infinity)<COLD_WINDOW?COLD_FACTOR:1)*(mark.mode==='pixel'?PIXEL_FACTOR:1);
     let used=deadline;
     const ensure=async()=>{
-      if(known)return;let running=await target.running(id,c.appId);
+      this.service.checkRunning();if(known)return;let running=await target.running(id,c.appId);
       if(running&&relaunch){readiness.forget?.(id);await target.terminate(id,c.appId);running=false;}relaunch=false;
       if(running){known=true;r.running=c.appId;this.service.starting.delete(id);await runner();return;}
-      this.progress('boot',`Opening ${c.name} on ${name}…`);cold=true;this.service.starting.add(id);readiness.forget?.(id);const mark=await readiness.mark(id,c.appId,true);await target.launch(id,c.appId);r.coldAt=this.service.now();
+      this.service.checkRunning();this.progress('boot',`Opening ${c.name} on ${name}…`);cold=true;this.service.starting.add(id);readiness.forget?.(id);const mark=await readiness.mark(id,c.appId,true);this.service.checkRunning();await target.launch(id,c.appId);r.coldAt=this.service.now();
       // A first launch after a boot or install is slower than a link; it gets two and a half link deadlines. Only the tree
       // tells the root screen from a launch screen, so pixels leave the root to the first reset.
-      const outcome=await readiness.wait(mark,deadline*LAUNCH_FACTOR);this.service.starting.delete(id);known=outcome!=='quit';r.running=known?c.appId:undefined;confirmed=mark.via==='ax';atRoot=outcome==='ready'&&confirmed;
+      this.service.checkRunning();const outcome=await readiness.wait(mark,deadline*LAUNCH_FACTOR);this.service.checkRunning();this.service.starting.delete(id);known=outcome!=='quit';r.running=known?c.appId:undefined;confirmed=mark.via==='ax';atRoot=outcome==='ready'&&confirmed;
     };
-    const go=async(url:string):Promise<Outcome>=>{const mark=await readiness.mark(id,c.appId);await target.open(id,url);used=deadlineFor(mark);const outcome=await readiness.wait(mark,used);confirmed=mark.via==='ax';return outcome;};
+    const go=async(url:string):Promise<Outcome>=>{this.service.checkRunning();const mark=await readiness.mark(id,c.appId);this.service.checkRunning();await target.open(id,url);this.service.checkRunning();used=deadlineFor(mark);const outcome=await readiness.wait(mark,used);this.service.checkRunning();confirmed=mark.via==='ax';return outcome;};
     const lose=()=>{known=false;atRoot=false;r.running=undefined;};
     const appearances=[...new Set(group.map(j=>j.frame.appearance??'light'))].sort((a,b)=>Number(b===r.appearance)-Number(a===r.appearance));
     try{
-      for(const appearance of appearances){
+      for(const appearance of appearances){this.service.checkRunning();
         if(appearance!==r.appearance){
           // A running app redraws in place: wait for it. One about to launch starts in the new appearance.
-          if(known){const mark=await readiness.mark(id,c.appId);await target.setAppearance(id,appearance);r.appearance=appearance;if(await readiness.wait(mark,deadlineFor(mark))==='quit')lose();}
+          if(known){const mark=await readiness.mark(id,c.appId);this.service.checkRunning();await target.setAppearance(id,appearance);r.appearance=appearance;this.service.checkRunning();if(await readiness.wait(mark,deadlineFor(mark))==='quit')lose();}
           else{readiness.forget?.(id);await target.setAppearance(id,appearance);r.appearance=appearance;}
         }
         // The root screen first: it needs no reset, and the next screen starts from it.
         for(const {key,frame} of group.filter(j=>(j.frame.appearance??'light')===appearance).sort((a,b)=>Number(b.frame.route==='/')-Number(a.frame.route==='/'))){
-          this.statuses.set(key,{state:'capturing',error:''});this.progress('capture',`Capturing ${this.done+1} of ${this.total}…`);
+          this.service.checkRunning();this.statuses.set(key,{state:'capturing',error:''});this.progress('capture',`Capturing ${this.done+1} of ${this.total}…`);
           const pending=join(this.dir,'shots',`${key}.pending.png`),quit=()=>new Error(`${c.name} quit while opening ${frame.route}`);
           try{
             await ensure();
-            for(let attempt=1;;attempt++){
+            for(let attempt=1;;attempt++){this.service.checkRunning();
               let outcome:Outcome='ready';
               // The root link resets the app: it dismisses a sheet and leaves a full-screen route. For `/` it is the capture.
               if(!atRoot||attempt>1){atRoot=false;outcome=await go(`${c.scheme}://`);if(outcome==='ready')atRoot=true;}
@@ -228,7 +233,7 @@ export class AppPreviews {
               if(outcome==='quit'){lose();if(attempt>=2)throw quit();await ensure();continue;}
               if(attempt>=2)throw new Error(`${c.name} did not settle on ${frame.route} within ${Math.round(used/100)/10} s.`);
             }
-            await target.screenshot(id,pending,'png');
+            this.service.checkRunning();await target.screenshot(id,pending,'png');
             // A tree read already confirmed the app in front; pixels cannot tell, so ask the device.
             if(!confirmed&&!await target.running(id,c.appId)){lose();throw quit();}
             const png=await readFile(pending);if(png.length<24||png.toString('hex',0,8)!=='89504e470d0a1a0a')throw new Error('Simulator returned an invalid PNG.');

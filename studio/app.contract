@@ -1771,14 +1771,18 @@ component NativeFrame
     column position="relative" width="100%" height="100%" overflow="hidden" background-color="surface.panel" color="ink.secondary" testId=`${id}-native`
       if frame.shot != ""
         image frame.shot width="100%" height="100%" object-fit="fill" alt=name testId=`${id}-native-shot`
-      if error != "" or frame.shot == ""
+      if frame.shot == ""
         column position="absolute" inset=0 align-items="center" justify-content="center" padding=24 gap=12 background-color="surface.panel"
           Icon(name=(error != "" ? "circle-alert" : deviceIcon(name)), size=32, angle=0)
           text "Native preview" font="type.heading" color="ink.primary"
           text (error != "" ? error : frame.state == "queued" or frame.state == "capturing" ? "Waiting for the iOS build…" : "Not captured yet") font="type.body" text-align="center" testId=`${id}-native-state`
           if error == "" and frame.state == "empty"
             text "Select Refresh preview to capture." font="type.caption" text-align="center"
-      if frame.state == "queued" or frame.state == "capturing" or frame.state == "stale"
+      if error != "" and frame.shot != ""
+        row class=FloatingBar position="absolute" top=12 left=12 right=12 padding="4px 8px" gap=8 color="ink.danger" data-tip=error aria-label=error
+          Icon(name="circle-alert", size=14, angle=0)
+          text "Refresh failed · previous capture" font="type.caption" testId=`${id}-native-error`
+      if error == "" and (frame.state == "queued" or frame.state == "capturing" or frame.state == "stale")
         row class=FloatingBar position="absolute" top=12 left=12 padding="4px 8px" gap=8
           Icon(name=(frame.state == "stale" ? "history" : "refresh-cw"), size=14, angle=0)
           text (frame.state == "stale" ? "Stale · the app changed" : "Capturing…") font="type.caption" testId=`${id}-native-chip`

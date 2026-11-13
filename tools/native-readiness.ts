@@ -25,6 +25,9 @@ export type Baseline=string|Bitmap|null|undefined;
  *  front. */
 export type Mark={udid:string;appId:string;at:number;baseline:Baseline;mode?:'ax'|'pixel';via?:'ax'|'pixel'};
 export interface Readiness {
+  readonly deadline?:number;
+  /** Ends a device session before a different app uses that device. */
+  releaseOtherApp?(udid:string,appId:string):Promise<void>;
   /** Starts opening what readiness needs for a device without waiting for it. */
   prepare?(udid:string,appId:string):void;
   /** Whether `prepare` would start opening something now (nothing open or opening, and not given up). */
@@ -121,6 +124,7 @@ export class NativeReadiness implements Readiness {
     if(slot.attempts<2&&!this.closed)return;
     this.slots.delete(udid);this.pixel.add(udid);this.options.notice?.(udid,reason);
   }
+  async releaseOtherApp(udid:string,appId:string){const slot=this.slots.get(udid);if(!slot||slot.appId===appId)return;this.slots.delete(udid);this.settled.delete(udid);this.pixel.delete(udid);await slot.opening;await slot.session?.close();}
   forget(udid:string){this.settled.delete(udid);}
   private async ask(session:TouchSession,request:Record<string,unknown>){try{return await session.ask(request);}catch(e){return {error:`the touch runner failed: ${String((e as Error)?.message??e)}`};}}
   async mark(udid:string,appId:string,blank=false):Promise<Mark>{

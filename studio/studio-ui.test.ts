@@ -137,7 +137,16 @@ test('native screenshots load cross origin and fill their frame in both themes',
   for(const e of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(e.isFile()&&!e.name.includes('.test.')&&!e.name.endsWith('.d.ts')&&/\.(ts|contract|json|tamber)$/.test(e.name))await cp(resolve(root,'studio',e.name),resolve(temp,e.name));
   for(const name of ['assets','modules'])await cp(resolve(root,'studio',name),resolve(temp,name),{recursive:true});
   const fixture=await import('../tools/native-fixture');
-  const helper=Bun.serve({hostname:'127.0.0.1',port:0,fetch:async request=>{const headers={'access-control-allow-origin':'*','access-control-allow-headers':'content-type','access-control-allow-methods':'POST, GET, OPTIONS'};if(request.method==='OPTIONS')return new Response(null,{headers});const respond=(response:Response)=>{for(const [k,v]of Object.entries(headers))response.headers.set(k,v);return response;};const url=new URL(request.url);if(url.pathname.startsWith('/native/shot/'))return fixture.nativeShot(url.pathname.slice('/native/shot/'.length));if(url.pathname==='/native')return respond(fixture.nativeScreens(await request.json(),request));if(url.pathname==='/discover')return respond(Response.json({routes:[{name:'Home',route:'/',pattern:'/'}],error:''}));return Response.json({});}});
+  let failureMode: 'frame'|'job'|undefined;
+  const helper=Bun.serve({hostname:'127.0.0.1',port:0,fetch:async request=>{const headers={'access-control-allow-origin':'*','access-control-allow-headers':'content-type','access-control-allow-methods':'POST, GET, OPTIONS'};if(request.method==='OPTIONS')return new Response(null,{headers});const respond=(response:Response)=>{for(const [k,v]of Object.entries(headers))response.headers.set(k,v);return response;};const url=new URL(request.url);if(url.pathname.startsWith('/native/shot/'))return fixture.nativeShot(url.pathname.slice('/native/shot/'.length));if(url.pathname==='/native'){
+    const body=await request.json();
+    if(failureMode&&body.run){
+      const error='Fixture refresh failed.';
+      const frames=body.frames.map((f:any)=>({id:f.id,state:failureMode==='frame'?'error':'ready',shot:`${url.origin}/native/shot/375/667.png`,width:375,height:667,capturedAt:1794540000000,error:failureMode==='frame'?error:''}));
+      return respond(new Response(`data: ${JSON.stringify({state:'error',phase:'',message:error,error:failureMode==='job'?error:'',done:1,total:1,frames})}\n\n`,{headers:{'content-type':'text/event-stream'}}));
+    }
+    return respond(fixture.nativeScreens(body,request));
+  }if(url.pathname==='/discover')return respond(Response.json({routes:[{name:'Home',route:'/',pattern:'/'}],error:''}));return Response.json({});}});
   const appPath=resolve(temp,'app.ts');await writeFile(appPath,(await readFile(appPath,'utf8')).replaceAll('http://127.0.0.1:5175','http://127.0.0.1:'+helper.port));
   const manifest=JSON.parse(await readFile(resolve(temp,'app.json'),'utf8'));delete manifest.commands;delete manifest.server;await writeFile(resolve(temp,'app.json'),JSON.stringify(manifest));
   const probe=Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response()});const port=probe.port;probe.stop(true);
@@ -163,6 +172,19 @@ test('native screenshots load cross origin and fill their frame in both themes',
     // The only frame is current, so refreshing all captures nothing and says so.
     await page.locator('[data-testid="native-refresh-all"]:not([disabled])').click();
     await page.locator('[data-testid="native-progress"]',{hasText:'Native previews are up to date.'}).waitFor({timeout:5000});
+    for(const failure of ['frame','job'] as const){
+      failureMode=failure;
+      await refresh.click();
+      await page.locator('[data-testid="view-2-native-error"]').waitFor();
+      expect(await page.locator('[data-testid="view-2-native-state"]').count()).toBe(0);
+      // The error occupies a compact chip rather than a frame-sized opaque panel.
+      const chip=await page.locator('[data-testid="view-2-native-error"]').evaluate((text:HTMLElement)=>{const panel=text.parentElement!,frame=panel.parentElement!;return {panel:panel.getBoundingClientRect().height,frame:frame.getBoundingClientRect().height};});
+      expect(chip.panel).toBeLessThan(chip.frame/2);
+      failureMode=undefined;
+      await refresh.click();
+      await page.locator('[data-testid="view-2-native-error"]').waitFor({state:'detached'});
+      await page.locator('[data-testid="native-refresh"]:not([disabled])').waitFor();
+    }
     expect(errors).toEqual([]);
   }finally{await page?.context().close();await suite?.browser.close();child.kill('SIGTERM');await child.exited;helper.stop(true);await rm(temp,{recursive:true,force:true});}
 },60000);

@@ -72,7 +72,7 @@ test('scheme approval writes the launch services key and rejects bad schemes and
   expect(f.calls.length).toBe(count);
 });
 test('warm loop launches once, opens links with a root reset between screens and never relaunches per screen',async()=>{
-  const f=await fixture({rewrite:true});const three=[...frames,{id:'three',device:'native-iphone-17',route:'/activity'}];
+  const f=await fixture();const three=[...frames,{id:'three',device:'native-iphone-17',route:'/activity'}];
   await f.app.start('a',three);expect(f.app.snapshot(three).frames.map(f=>f.state)).toEqual(['ready','ready','ready']);expect(f.app.message).toBe('Native previews updated.');
   expect(f.calls.some(c=>c.args.includes('--terminate-running-process'))).toBe(false);expect(f.calls.some(c=>c.env&&Object.keys(c.env).some(k=>k.startsWith('SIMCTL_CHILD_')))).toBe(false);
   expect(named(f.calls,'launch').map(c=>c.args)).toEqual([[SIMCTL,'launch','owned','dev.test.ember']]);expect(named(f.calls,'terminate')).toHaveLength(0);
@@ -195,6 +195,65 @@ test('refresh all skips current frames, a source change captures again, and capt
   await f.app.start('d',frames,['two']);expect(shots(f.calls)).toHaveLength(5);expect(f.app.snapshot(frames)).toMatchObject({done:1,total:1,message:'Native previews updated.'});expect(opened(f.calls).at(-1)).toBe('web+ember://diary/add');
   // A new frame on a current build captures only that frame.
   const more=[...frames,{id:'three',device:'native-iphone-17',route:'/activity'}];await f.app.start('e',more);expect(shots(f.calls)).toHaveLength(6);expect(f.app.total).toBe(1);
+});
+function deferred(){let resolve!:()=>void;const promise=new Promise<void>(r=>{resolve=r;});return {promise,resolve};}
+test('source changes during a build stay stale even when the status poll observes them',async()=>{
+  const f=await fixture();let first=true;let app:Awaited<ReturnType<NativePreviews['app']>>;
+  const run:Runner=async(args,env)=>{
+    const result=await f.runner(args,env);
+    if(first&&args.some(a=>a.endsWith('native-build.mjs'))){first=false;await writeFile(join(f.appDir,'app.contract'),'edited during build');await app.refresh();}
+    return result;
+  };
+  const service=new NativePreviews({...f.serviceOptions,run});app=await service.app(f.appDir);
+  await app.start('old',frames);expect(app.snapshot(frames).frames.map(f=>f.state)).toEqual(['stale','stale']);
+  await app.start('new',frames);expect(builds(f.calls)).toHaveLength(2);expect(app.snapshot(frames).frames.map(f=>f.state)).toEqual(['ready','ready']);
+});
+test('SDK app manifest rewrites conservatively require one extra build',async()=>{
+  const f=await fixture({rewrite:true});await f.app.start('first',frames);expect(f.app.snapshot(frames).frames[0].state).toBe('stale');
+  await f.app.start('second',frames);expect(builds(f.calls)).toHaveLength(2);expect(f.app.snapshot(frames).frames[0].state).toBe('ready');
+  await f.app.start('third',frames);expect(builds(f.calls)).toHaveLength(2);
+});
+test('failed Xcode versions from a status poll recover without restarting the helper',async()=>{
+  const f=await fixture();let missing=true;
+  const run:Runner=async(args,env)=>{if(args[0]==='xcodebuild'&&missing)throw new Error('Xcode not selected');return f.runner(args,env);};
+  const service=new NativePreviews({...f.serviceOptions,run,target:new Simulators(run,'darwin')});const app=await service.app(f.appDir);
+  await expect(app.refresh()).rejects.toThrow('Xcode not selected');missing=false;
+  await app.start('retry',frames);expect(app.snapshot(frames).frames.map(f=>f.state)).toEqual(['ready','ready']);
+});
+test('shutdown during a build skips device work and queued jobs',async()=>{
+  const f=await fixture(),entered=deferred(),release=deferred();
+  const run:Runner=async(args,env)=>{if(args.some(a=>a.endsWith('native-build.mjs'))){entered.resolve();await release.promise;}return f.runner(args,env);};
+  const service=new NativePreviews({...f.serviceOptions,run});const app=await service.app(f.appDir);
+  const first=app.start('first',frames);await entered.promise;const queued=app.start('queued',frames);
+  const stopping=service.stop();release.resolve();await Promise.all([first,queued,stopping]);await app.start('late',frames);
+  expect(builds(f.calls)).toHaveLength(1);expect(named(f.calls,'boot')).toHaveLength(0);expect(shots(f.calls)).toHaveLength(0);
+  expect(f.calls.filter(c=>op(c)==='prepare')).toHaveLength(0);expect(f.calls.filter(c=>op(c)==='close')).toHaveLength(1);
+});
+test('shutdown after an active readiness step skips the remaining frames and restores appearance',async()=>{
+  const f=await fixture(),entered=deferred(),release=deferred();let waitCount=0;
+  const readiness=fakeReadiness(f.calls);const wait=readiness.wait;
+  readiness.wait=async(mark,deadline)=>{if(++waitCount===1){entered.resolve();await release.promise;}return wait(mark,deadline);};
+  const service=new NativePreviews({...f.serviceOptions,readiness});const app=await service.app(f.appDir);
+  const job=app.start('first',frames.map(f=>({...f,appearance:'dark'})));await entered.promise;const stopping=service.stop();release.resolve();await Promise.all([job,stopping]);
+  expect(waitCount).toBe(1);expect(shots(f.calls)).toHaveLength(0);expect(f.sim.appearance).toBe('light');
+  expect(named(f.calls,'shutdown')).toHaveLength(1);expect(f.calls.filter(c=>op(c)==='prepare')).toHaveLength(0);
+});
+test('different projects serialize all simulator work through one service',async()=>{
+  const f=await fixture(),g=await fixture(),entered=deferred(),release=deferred();let first=true;
+  const run:Runner=async(args,env)=>{if(first&&args.includes('--type=png')){first=false;entered.resolve();await release.promise;}return f.runner(args,env);};
+  const service=new NativePreviews({...f.serviceOptions,run,target:new Simulators(run,'darwin')});
+  const a=await service.app(f.appDir),b=await service.app(g.appDir);const firstJob=a.start('first',frames);await entered.promise;
+  const count=f.calls.length,secondJob=b.start('second',frames);await Bun.sleep(0);expect(f.calls).toHaveLength(count);
+  release.resolve();await Promise.all([firstJob,secondJob]);expect(a.snapshot(frames).frames[0].state).toBe('ready');expect(b.snapshot(frames).frames[0].state).toBe('ready');
+  const secondBuild=f.calls.findIndex(c=>c.args.includes(b.appDir)&&c.args.some(a=>a.endsWith('native-build.mjs')));
+  expect(secondBuild).toBeGreaterThan(f.calls.indexOf(shots(f.calls)[1]));expect(shots(f.calls)).toHaveLength(4);
+});
+test('switching apps waits for the old accessibility session to close',async()=>{
+  const opened=deferred(),closed=deferred();let closes=0;
+  const readiness=new NativeReadiness({open:async()=>{await opened.promise;return {ask:async()=>({}),close:async()=>{closes++;await closed.promise;}};},shoot:async()=>{throw new Error('unused');}});
+  readiness.prepare('device','first');let released=false;const release=readiness.releaseOtherApp('device','second').then(()=>{released=true;});
+  opened.resolve();await Bun.sleep(0);expect(closes).toBe(1);expect(released).toBe(false);closed.resolve();await release;
+  expect(readiness.needsOpen('device','second')).toBe(true);await readiness.close();expect(closes).toBe(1);
 });
 test('appearance groups frames, switches once each way and keys shots by appearance',async()=>{
   const f=await fixture();const both=[{id:'d1',device:'native-iphone-17',route:'/',appearance:'dark' as const},{id:'l1',device:'native-iphone-17',route:'/'},{id:'d2',device:'native-iphone-17',route:'/diary/add',appearance:'dark' as const},{id:'l2',device:'native-iphone-17',route:'/diary/add',appearance:'light' as const}];

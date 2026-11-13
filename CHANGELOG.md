@@ -18,6 +18,8 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Fixed
 
+- Native refreshes retain the pre-build source signature, retry failed Xcode checks, and serialize jobs across projects. Shutdown skips queued work, and capture errors keep the previous screenshot visible.
+
 - Windows setup now points to the supported Ubuntu/WSL2 workflow and rejects native execution before starting SDK builds or the helper.
 - Preserve resource identity across launches while still passing the page timestamp to the data sources. Loading-indicator frames use stable keys, and spacing labels and draft-count badges scale with browser text settings.
 
