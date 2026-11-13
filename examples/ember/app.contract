@@ -5,6 +5,7 @@ use EmptyState from "exact:content"
 
 routes nav
   tab today "/"
+    opening "/open"
     welcome "/welcome"
     onboardingGoal "/onboarding"
     onboardingBody "/onboarding/body"
@@ -244,6 +245,10 @@ style Eyebrow
   letter-spacing="0.8px"
   color="ink-2"
 
+// A deep link `web+ember://diary/add` arrives as `/open?u=<the whole link>`. Its route is the
+// text after the scheme, with any authority slashes folded into one leading slash.
+fn linkPath(u: string): string = u.startsWith("web+ember:") ? folded(u.slice(10)) : "/"
+fn folded(rest: string): string = rest.startsWith("///") ? rest.slice(2) : rest.startsWith("//") ? `/${rest.slice(2)}` : rest.startsWith("/") ? rest : `/${rest}`
 fn num(n: number): string = formatNumber(round(n), "decimal")
 fn frac(part: number, whole: number): number = whole <= 0 ? 0 : max(0, min(1, part / whole))
 fn pct(part: number, whole: number): string = `${round(frac(part, whole) * 100)}%`
@@ -313,12 +318,17 @@ component App
   derive saveError = match saved { case some(r) => r.error, case none => "" }
   task tick mount
     every(60000, step)
+  // A link opens `/open` first, cold or warm; this leaves it for the route it names.
+  task deepLink when top(nav).name == "opening"
+    after(1, followLink)
   action step
     now = performanceNow()
   action follow(url: string)
     nav = go(nav, url)
   action back
     nav = back(nav)
+  action followLink
+    nav = open(back(nav), linkPath(searchParam(top(nav), "u")))
   action pick(tab: string)
     nav = select(nav, tab)
   action pickDay(d: string)
@@ -457,6 +467,8 @@ component App
                     button press=train class=Pill disabled=pending(trained) opacity=(pending(trained) ? 0.6 : 1) testId="save-workout"
                       image "symbol:icon.check" aria-hidden=true
                       text "Save workout"
+              if e.name == "opening"
+                column navigationKey=`${e.id}` navigationBar="none" position="absolute" inset=0 background-color="page" testId="opening"
               if e.name == "welcome"
                 column navigationKey=`${e.id}` navigationPresentation="fullscreen" navigationBar="none" position="absolute" inset=0 background-color="page" overflow="hidden"
                   Aurora(kind="bloom", still=still)
