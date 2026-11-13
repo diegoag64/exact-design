@@ -135,8 +135,12 @@ export class AppPreviews {
   private frameState(key:string):FrameStatus{const shot=this.disk.shots[key],status=this.statuses.get(key);return status?.state==='ready'||!status?(shot?(shot.signature===this.signature?'ready':'stale'):'empty'):status.state;}
   snapshot(frames:NativeFrame[],origin='http://127.0.0.1:5175'){return {state:this.state,phase:this.phase,message:this.message,error:this.error,done:this.done,total:this.total,frames:frames.map(f=>{const key=frameKey(f),shot=this.disk.shots[key],status=this.statuses.get(key);return {id:f.id,state:this.frameState(key),shot:shot?`${origin}/native/shot/${this.key}/${shot.file}?v=${shot.capturedAt}`:'',width:shot?.width??0,height:shot?.height??0,capturedAt:shot?.capturedAt??0,error:status?.error??''};})};}
   /** Starts one job per new token. `capture` empty: every frame that is not ready; ids: exactly those frames. */
-  start(token:string,frames:NativeFrame[],capture:string[]=[]){if(this.service.stopping||!token||this.tokens.has(token))return this.tail;this.tokens.add(token);const copy=frames.map(f=>({...f,appearance:f.appearance??'light'})),ids=[...capture];this.tail=this.service.enqueue(()=>this.job(copy,ids));return this.tail;}
-  finished(){return this.tail;}
+  start(token:string,frames:NativeFrame[],capture:string[]=[]){
+    if(this.service.stopping||!token||this.tokens.has(token))return this.tail;
+    this.tokens.add(token);
+    if(this.state!=='working'){this.state='working';this.phase='queued';this.message='Waiting for native refresh…';this.error='';this.done=0;this.total=0;this.publish();}
+    const copy=frames.map(f=>({...f,appearance:f.appearance??'light'})),ids=[...capture];this.tail=this.service.enqueue(()=>this.job(copy,ids));return this.tail;
+  }
   private progress(phase:string,text:string){this.phase=phase;this.message=text;this.publish();}
   private async job(frames:NativeFrame[],capture:string[]){
     this.service.nextJob();this.state='working';this.phase='';this.message='Preparing native previews…';this.error='';this.done=0;this.total=0;this.publish();let jobs:Job[]=[],appId='';const used:string[]=[];

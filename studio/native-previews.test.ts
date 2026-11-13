@@ -243,10 +243,24 @@ test('different projects serialize all simulator work through one service',async
   const run:Runner=async(args,env)=>{if(first&&args.includes('--type=png')){first=false;entered.resolve();await release.promise;}return f.runner(args,env);};
   const service=new NativePreviews({...f.serviceOptions,run,target:new Simulators(run,'darwin')});
   const a=await service.app(f.appDir),b=await service.app(g.appDir);const firstJob=a.start('first',frames);await entered.promise;
-  const count=f.calls.length,secondJob=b.start('second',frames);await Bun.sleep(0);expect(f.calls).toHaveLength(count);
+  const count=f.calls.length,secondJob=b.start('second',frames);
+  expect(b.snapshot(frames)).toMatchObject({state:'working',phase:'queued',message:'Waiting for native refresh…',error:'',done:0,total:0});
+  await Bun.sleep(0);expect(f.calls).toHaveLength(count);
   release.resolve();await Promise.all([firstJob,secondJob]);expect(a.snapshot(frames).frames[0].state).toBe('ready');expect(b.snapshot(frames).frames[0].state).toBe('ready');
   const secondBuild=f.calls.findIndex(c=>c.args.includes(b.appDir)&&c.args.some(a=>a.endsWith('native-build.mjs')));
   expect(secondBuild).toBeGreaterThan(f.calls.indexOf(shots(f.calls)[1]));expect(shots(f.calls)).toHaveLength(4);
+});
+test('a queued refresh replaces a previous success message without hiding active progress',async()=>{
+  const f=await fixture();await f.app.start('first',frames);
+  const entered=deferred(),release=deferred();const blocker=f.service.enqueue(async()=>{entered.resolve();await release.promise;});await entered.promise;
+  const next=f.app.start('next',frames,['one']);
+  expect(f.app.snapshot(frames)).toMatchObject({state:'working',phase:'queued',message:'Waiting for native refresh…',done:0,total:0});
+  release.resolve();await Promise.all([blocker,next]);expect(f.app.state).toBe('idle');
+  const buildEntered=deferred(),buildRelease=deferred();let current:Awaited<ReturnType<NativePreviews['app']>>;
+  const run:Runner=async(args,env)=>{if(args.some(a=>a.endsWith('native-build.mjs'))){buildEntered.resolve();await buildRelease.promise;}return f.runner(args,env);};
+  const service=new NativePreviews({...f.serviceOptions,cache:join(f.appDir,'.other-cache'),run});current=await service.app(f.appDir);
+  const active=current.start('active',frames);await buildEntered.promise;const queued=current.start('queued',frames);
+  expect(current.snapshot(frames).phase).toBe('build');buildRelease.resolve();await Promise.all([active,queued]);await service.stop();
 });
 test('projects sharing a bundle ID reinstall their own build when switching back',async()=>{
   const f=await fixture(),g=await fixture();await writeFile(join(g.appDir,'app.contract'),'different app');
