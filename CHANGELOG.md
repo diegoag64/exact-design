@@ -15,6 +15,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Fixed
 
+- `bun run setup` now builds the Contract compiler. On a fresh clone, Apply and the source-writing tests failed until it had been built some other way.
 - Prevent a tooltip popover error when focus returns to a control as a context menu closes.
 
 - Two studio pages open at once, such as two tabs, no longer overwrite each other's preview readiness, sizes, and editing state. Each page now scopes its frame ids.
