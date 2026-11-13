@@ -197,6 +197,8 @@ Frame ids are echoed unchanged. `GET /native/shot/<key>/<file>.png` serves a scr
 
 The shared runtime supports the pinned Exact JavaScript development bundle and TypeScript request/reply data sources. Streaming sources, Rust sources, and native module operations need separate adapters. Unsupported bundles and browsers without SharedWorker retain independent state.
 
+The bundle adapter resolves the runtime's exported name from its hashed chunk and supports both inline and separate TypeScript installers. It validates the runtime and installer before enabling sharing. Only the elected viewport runs scheduled tasks; other viewports still apply shared state and local navigation.
+
 Preview adapters change served code without changing app source or the SDK. Apply is the explicit source-write operation. CSS classes alone cannot identify editable source because Exact deduplicates identical styles.
 
 Workspace timeline entries retain document snapshots. Source entries retain patches, addresses, and file hashes, not complete application snapshots. Historical replay and rollback are not implemented.

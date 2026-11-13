@@ -6,7 +6,7 @@ import { requireSupportedHost } from './platform.mjs';
 requireSupportedHost();
 const root = resolve(import.meta.dir, '..');
 const sdk = resolve(root, '.exact-sdk');
-const revision = '336a059fd1464bee7c61640afb7124ebf276d06d';
+const revision = '114bb88f6f6fc0d9da8c1846c51d81fe23f63042';
 const env = {...process.env, PATH: `${resolve(homedir(), '.cargo/bin')}:${process.env.PATH}`, EXACT_FEEDBACK: '0'};
 function run(command, args, cwd=root) {
   const result=spawnSync(command,args,{cwd,env,stdio:'inherit'});

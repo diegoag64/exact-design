@@ -1,6 +1,6 @@
 import {test,expect} from 'bun:test';
 import {readFileSync} from 'node:fs';
-import {sharedRuntime} from '../tools/shared-runtime';
+import {sharedRuntime,sharedBundle,sharedRuntimeChunk} from '../tools/shared-runtime';
 const source=readFileSync(new URL('../tools/project-state-hub.js',import.meta.url),'utf8');
 function fixture(){
   const clients=new Map(),messages:any[]=[];
@@ -57,6 +57,36 @@ test('rebuilds reject outstanding writes, reload the engine, and refuse retired 
   expect(f.executions().at(-1).client).toBe('engine2');f.reply(replacement,[]);
 });
 test('unknown runtime bundles are left unchanged',()=>{expect(sharedRuntime('globalThis.exact={ready:true}')).toBeNull();});
+
+const chunk='var rt=wrap({AGENT_ADMITTED:()=>!0,After:()=>after,Store:()=>store,W:()=>write,commit:()=>commit,conforms:()=>conforms,useSchedule:()=>schedule});const schedule=s=>{scheduler=s};scheduler?.gates();export{rt as r};';
+test('split runtime adaptation gates scheduled work to the elected preview',()=>{
+  const adapted=sharedRuntimeChunk(chunk)!;
+  expect(adapted).not.toBeNull();
+  const run=new Function('globalThis','wrap','scheduler','after','store','write','commit','conforms',adapted.replace('export{rt as r};',''));
+  let calls=0;const scheduler={gates:()=>calls++};
+  for(const state of [{},{__exactDesignShared:true},{__exactDesignShared:true,__exactDesignAuthority:true}])run(state,()=>({}),scheduler);
+  expect(calls).toBe(2);
+});
+test('split bundles install sharing before the app mounts with either TypeScript layout',async()=>{
+  const head='import{x}from"./rt-hash.js";';
+  const inline=head+'function install(data){data.ts=answer,data.tool=tool}install(data);globalThis.exact={ready:true,data:data,state:mount()};';
+  const separate=head+'import{t as install}from"./ts-data-hash.js";install(data,!1,()=>import(`./native-hash.js`)),globalThis.exact={ready:true,data:data,state:mount()};';
+  for(const source of [inline,separate]){
+    const adapted=await sharedBundle(source,async path=>path.includes('ts-data')?'data.ts=answer,data.tool=tool':chunk);
+    expect(adapted).not.toBeNull();
+    const events:string[]=[];const data:any={};
+    const executable=adapted!.replace(/import\{[^}]+\}from[^;]+;/g,'');
+    const run=new Function('__exactDesignRuntime','globalThis','data','answer','tool','mount','install',executable);
+    run({}, {__exactDesignInstallRuntime:(_rt:any,d:any)=>{expect(d.ts).toBeDefined();events.push('share');}},data,()=>{},()=>{},()=>events.push('mount'),(d:any)=>{d.ts=()=>{};});
+    expect(events).toEqual(['share','mount']);
+  }
+});
+test('split bundles refuse unknown runtime or ambiguous TypeScript installers',async()=>{
+  const entry='import{x}from"./rt-hash.js";data.ts=answer,globalThis.exact={ready:true,data:data,state:mount()};';
+  expect(await sharedBundle(entry,async()=>chunk.replace('Store:','Unknown:'))).toBeNull();
+  expect(await sharedBundle(entry+'other.ts=answer,next()',async()=>chunk)).toBeNull();
+  expect(sharedRuntimeChunk(chunk.replace('scheduler?.gates()','scheduler.tick()'))).toBeNull();
+});
 
 test('a replacement engine hydrates prior reads before accepting queued writes',()=>{
   const f=fixture(),view=f.join('phone'),engine=f.join('engine','engine');
