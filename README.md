@@ -14,6 +14,8 @@ Blank screens support editable layers and Contract export.
 
 ## Run locally
 
+On Windows, follow [the WSL2 setup](docs/development.md#develop-on-windows-with-wsl2). The pinned SDK does not support running the studio directly in PowerShell.
+
 Install Bun 1.4.2 and Rust through rustup, then run:
 
 ```sh

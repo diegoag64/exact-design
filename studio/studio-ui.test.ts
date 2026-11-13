@@ -86,6 +86,9 @@ test('studio icons, context menus and canvas gestures share the desktop interact
     expect((await camera()).zoom).toBeCloseTo(unzoomed.zoom,5);
     const heading=page.getByRole('button',{name:'Heading',exact:true});await heading.click({button:'right'});
     const menu=page.getByRole('menu',{name:'Canvas actions'});await menu.waitFor();
+    // Right-click selection is a data-source mutation. The menu can open before
+    // its layer actions replace the previous frame selection's disabled actions.
+    await page.waitForFunction(()=>{const item=document.getElementById('menu-delete');return item?.checkVisibility()&&!item.disabled;});
     await page.waitForFunction(()=>document.activeElement?.getAttribute('role')==='menuitem');
     await page.keyboard.press('End');expect(await page.evaluate(()=>document.activeElement.id)).toBe('menu-inspector');
     await page.keyboard.press('Home');expect(await page.evaluate(()=>document.activeElement.id)).toBe('menu-delete');

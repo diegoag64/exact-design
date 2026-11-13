@@ -50,13 +50,20 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
     },expected,{polling:50,timeout:3000})));
     const frameScale=()=>page.evaluate(()=>parseFloat(document.querySelector('#canvas-stage > [data-testid^="frame-"]').style.scale));
     const zoomBy=(factor:number)=>page.locator('[aria-label="Design canvas"]').dispatchEvent('wheel',{ctrlKey:true,deltaY:(1-factor)/0.005});
+    const zoomTo=async(target:number)=>{
+      await zoomBy(target/await frameScale());
+      await page.waitForFunction(target=>Math.abs(parseFloat(document.querySelector('#canvas-stage > [data-testid^="frame-"]').style.scale)-target)<0.0001,target);
+    };
     await probe('blur(4px)');
-    while(await frameScale()>=0.16)await zoomBy(0.9);
+    // Multiplicative steps can overshoot 15%, depending on the fitted starting scale.
+    await zoomTo(0.16);
     await probe('blur(4px)');
-    while(await frameScale()>=0.15)await zoomBy(0.9);
+    await zoomTo(0.14);
     await probe('none');
-    while(await frameScale()<=0.17)await zoomBy(1.05);
+    await zoomTo(0.17);
     await probe('none');
+    await zoomTo(0.19);await probe('blur(4px)');
+    await zoomTo(0.16);await probe('blur(4px)');
     await page.getByRole('button',{name:'Fit all screens',exact:true}).click();await probe('blur(4px)');
     // Reduced preview effects drop blurs at every zoom and remove CSS animations.
     const motion=(expected:string)=>Promise.all(previewFrames.map(preview=>preview.waitForFunction(expected=>{

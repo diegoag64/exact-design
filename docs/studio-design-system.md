@@ -34,7 +34,7 @@ The Exact Contract owns view state and actions. Browser hatches handle browser-s
 | Control sizes | 48px panel headers, 40px section title rows, 32px tool buttons, 28px fields, buttons, and tree rows, 24px section actions |
 | Spacing | 4px grid. Panel sections pad 12px top, 16px left and bottom, 12px right; 8px between controls, 10px between inspector properties, 1px between tree rows. Tree rows indent 12px per level |
 
-Panel geometry and camera calculations read the same width helpers. Dense tool typography is fixed-size for now; support for larger text remains a separate accessibility task. The canvas renderer uses the fixed `#0d99ff` accent because its drawing API does not resolve Tamber tokens.
+Panel geometry and camera calculations read the same width helpers. Spacing labels and draft-count badges use `rem` sizes and grow with the browser's text size. Most dense tool typography still uses fixed-size tokens; broader support for larger text remains a separate accessibility task. The canvas renderer uses the fixed `#0d99ff` accent because its drawing API does not resolve Tamber tokens.
 
 ## Components
 

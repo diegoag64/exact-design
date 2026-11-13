@@ -17,7 +17,7 @@ Outside contributors work from a fork. Only the maintainer can push branches to 
 
 1. Fork the repository and clone your fork.
 2. Create a branch from `main`, such as `fix/inspector-spacing`.
-3. Follow the [README setup](README.md#run-locally): install Bun 1.4.2 and Rust through rustup, then run `bun run setup`.
+3. Follow the [README setup](README.md#run-locally): install Bun 1.4.2 and Rust through rustup, then run `bun run setup`. On Windows, use [Ubuntu on WSL2](docs/development.md#develop-on-windows-with-wsl2) for setup, development, and checks.
 4. Make your change and run the checks below.
 5. Push to your fork and open a pull request against `main`.
 

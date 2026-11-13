@@ -15,6 +15,9 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Fixed
 
+- Windows setup now points to the supported Ubuntu/WSL2 workflow and rejects native execution before starting SDK builds or the helper.
+- Preserve resource identity across launches while still passing the page timestamp to the data sources. Loading-indicator frames use stable keys, and spacing labels and draft-count badges scale with browser text settings.
+
 - `bun run setup` now builds the Contract compiler. On a fresh clone, Apply and the source-writing tests failed until it had been built some other way.
 - Prevent a tooltip popover error when focus returns to a control as a context menu closes.
 
