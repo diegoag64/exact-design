@@ -48,7 +48,7 @@ Run the studio and its helper in Ubuntu on WSL2. Open the studio in your Windows
 
 	In a second Ubuntu terminal, run `cd ~/exact-design` and `bun run demo`. Open `http://127.0.0.1:5173` in your Windows browser, or use the setup link printed by the demo. WSL forwards the loopback ports to Windows. Keep both terminals open and press Ctrl+C to stop each server.
 
-Run the checks below in Ubuntu too. Stop the studio before `test:ui` or `verify` because they use the same helper ports. If a URL does not load, confirm both servers are running and ports 5173, 5174, and 5175 are not occupied by another Windows or WSL process. Use `127.0.0.1` consistently for the editor and demo.
+Run the checks below in Ubuntu too. `test:ui` and `verify` use private ports and leave the studio running. If a URL does not load, confirm both servers are running and ports 5173, 5174, and 5175 are not occupied by another Windows or WSL process. Use `127.0.0.1` consistently for the editor and demo.
 
 ## Commands
 
@@ -67,7 +67,11 @@ Commands run from the repository root after `bun run setup`.
 | `bun run icons` | Generate the Contract icon component from vendored SVGs |
 | `bun tools/demo.mjs test web` | Run Ember behavior tests |
 
-`test:ui` and `verify` use ports 5175 and 5176 for the helper and fixture. They conflict with a running editor's helper. The preview tests create temporary copies under `.exact` and use separate ports. Tests that compile Contract require the SDK toolchain even when run through `bun run test`.
+`test:ui` and `verify` copy current tracked and untracked source into `.exact/verification/run-*/workspace`. They start private helper and fixture servers on OS-assigned ports, then substitute those origins only in the copied app and tests. Each run has separate build output. The copied generated launcher uses the pinned SDK and retains its Bun version check. Direct SDK commands, including `bun tools/run.mjs test web`, still use fixed ports and are not isolated. The preview tests create temporary copies under `.exact` and use separate ports. Tests that compile Contract require the SDK toolchain even when run through `bun run test`.
+
+Each verification run prints its artifact directory. `output.log` retains console output, `result.json` records the source HEAD, SDK revision, dirty state, command, private origins, and exit status, and `shots/` retains SDK audit captures and findings when available. Runs remove their copied source and builds and stop their owned servers and child processes, including on SIGINT or SIGTERM. Output is piped to retain logs, so SDK terminal colors and interactive progress may be absent. Logs and captures remain until you delete that run directory. A forced kill cannot run cleanup.
+
+A bind failure in the runner's helper or fixture reports a socket-permission diagnostic before compilation. SDK server and browser failures retain the SDK's own diagnostic. If an agent sandbox blocks local sockets, rerun the same root command with approved local-server access. A permissions failure is not evidence of a code regression.
 
 The root launchers set `EXACT_FEEDBACK=0`. Generated SDK instructions describe a broader workflow than this repository uses.
 

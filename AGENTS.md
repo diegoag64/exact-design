@@ -28,7 +28,7 @@ Use the root package scripts to select checks for the changed behavior:
 - Ember behavior changes: `bun tools/demo.mjs test web`.
 - Documentation-only changes: check local links, command names, and `git diff --check`.
 
-Before `test:ui` or `verify`, check ports 5175 and 5176. If occupied, coordinate stopping the owner or use an isolated environment. Preserve the user's running studio and demo.
+`test:ui` and `verify` run in temporary copies with private ports. Preserve the user's running studio and demo. See `docs/development.md` for verification artifacts and socket-permission failures.
 
 Report the checks run, failures, and untested behavior. Attribute a failure to an existing issue only with evidence.
 
@@ -50,7 +50,7 @@ Use a lowercase type: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`
 
 Write the summary as an imperative phrase with no trailing period. Describe the resulting change. Keep the full title within 72 characters. For a breaking change, put `!` before the colon and explain the migration in the description.
 
-Use [.github/pull_request_template.md](.github/pull_request_template.md) for the description. Under Summary, state the problem and resulting behavior. Under Screenshots, add before-and-after images for visible changes, taken at the same window size, zoom, and theme, or explain why they are missing. Images must be GitHub attachments in the description or a comment. Never commit screenshots or recordings to the repository, and never link to image files on the branch. `gh` cannot upload attachments, so save captures outside the repository, such as in a scratch directory, list their paths for the user to attach, and mark the Screenshots section as pending until they are attached. Under Validation, list the checks run and their results, including anything not tested and why. Add a Risks or migration section only when needed. Complete the checklist. End the description with the model and tool that did the work.
+Use [.github/pull_request_template.md](.github/pull_request_template.md) for the description. Under Summary, state the problem and resulting behavior. Under Screenshots, add before-and-after images for visible changes, taken at the same window size, zoom, and theme, or explain why they are missing. Images must be GitHub attachments in the description or a comment. Keep PR proof captures outside the repository and use attachment URLs, not branch file links. Check `gh pr edit --help` for `--attach`; when available, upload captures with it and verify the resulting URLs. Otherwise use the authenticated browser, or list local paths and mark attachments pending. Intentional README and documentation images may be committed under `docs/images/`. Under Validation, list the checks run and their results, including anything not tested and why. Add a Risks or migration section only when needed. Complete the checklist. End the description with the model and tool that did the work.
 
 The repository has no hosted CI, so local check results in the description are the only verification record. Contributor guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md); keep it consistent with these instructions.
 

@@ -36,7 +36,7 @@ This repository has no hosted CI. You run the checks and report the results in y
 | Ember demo behavior | `bun tools/demo.mjs test web` |
 | Documentation only | Check links and command names, then `git diff --check` |
 
-`test:ui` and `verify` use ports 5175 and 5176, which conflict with a running editor. Stop `bun run dev` before running them. See [docs/development.md](docs/development.md) for commands, ports, and the source layout.
+`test:ui` and `verify` use temporary copies and private ports, so your editor can stay running. See [docs/development.md](docs/development.md) for commands, ports, and the source layout.
 
 Before changing studio controls, theme tokens, icons, or canvas interactions, read [docs/studio-design-system.md](docs/studio-design-system.md).
 
@@ -61,7 +61,7 @@ The [pull request template](.github/pull_request_template.md) has four parts:
 - **Summary**: the problem and the resulting behavior. Link the related issue.
 - **Screenshots**: before and after images for any visible change. Take both at the same window size, zoom, and theme. Use a short recording for interactions such as drag, hover, or animation. If the change has no visible effect, write "Not applicable" and say why.
 
-  Add images and recordings as GitHub attachments: drag or paste them into the description or a comment. Don't commit them to the repository or link to files on your branch.
+  Add images and recordings as GitHub attachments: drag or paste them into the description or a comment. Keep PR proof captures outside the repository and use attachment URLs instead of branch links. If `gh pr edit --help` lists `--attach`, you can upload them from the CLI. Intentional README and documentation images may be committed under `docs/images/`.
 - **Validation**: how you checked the change and what you saw, such as reproduction steps before and after a fix, or measurements for a performance change. List the commands you ran and their results, and anything you couldn't test. "Tests pass" on its own isn't enough.
 - **Checklist**: the conventions below.
 
@@ -71,7 +71,7 @@ If an AI agent did some or all of the work, name the model and tool at the end o
 
 - Add notable user-visible changes to [CHANGELOG.md](CHANGELOG.md) under **Unreleased**, grouped under Added, Changed, or Fixed.
 - Update the documentation that your change affects. Keep the root README focused on startup and documentation links.
-- Don't commit screenshots, recordings, or other proof images. Attach them to the pull request instead.
+- Attach PR proof screenshots and recordings to the pull request. Store intentional README and documentation images under `docs/images/`.
 - Don't edit generated files: `exact.mjs`, the `exact:begin` instruction blocks, and `studio/icons.contract`. After changing the vendored icons, run `bun run icons`.
 - Keep the Exact SDK revision in `tools/setup.mjs` unchanged unless the pull request is an SDK upgrade.
 
