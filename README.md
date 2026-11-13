@@ -53,7 +53,7 @@ Select a viewport, click **Edit app**, and change a property. Click **Review** t
 
 ## Status
 
-Browser previews run the web build, including at iPhone and iPad sizes. Native iOS and macOS previews are not qualified. Figma file import, structural source editing, and rollback of applied drafts are not implemented. Enlarged system text still needs accessibility work.
+Browser previews run the web build, including at iPhone and iPad sizes. Native iOS previews are read-only Simulator screenshots that you refresh by hand; live native mirroring and macOS previews are not implemented. Figma file import, structural source editing, and rollback of applied drafts are not implemented. Enlarged system text still needs accessibility work.
 
 ## License
 

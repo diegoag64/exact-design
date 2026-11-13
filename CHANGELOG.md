@@ -6,6 +6,9 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Added
 
+- Native iOS frames. The **Native iOS** viewport set adds iPhone SE, iPhone 17, iPhone 17 Pro Max and iPad Pro 11 frames that show the app's native build running in the iOS Simulator, with its UIKit tab bar, sheets and Liquid Glass controls. **Refresh native previews** builds the app when its source changed, opens each route through its deep link, and captures it; frames show progress, stale screenshots and errors such as missing Xcode or low disk space. Native frames are read-only screenshots.
+- Ember opens any route from a `web+ember://` link, and the first native build records its iOS host in `app.json`.
+
 - Setup links accept `show`, a list of screen names or routes that start visible. The link still adds every screen, but the others start hidden and don't load their previews. The Ember link printed by `bun run demo` shows Today, Welcome and Onboarding Goal.
 - An MIT license and open-source project files: a contributing guide, a security policy, a code of conduct, issue forms, and a pull request template with before-and-after screenshots.
 - Tooltips for every icon button. They appear quickly on hover or keyboard focus, show the keyboard shortcut, and explain what the button does.
@@ -27,6 +30,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Changed
 
+- Screen discovery no longer lists a protocol handler's landing route, such as Ember's `/open`, as a screen.
 - Below 15% zoom, live canvas previews omit backdrop blur, which is only a few pixels wide at that size. Idle and pan with many visible previews no longer re-render each blur on every frame.
 - Shortened the root README and separated usage and development documentation.
 - Added repository-wide agent instructions, PR title and description requirements, a PR template, and a changelog maintenance convention.

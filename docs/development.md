@@ -110,6 +110,23 @@ The canvas keeps separate preview layers. A shared transformed parent reduced Ex
 
 Native frames show screenshots of the app's native build running in the iOS Simulator. The studio helper (`tools/discovery-server.ts`) owns the pipeline in `tools/native-previews.ts`; under the test launchers (`EXACT_DESIGN_TEST=1`) it serves the canned states in `tools/native-fixture.ts` instead, so no Xcode is needed for `test:ui` or `verify`. The device catalog in `studio/devices.ts` names each native device's CoreSimulator device type.
 
+### Pipeline
+
+1. **Find the app.** The studio sends only the project URL. The helper reads that server's `manifest.json` and matches it, by `name` and `protocol_handlers`, against registered app folders: `examples/ember` and each entry of `EXACT_DESIGN_NATIVE_APPS` (separated by `:`, absolute or relative to the repository). The helper never builds a folder named by a request.
+2. **Build.** `tools/native-build.mjs` runs the SDK's per-app CLI with `ios --no-install`, as `tools/demo.mjs` does. The input signature hashes the app folder's files (skipping `.exact`, `target`, `node_modules`, `dist` and dot-folders), the SDK revision and the Xcode version. An unchanged signature skips the build and the reinstall. The signature is taken again after a build, because the first iOS build adds `host.ios` to `app.json`. A first build needs 20 GB free and any build 10 GB.
+3. **Boot.** Each device runs on the newest installed iOS runtime that supports its device type. A runtime can support only a few types; on the development Mac, iOS 27.1 runs only iPhone Duo, so iPhone 17 uses iOS 27.0. The helper creates and reuses simulators named `Exact Design <device>`, never touches others, overrides the status bar to 9:41, and keeps the ones it booted running until `bun run dev` stops.
+4. **Open and capture.** The helper relaunches the app with `SIMCTL_CHILD_EXACT_LAUNCH_URL=<scheme>://<route>`. The Exact iOS host reads that at launch like an incoming link. `simctl openurl` is not used: iOS answers it with an "Open in …?" alert that stays on screen until the simulator restarts. After 6 s for the first launch on a booted device, or 2.5 s otherwise (`EXACT_DESIGN_NATIVE_FIRST_SETTLE_MS`, `EXACT_DESIGN_NATIVE_SETTLE_MS`), it captures with `simctl io screenshot` and checks the app is still running. Devices run two at a time (`EXACT_DESIGN_NATIVE_PARALLEL`), and each device's routes run in turn.
+
+The cache lives in `.exact/native-previews/<app key>/` (`EXACT_DESIGN_NATIVE_CACHE` moves it): `state.json`, `build.log`, and the latest screenshot for each device and route.
+
+Measured with Ember on the development Mac: a cold build took 343 s and about 5.5 GB; a rebuild with no changes took 18 s; booting a new simulator took 32 s and a booted one 9 s; installing took 16 s; each route took 3–4 s. A cached refresh of two routes took 11 s.
+
+`studio/native-previews.test.ts` tests the pipeline with a fake command runner. Its end-to-end test runs only with `EXACT_DESIGN_NATIVE_E2E=1` on a Mac with Xcode: it captures Ember's `/` and `/diary/add` on iPhone 17.
+
+### macOS later
+
+`tools/simulators.ts` keeps the platform steps behind `NativeTarget`. A macOS target would build with `mac` instead of `ios --no-install`, launch the `.app` with `EXACT_LAUNCH_URL` in its environment, size its window to the frame, and capture that window with `screencapture -l <window id>`. The catalog would gain `platform: 'macos'` devices; the protocol already carries the device per frame.
+
 ### Helper protocol
 
 `POST /native` with a JSON body answers with `text/event-stream`. Each `data:` line is a complete JSON snapshot; the stream stays open and sends a new snapshot whenever anything in it changes, including a frame going stale after a source edit.

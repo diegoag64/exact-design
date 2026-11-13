@@ -30,7 +30,7 @@ To set it up by hand instead, open **Add screen**, set **Viewports** to **Core**
 
 Thirty live frames is a comfortable load. **Every size** on all ten screens is 130 running copies of the app, so add it to the screens you are checking.
 
-These are web frames. On iOS, Ember's tab bar, sheets and + button are UIKit controls with Liquid Glass, so the web frames approximate them. Native iOS and macOS previews need simulator and Mac builds; they are not part of the editor yet.
+These are web frames. On iOS, Ember's tab bar, sheets and + button are UIKit controls with Liquid Glass, so the web frames approximate them. To see the real controls, add screens with the **Native iOS** viewport set and click **Refresh native previews**: the studio builds Ember for the iOS Simulator and shows a screenshot of each route ([Preview on the iOS Simulator](../../docs/use-the-studio.md#preview-on-the-ios-simulator)). Native macOS previews are not part of the editor yet.
 
 ## Screens
 
@@ -50,6 +50,16 @@ Each screen is its own route, so the editor can place each one on the canvas.
 | Onboarding plan | `/onboarding/plan` | The daily calories and macros calculated from the answers |
 
 Welcome and onboarding are full-screen and hide the tab bar. **Start tracking** saves the plan and returns to Today. Profile ▸ **Replay onboarding** opens Welcome again.
+
+## Deep links
+
+Every screen opens from a `web+ember:` link. `app.json` declares the scheme, and the `/open` route forwards `web+ember://<route>` to that route: `web+ember://diary/add` opens Add food, and `web+ember://` opens Today. A link that starts the app opens there directly; a link that arrives while it runs moves it. The studio's native previews use these links to open each route in the iOS Simulator.
+
+```sh
+xcrun simctl openurl booted 'web+ember://activity/log'
+```
+
+iOS asks before opening a link from another app, so this command shows an "Open in Ember?" prompt. The studio launches Ember with the link instead, which skips it.
 
 ## Layout
 
@@ -115,7 +125,7 @@ Icons are tokens: an SF Symbol on Apple platforms and a filled [Phosphor](https:
 
 ## Tests
 
-`app.test.contract` covers the dashboard totals, logging food, water, switching diary days and removing a food, logging a workout, the whole onboarding flow, and resetting the sample. Each test pins the date and time zone.
+`app.test.contract` covers the dashboard totals, logging food, water, switching diary days and removing a food, logging a workout, the whole onboarding flow, resetting the sample, and cold and warm deep links. Each test pins the date and time zone.
 
 ```sh
 cd examples/ember
