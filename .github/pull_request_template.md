@@ -7,7 +7,7 @@
 <!--
 For visible changes, add before and after images taken at the same window size, zoom, and theme.
 Use a short recording for interactions such as drag, hover, or animation.
-Drag or paste images into this description so GitHub stores them as attachments. Don't commit them to the branch.
+Drag or paste images into this description so GitHub stores them as attachments. Keep PR proof captures outside the branch. Intentional documentation images may be committed under docs/images/.
 If nothing visible changed, replace the table with "Not applicable" and a reason.
 -->
 

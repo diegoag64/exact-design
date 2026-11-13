@@ -11,10 +11,10 @@
     "demo": "bun tools/demo.mjs",
     "dev": "bun tools/run.mjs web --port 5173",
     "build": "bun tools/run.mjs web-build --out dist",
-    "test": "bun tools/platform.mjs && bun test studio/render.test.ts studio/draft-review.test.ts studio/model.test.ts studio/workspace.test.ts studio/persistence.test.ts studio/snapping.test.ts studio/spacing.test.ts studio/project.test.ts studio/previews.test.ts studio/event-stream.test.ts studio/shared-runtime.test.ts studio/discovery.test.ts studio/design-session.test.ts studio/design-drafts.test.ts studio/layout-source.test.ts studio/element-bridge.test.ts studio/design-history.test.ts studio/source-properties.test.ts studio/native-previews.test.ts",
+    "test": "bun tools/platform.mjs && bun test tools/verify-isolated.test.ts studio/render.test.ts studio/draft-review.test.ts studio/model.test.ts studio/workspace.test.ts studio/persistence.test.ts studio/snapping.test.ts studio/spacing.test.ts studio/project.test.ts studio/previews.test.ts studio/event-stream.test.ts studio/shared-runtime.test.ts studio/discovery.test.ts studio/design-session.test.ts studio/design-drafts.test.ts studio/layout-source.test.ts studio/element-bridge.test.ts studio/design-history.test.ts studio/source-properties.test.ts studio/native-previews.test.ts",
     "test:preview": "bun tools/platform.mjs && bun test studio/preview-loading.test.ts studio/shared-preview.test.ts studio/selection-reveal.test.ts studio/studio-ui.test.ts studio/design-editing.test.ts",
-    "test:ui": "bun tools/run.mjs test web",
-    "verify": "bun tools/run.mjs verify",
+    "test:ui": "bun tools/verify-isolated.mjs test web",
+    "verify": "bun tools/verify-isolated.mjs verify",
     "profile:canvas": "bun tools/platform.mjs && bun tools/profile-canvas.mjs",
     "icons": "bun tools/build-icons.mjs"
   },
