@@ -33,6 +33,35 @@ export function fieldText(type,value='',placeholder=''){
   return value||placeholder;
 }
 
+// Assign whole words cheaply; only a token spanning lines needs character measurements.
+export function lineWords(text,lines,rectAt){
+  const words=lines.map(()=>[]),plain=text.trim().replace(/\s+/g,' ');
+  const lineAt=offset=>{
+    const r=rectAt(offset);if(!r)return -1;
+    const mid=r.top+r.height/2;
+    return lines.findIndex(l=>mid>=l.top&&mid<=l.bottom&&r.left>=l.left-1&&r.left<=l.right+1);
+  };
+  if(lines.length===1)return [plain];
+  for(const m of text.matchAll(/\S+/g)){
+    const word=m[0],first=lineAt(m.index);
+    const lastOffset=word.length-(/[\uD800-\uDBFF][\uDC00-\uDFFF]$/.test(word)?2:1);
+    const last=lastOffset?lineAt(m.index+lastOffset):first;
+    if(first<0)continue;
+    if(last<0||first===last){words[first].push(word);continue;}
+    const slices=lines.map(()=>'');let at=first,offset=0;
+    for(const char of word){
+      const next=offset===0?first:offset===lastOffset?last:lineAt(m.index+offset);
+      if(next>=0)at=next;
+      slices[at]+=char;offset+=char.length;
+    }
+    slices.forEach((slice,i)=>{if(slice)words[i].push(slice);});
+  }
+  const out=words.map(w=>w.join(' '));
+  // Missing measurements must never leave a node without text.
+  if(!out.some(Boolean))out[0]=plain;
+  return out;
+}
+
 export function index(records){
   const byI=new Map(records.map(e=>[e.i,e])),kids=new Map();
   for(const e of records){if(!kids.has(e.p))kids.set(e.p,[]);kids.get(e.p).push(e);}

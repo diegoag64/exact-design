@@ -2,7 +2,7 @@
 // drawing of it sits on top, so hit testing, selection and draft editing still reach the
 // app's own elements. Regions measure everything inside a dragged rectangle.
 // Loaded by canvas-input-client.js on the first plan or region message; never in Preview.
-import {maskImageUrl,decodeSvgDataUrl,fieldText,isSurface,cornerRadius,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
+import {maskImageUrl,decodeSvgDataUrl,fieldText,lineWords,isSurface,cornerRadius,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
 import {measureSpacing} from './spacing-geometry.js';
 
 const NS='http://www.w3.org/2000/svg';
@@ -103,17 +103,11 @@ const cased=(text,s)=>s.textTransform==='uppercase'?text.toUpperCase():s.textTra
 function lineTexts(node,lines){
   const text=node.textContent,sig=text+'|'+lines.map(l=>Math.round(l.width)).join(','),hit=lineCache.get(node);
   if(hit?.sig===sig)return hit.words;
-  const words=lines.map(()=>[]),range=document.createRange();
-  if(lines.length===1)words[0].push(text.trim().replace(/\s+/g,' '));
-  else for(const m of text.matchAll(/\S+/g)){
-    range.setStart(node,m.index);range.setEnd(node,m.index+1);
-    const r=range.getClientRects()[0];if(!r)continue;
-    const mid=r.top+r.height/2,at=lines.findIndex(l=>mid>=l.top&&mid<=l.bottom&&r.left>=l.left-1&&r.left<=l.right+1);
-    if(at>=0)words[at].push(m[0]);
-  }
-  const out=words.map(w=>w.join(' '));
-  // A line that no word starts on stays empty, but a node must not lose all its words.
-  if(!out.some(Boolean))out[0]=text.trim().replace(/\s+/g,' ');
+  const range=document.createRange();
+  const out=lineWords(text,lines,offset=>{
+    range.setStart(node,offset);range.setEnd(node,offset+(text.codePointAt(offset)>0xffff?2:1));
+    return range.getClientRects()[0]??null;
+  });
   lineCache.set(node,{sig,words:out});return out;
 }
 // One box per line. An ellipsized line reports its full text and its visible part as two boxes on

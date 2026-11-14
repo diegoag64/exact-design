@@ -142,6 +142,27 @@ test('plan view draws previews as line plans, regions measure from the canvas an
       return [range.getClientRects()[0],copy.getBoundingClientRect()].map(r=>({x:r.x,y:r.y+r.height/2,width:r.width}));
     });
     expect(Math.abs(drawn.width-line.width)).toBeLessThan(2);expect(Math.abs(drawn.x-line.x)).toBeLessThan(2);expect(Math.abs(drawn.y-line.y)).toBeLessThan(3);
+    // A long token wraps into readable slices, rather than being squeezed onto its first line.
+    const token='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    await frame.evaluate((text:string)=>{
+      const node=document.createElement('div');node.id='plan-wrapped-token';node.textContent=text;
+      node.style.cssText='position:fixed;left:20px;top:20px;width:80px;font:14px/20px monospace;overflow-wrap:anywhere;color:black';
+      document.getElementById('exact-root')!.append(node);
+    },token);
+    try{
+      await frame.locator('#ed-plan text[data-app]',{hasText:/^ABCD/}).first().waitFor({timeout:5000});
+      const wrapped=await frame.evaluate((token:string)=>{
+        const node=document.getElementById('plan-wrapped-token')!,box=node.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(node);
+        const lines=new Set([...range.getClientRects()].filter(r=>r.width>0.5).map(r=>r.top));
+        const drawn=[...document.querySelectorAll<SVGTextElement>('#ed-plan text[data-app]')].filter(n=>{
+          const x=Number(n.getAttribute('x')),y=Number(n.getAttribute('y'));
+          return token.includes(n.textContent!)&&Math.abs(x-box.left)<1&&y>=box.top&&y<=box.bottom;
+        }).sort((a,b)=>Number(a.getAttribute('y'))-Number(b.getAttribute('y'))).map(n=>n.textContent!);
+        return {lines:lines.size,drawn};
+      },token);
+      expect(wrapped.lines).toBeGreaterThanOrEqual(3);expect(wrapped.drawn.length).toBe(wrapped.lines);
+      expect(wrapped.drawn.every(Boolean)).toBe(true);expect(wrapped.drawn.join('')).toBe(token);
+    }finally{await frame.evaluate(()=>document.getElementById('plan-wrapped-token')!.remove());}
     // An opacity-zero parent hides its whole subtree; the plan's hidden root does not.
     await frame.evaluate(()=>{
       const hidden=document.createElement('div');hidden.id='plan-opacity';hidden.style.cssText='position:fixed;left:20px;top:20px;width:240px;opacity:0;color:black';hidden.textContent='Hidden plan text';

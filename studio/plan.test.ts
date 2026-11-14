@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {maskImageUrl,decodeSvgDataUrl,fieldText,valueFill,surfaceShape,layoutBox,visibleColor,index,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
+import {maskImageUrl,decodeSvgDataUrl,fieldText,lineWords,valueFill,surfaceShape,layoutBox,visibleColor,index,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
 
 test('plan mask URLs preserve parentheses in quoted and unquoted SVG data',()=>{
   const svg='<svg xmlns="http://www.w3.org/2000/svg"><g transform="translate(12 12)"><rect width="10" height="10"/></g></svg>';
@@ -219,4 +219,34 @@ test('rows with the same layout still group when their children differ in width,
   const records=[box(0,-1,16,578,358,225,{surface:true,display:'flex',dir:'column'}),...row(1,599,70,136),...row(5,640,52,200),...row(9,680,34,90)];
   const m=measureRegion(records,[],{x:0,y:560,w:390,h:200});
   expect(m.badges.map(b=>b.n)).toEqual([3]);
+});
+
+const textRows=[0,20,40].map(top=>({left:0,right:100,top,bottom:top+16,width:100,height:16}));
+const charRect=(line:number)=>({left:0,top:line*20,height:16});
+
+test('readable words use their first character with at most two measurements each',()=>{
+  const calls:number[]=[];
+  expect(lineWords('one two six',textRows,i=>{calls.push(i);return charRect(Math.floor(i/4));})).toEqual(['one','two','six']);
+  expect(calls.length).toBeLessThanOrEqual(6);for(const first of [0,4,8])expect(calls).toContain(first);
+  expect(lineWords('one two',textRows.slice(0,1),()=>{throw Error('single line measured');})).toEqual(['one two']);
+});
+
+test('readable wrapped tokens keep a slice on every line',()=>{
+  const token='abcdefghijkl',out=lineWords(token,textRows,i=>charRect(Math.floor(i/4)));
+  expect(out).toEqual(['abcd','efgh','ijkl']);expect(out.join('')).toBe(token);
+});
+
+test('readable text separates words but joins slices of the same token',()=>{
+  expect(lineWords('hi abcdefgh end',textRows,i=>charRect(i<5?0:i<9?1:2))).toEqual(['hi ab','cdef','gh end']);
+});
+
+test('readable wrapped tokens preserve astral characters and rect-less combining marks',()=>{
+  const token='a😀b\u0301cd😀',calls:number[]=[];
+  const out=lineWords(token,textRows,i=>{calls.push(i);return i===4?null:charRect(i<3?0:i<6?1:2);});
+  expect(out).toEqual(['a😀','b\u0301c','d😀']);expect(out.join('')).toBe(token);
+  expect(calls).not.toContain(2);expect(calls).not.toContain(8);
+});
+
+test('readable text falls back to the full node when no character matches',()=>{
+  for(const rect of [null,charRect(9)])expect(lineWords('  lost   words  ',textRows,()=>rect)).toEqual(['lost words','','']);
 });
