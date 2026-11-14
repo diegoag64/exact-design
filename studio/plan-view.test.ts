@@ -124,6 +124,31 @@ test('plan view draws previews as line plans, regions measure from the canvas an
     await frame.evaluate(()=>document.getElementById('plan-opacity')!.style.opacity='0');
     await frame.waitForFunction(()=>![...document.querySelectorAll('#ed-plan text[data-app]')].some(n=>/Hidden (plan|child) text/.test(n.textContent!)),undefined,{polling:50,timeout:5000});
     await frame.evaluate(()=>{document.getElementById('plan-opacity')!.remove();document.getElementById('plan-visible')!.remove();});
+    // Modal opacity comes from the plan itself; descendants still honor their own opacity.
+    await page.keyboard.press('Escape');
+    await frame.evaluate(()=>{
+      const dialog=document.createElement('dialog');dialog.id='plan-modal';
+      dialog.style.cssText='position:fixed;inset:40px auto auto 40px;margin:0;width:260px;padding:12px;border:2px solid black;background:white;color:black';
+      dialog.innerHTML='<div id="plan-modal-child" style="border:1px solid black;width:210px;height:40px">Modal plan text</div><div id="plan-modal-hidden" style="opacity:0;border:1px solid black;width:190px;height:30px">Hidden modal text</div>';
+      document.getElementById('exact-root')!.append(dialog);dialog.showModal();
+    });
+    await frame.locator('#ed-plan text[data-app]',{hasText:'Modal plan text'}).waitFor({timeout:5000});
+    const modalSurfaces=()=>frame.evaluate(()=>{
+      const paths=[...document.querySelectorAll<SVGGraphicsElement>('#ed-plan path[stroke="var(--ink)"]')];
+      return ['plan-modal','plan-modal-child','plan-modal-hidden'].map(id=>{
+        const box=document.getElementById(id)!.getBoundingClientRect();
+        return paths.some(path=>{const r=path.getBBox();return Math.abs(r.x-box.x)<1&&Math.abs(r.y-box.y)<1&&Math.abs(r.width-box.width)<1&&Math.abs(r.height-box.height)<1;});
+      });
+    });
+    expect(await modalSurfaces()).toEqual([true,true,false]);
+    expect(await frame.locator('#ed-plan text[data-app]',{hasText:'Hidden modal text'}).count()).toBe(0);
+    expect(await frame.locator('#plan-modal').evaluate((n:Element)=>getComputedStyle(n).opacity)).toBe('0');
+    await toggle.click();
+    await frame.waitForFunction(()=>getComputedStyle(document.getElementById('plan-modal')!).opacity==='1'&&getComputedStyle(document.getElementById('exact-root')!).opacity==='1'&&!document.getElementById('ed-plan')?.isConnected,undefined,{polling:50,timeout:5000});
+    expect(await frame.locator('#plan-modal').isVisible()).toBe(true);
+    await frame.evaluate(()=>{const dialog=document.getElementById('plan-modal') as HTMLDialogElement;dialog.close();dialog.remove();});
+    await toggle.click();
+    await frame.locator('#ed-plan text[data-app]').first().waitFor();
     // The shortcuts switch them off again while the plan shows.
     await page.keyboard.press('Escape');await page.getByTestId('canvas-stage').focus();
     await page.keyboard.press('Shift+KeyB');await page.keyboard.press('Shift+KeyT');

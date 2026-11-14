@@ -6,6 +6,25 @@ import {DesignSession} from '../tools/design-session';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 
+test('plan scenes retain zero-opacity modals and their stacking key but skip hidden descendants',()=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const style={display:'block',visibility:'visible',opacity:'1',position:'static',zIndex:'auto',backgroundImage:'none',backgroundColor:'transparent',boxShadow:'none',outlineStyle:'none',filter:'none',overflowX:'visible',overflowY:'visible'};
+  const element=(tag:string,opacity:string,children:any[]=[],modal=false):any=>({localName:tag,children,childNodes:[],textContent:'',
+    style:{...style,opacity},matches:(selector:string)=>modal&&selector.includes(':modal'),querySelector:()=>null,getAttribute:()=>null,
+    getBoundingClientRect:()=>({left:20,top:20,right:220,bottom:120,width:200,height:100})});
+  const visible=element('div','1'),hidden=element('div','0',[element('div','1')]);
+  const modal=element('dialog','0',[visible,hidden],true);
+  const popover=element('div','0');popover.matches=(selector:string)=>selector.includes(':popover-open');
+  const root={children:[modal,popover]};
+  const read=runInNewContext(script.slice(script.indexOf('function readScene()'),script.indexOf('/* Drawing the plan'))+'\nreadScene;',{
+    document:{getElementById:()=>root,documentElement:{clientWidth:400,clientHeight:800}},host:null,
+    getComputedStyle:(node:any)=>node.style,px:(v:string)=>parseFloat(v)||0,maskUrl:()=>'',visibleColor:()=>false,layerName:()=> 'Dialog',
+  });
+  const scene=read();
+  expect(scene.records.map((r:any)=>r.node)).toEqual([modal,visible]);
+  expect(scene.records.map((r:any)=>r.key[0])).toEqual([1,1]);
+});
+
 test('layer names describe layout spans without repeating their descendants text',()=>{
   const script=readFileSync(new URL('../tools/element-bridge-client.js',import.meta.url),'utf8');
   const present=runInNewContext(script.slice(script.indexOf('function presentElement('),script.indexOf('function snapshot('))+'\npresentElement;');
