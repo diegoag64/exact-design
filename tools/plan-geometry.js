@@ -11,7 +11,11 @@ export function maskImageUrl(value){
 }
 export function decodeSvgDataUrl(url){
   const comma=url.indexOf(',');if(comma<0)return null;
-  try{return url.slice(0,comma).endsWith(';base64')?atob(url.slice(comma+1)):decodeURIComponent(url.slice(comma+1));}catch{return null;}
+  try{
+    const data=url.slice(comma+1);
+    if(url.slice(0,comma).endsWith(';base64'))return atob(data);
+    return data.replace(/(?:%[\da-f]{2})+/gi,run=>new TextDecoder('utf-8',{ignoreBOM:true}).decode(Uint8Array.from(run.slice(1).split('%'),hex=>parseInt(hex,16))));
+  }catch{return null;}
 }
 
 // Computed colours are `rgb(r, g, b)` when opaque and `rgba(r, g, b, a)` or `rgb(r g b / a)` otherwise.

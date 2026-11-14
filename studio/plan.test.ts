@@ -12,8 +12,18 @@ test('plan mask URLs preserve parentheses in quoted and unquoted SVG data',()=>{
   expect(decodeSvgDataUrl('data:image/svg+xml;base64,'+btoa(svg))).toBe(svg);
 });
 
-test('plan malformed SVG data URLs fail without throwing',()=>{
-  for(const url of ['data:image/svg+xml,<svg width="100%"/>','data:image/svg+xml,%E0%A4','data:image/svg+xml;base64,%%%','data:image/svg+xml'])expect(decodeSvgDataUrl(url)).toBeNull();
+test('plan SVG data URLs decode percent escapes leniently as UTF-8',()=>{
+  for(const [input,text] of [
+    ['<svg width="100%"/>','<svg width="100%"/>'],
+    ['%E0%A4','\uFFFD'],
+    ['%E2%9C%93','✓'],
+    ['100%25 %E2%9C%93 50%','100% ✓ 50%'],
+    ['% %2 %GG %2G ✓','% %2 %GG %2G ✓'],
+  ])expect(decodeSvgDataUrl('data:image/svg+xml,'+input)).toBe(text);
+});
+
+test('plan malformed SVG data URL headers and base64 fail without throwing',()=>{
+  for(const url of ['data:image/svg+xml;base64,%%%','data:image/svg+xml'])expect(decodeSvgDataUrl(url)).toBeNull();
 });
 
 test('plan fields mask passwords before measuring or drawing text',()=>{

@@ -92,7 +92,7 @@ test('plan view draws previews as line plans, regions measure from the canvas an
       expect(geometry.w).toBeCloseTo(6,1);expect(geometry.h).toBeCloseTo(8,1);
       expect(geometry.fill).toBe('none');expect(geometry.stroke).toBe('var(--ink)');expect(geometry.style).toBeNull();
     }
-    // A failed decode draws a placeholder and still reaches media later in the paint order, on every redraw.
+    // Invalid SVG or a failed decode draws a placeholder and still reaches later media on every redraw.
     await frame.evaluate(()=>{
       const root=document.getElementById('exact-root')!;
       for(const [id,url] of [['bad-percent','data:image/svg+xml,%'],['bad-base64','data:image/svg+xml;base64,%%%'],['after-bad','data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle data-plan-after="" cx="12" cy="12" r="5"/></svg>')]]){
