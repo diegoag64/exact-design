@@ -257,6 +257,13 @@ function drawInlineSvg(g,m){
   originals.forEach((o,j)=>{
     const c=copies[j];if(!c)return;
     const s=getComputedStyle(o),sw=parseFloat(s.strokeWidth)||0;
+    if(s.visibility==='hidden'){c.remove();return;}
+    // Opacity and display can hide a whole group; stop before the plan's hidden app root.
+    for(let p=o;p;p=p.parentElement){
+      const style=p===o?s:getComputedStyle(p);
+      if(style.opacity==='0'||style.display==='none'){c.remove();return;}
+      if(p===source)break;
+    }
     const stroked=s.stroke!=='none'&&sw>0&&s.strokeOpacity!=='0',filled=s.fill!=='none'&&s.fillOpacity!=='0';
     // The app's class rules are scoped to its root, so the copy carries the computed geometry.
     for(const prop of GEOMETRY){const v=s.getPropertyValue(prop);if(v)set(c,prop,v);}

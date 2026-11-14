@@ -25,6 +25,36 @@ test('plan scenes retain zero-opacity modals and their stacking key but skip hid
   expect(scene.records.map((r:any)=>r.key[0])).toEqual([1,1]);
 });
 
+test('inline SVG plans omit hidden shapes before outlining or cloning wide strokes',()=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const style={display:'inline',visibility:'visible',opacity:'1',stroke:'black',strokeWidth:'6',strokeOpacity:'1',fill:'none',fillOpacity:'1',strokeDasharray:'none',getPropertyValue:()=>''};
+  const draw=runInNewContext(script.slice(script.indexOf('function drawInlineSvg('),script.indexOf('function drawPlan('))+'\ndrawInlineSvg;',{
+    getComputedStyle:(n:any)=>n.computed,SHAPES:'path',GEOMETRY:[],k:()=>1,
+  });
+  const cases=[
+    {own:{},group:{},root:{},drawn:true},
+    {own:{opacity:'0'},group:{},root:{},drawn:false},
+    {own:{},group:{opacity:'0'},root:{},drawn:false},
+    {own:{display:'none'},group:{},root:{},drawn:false},
+    {own:{},group:{display:'none'},root:{},drawn:false},
+    {own:{visibility:'hidden'},group:{},root:{},drawn:false},
+    {own:{opacity:'0.5'},group:{opacity:'0.5'},root:{},drawn:true},
+    {own:{},group:{},root:{opacity:'0'},drawn:false},
+    {own:{},group:{},root:{display:'none'},drawn:false},
+    {own:{visibility:'visible'},group:{visibility:'hidden'},root:{},drawn:true},
+  ];
+  for(const {own,group,root,drawn} of cases){
+    let removed=false,clones=0;
+    const shape:any={style:{setProperty:()=>{}},remove:()=>{removed=true;},cloneNode:()=>{clones++;return shape;},after:()=>{},setAttribute:()=>{}};
+    const copy={querySelectorAll:(s:string)=>s==='path'?[shape]:[],removeAttribute:()=>{},setAttribute:()=>{}};
+    const source:any={computed:{...style,...root},parentElement:{computed:{...style,opacity:'0'}},cloneNode:()=>copy,getScreenCTM:()=>null};
+    const parent={computed:{...style,...group},parentElement:source};
+    source.querySelectorAll=()=>[{localName:'path',computed:{...style,...own},parentElement:parent}];
+    draw({append:()=>{}},{node:source,x:0,y:0,w:24,h:24});
+    expect(removed).toBe(!drawn);expect(clones).toBe(drawn?1:0);
+  }
+});
+
 test('layer names describe layout spans without repeating their descendants text',()=>{
   const script=readFileSync(new URL('../tools/element-bridge-client.js',import.meta.url),'utf8');
   const present=runInNewContext(script.slice(script.indexOf('function presentElement('),script.indexOf('function snapshot('))+'\npresentElement;');
