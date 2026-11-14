@@ -1,10 +1,44 @@
 import {scopePreviewIdentity} from '../tools/preview-identity';
 import {test,expect} from 'bun:test';
 import {selectionPan} from './modules/web/canvas-navigation.js';
+import {installPlanRegions} from './modules/web/plan-regions.js';
 import {ElementBridge,bridgeFor,stopElementBridges} from '../tools/element-bridge';
 import {DesignSession} from '../tools/design-session';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
+
+for(const type of ['keydown','pointerdown'])test(`plan regions ignore disconnected frames on ${type}`,()=>{
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'window'),handlers=new Map<string,Function>(),sent:any[]=[];
+  const target={closest:(selector:string)=>selector==='#canvas-stage'?target:null};
+  const frame={isConnected:true,src:'http://localhost/?__ed_events=project-v2&__ed_canvas=1',
+    contentWindow:{postMessage:(packet:any)=>sent.push(packet)},closest:target.closest,
+    clientWidth:100,clientHeight:100,getBoundingClientRect:()=>({left:0,top:0,right:100,bottom:100,width:100,height:100})};
+  const root={dataset:{},contains:(node:any)=>node===target,
+    querySelectorAll:()=>frame.isConnected?[frame]:[],
+    querySelector:(selector:string)=>selector==='[aria-label="Design canvas"]'?{closest:()=>null}:null};
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{
+    addEventListener:(name:string,handler:Function)=>handlers.set(name,handler),removeEventListener:(name:string)=>handlers.delete(name),
+  }});
+  let dispose:undefined|(()=>void);
+  try{
+    dispose=installPlanRegions(root);
+    handlers.get('message')!({source:frame.contentWindow,origin:'http://localhost',data:{kind:'exact-design:canvas',op:'region',region:{x:10,y:10,width:20,height:20}}});
+    const dispatch=()=>{
+      let prevented=false,stopped=false;
+      handlers.get(type)!({type,key:'Escape',button:0,target,clientX:200,clientY:200,
+        preventDefault:()=>{prevented=true;},stopImmediatePropagation:()=>{stopped=true;}});
+      return {prevented,stopped};
+    };
+    expect(dispatch()).toEqual({prevented:type==='keydown',stopped:type==='keydown'});
+    expect(sent).toEqual([{kind:'exact-design:region',op:'clear'}]);
+    sent.length=0;frame.isConnected=false;
+    expect(dispatch()).toEqual({prevented:false,stopped:false});
+    expect(sent).toEqual([]);
+  }finally{
+    dispose?.();
+    if(previous)Object.defineProperty(globalThis,'window',previous);else Reflect.deleteProperty(globalThis,'window');
+  }
+});
 
 test('plan scenes retain zero-opacity modals and their stacking key but skip hidden descendants',()=>{
   const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');

@@ -6,6 +6,7 @@ const FRAMES='#canvas-stage > [data-testid^="frame-"] iframe';
 
 export function installPlanRegions(root){
   const states=new Map(); // iframe → {region, copy, text}, as each preview reports it
+  const prune=()=>{for(const f of states.keys())if(!f.isConnected)states.delete(f);};
   let drag=null,pointer=null,lastFrame=null;
   const frames=()=>[...root.querySelectorAll(FRAMES)];
   const local=(frame,x,y)=>{
@@ -27,6 +28,7 @@ export function installPlanRegions(root){
   const option=op=>{if(canvasAvailable(root))root.querySelector(`[data-testid="${op}"]`)?.click();};
   // Window capture runs before Exact's own handlers, so a region never also starts a frame drag.
   const press=e=>{
+    prune();
     if(e.button!==0||!root.contains(e.target)||!e.target.closest?.('#canvas-stage')||e.target.closest?.('button,input,select,textarea,[role="menu"],[role="menuitem"]'))return;
     const frame=frameAt(e.clientX,e.clientY);if(frame)lastFrame=frame;
     if(e.shiftKey&&!e.altKey&&!e.ctrlKey&&!e.metaKey&&!hand()&&canvasAvailable(root)&&frame){
@@ -59,6 +61,7 @@ export function installPlanRegions(root){
   // Alt+A measures the frame under the pointer, else the one being edited, else the last one used.
   const editingFrame=()=>frames().find(f=>f.closest('[data-testid^="frame-"]')?.style.pointerEvents==='auto')??null;
   const key=e=>{
+    prune();
     if(e.key==='Shift')crosshair(e.type==='keydown'&&!hand()&&canvasAvailable(root));
     if(e.type!=='keydown'||e.isComposing||typing(e.target)||!canvasAvailable(root))return;
     if(e.shiftKey&&!e.altKey&&!e.ctrlKey&&!e.metaKey&&['KeyB','KeyT'].includes(e.code)&&root.dataset.planView==='on'){
@@ -86,7 +89,7 @@ export function installPlanRegions(root){
     const box=b=>b&&['x','y','width','height'].every(k=>Number.isFinite(b[k]))?b:null;
     states.set(frame,{region:box(packet.region),copy:box(packet.copy),text:typeof packet.text==='string'?packet.text.slice(0,20000):''});
     if(packet.region)lastFrame=frame;
-    for(const f of states.keys())if(!f.isConnected)states.delete(f);
+    prune();
   };
   window.addEventListener('pointerdown',press,true);
   window.addEventListener('pointermove',move,true);window.addEventListener('pointerup',lift,true);window.addEventListener('pointercancel',lift,true);
