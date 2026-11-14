@@ -82,7 +82,7 @@ addEventListener('message',e=>{
   // The studio relays regions for frames that do not take the pointer.
   if(e.data?.kind==='exact-design:region'&&typeof e.data.op==='string'){regionInput(e.data.op,e.data.x,e.data.y);return;}
   if(e.data?.kind!=='exact-design:preview-detail')return;
-  lastDetail=e.data;if(e.data.plan===true||plan)void planReady().then(m=>m.detail(e.data));
+  lastDetail=e.data;if(e.data.plan===true||plan)void planReady().then(m=>m.detail(lastDetail));
   // The studio's Screens theme pins the app as Exact's dev pin does; "System" leaves it to the browser.
   const scheme=e.data.scheme==='light'||e.data.scheme==='dark'?e.data.scheme:null,exact=globalThis.exact??={};
   let pin=document.getElementById('ed-scheme-pin');

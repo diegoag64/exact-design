@@ -256,6 +256,21 @@ test('canvas frames relay gestures independently of inspection while Preview inp
   expect(wheel.prevented).toBeUndefined();expect(packets.length).toBe(count);
 });
 
+test('canvas plan loading applies the latest detail and stays lazy for off-only frames',async()=>{
+  const script=readFileSync(new URL('../tools/canvas-input-client.js',import.meta.url),'utf8');
+  const handlers:Record<string,Function>={},parentWindow={},calls:any[]=[],module={detail:(packet:any)=>calls.push(packet)};
+  let resolveImport!:()=>void,imports=0;
+  const pending=new Promise<void>(resolve=>{resolveImport=resolve;});
+  runInNewContext(script,{URL,location:{href:'http://localhost/?__ed_canvas=1'},window:{},parent:parentWindow,document:{getElementById:()=>null},addEventListener:(name:string,fn:Function)=>{handlers[name]=fn;}},{importModuleDynamically:(async()=>{imports++;await pending;return module;}) as any});
+  const off={kind:'exact-design:preview-detail',plan:false,zoom:0.5},on={...off,plan:true,zoom:1};
+  handlers.message({source:parentWindow,data:off});
+  await new Promise(resolve=>setImmediate(resolve));expect(imports).toBe(0);expect(calls).toEqual([]);
+  handlers.message({source:parentWindow,data:on});handlers.message({source:parentWindow,data:off});
+  expect(imports).toBe(1);expect(calls).toEqual([]);
+  resolveImport();await new Promise(resolve=>setImmediate(resolve));
+  expect(calls.at(-1)).toBe(off);
+});
+
 test('revealing a selected layer scrolls only ancestors inside its preview document',()=>{
   const script=readFileSync(new URL('../tools/element-bridge-client.js',import.meta.url),'utf8'),calls:any[]=[];
   const root:any={parentElement:null,clientLeft:0,clientTop:0,clientWidth:500,clientHeight:500,offsetWidth:500,offsetHeight:500,scrollWidth:500,scrollHeight:500,scrollLeft:0,scrollTop:0,css:{},getBoundingClientRect:()=>({left:0,top:0,width:500,height:500}),scrollTo(v:any){calls.push(['root',v]);Object.assign(this,{scrollLeft:v.left,scrollTop:v.top});}};
