@@ -49,6 +49,46 @@ test('plan view draws previews as line plans, regions measure from the canvas an
     const text=await frame.locator('#exact-root').getByText('Room for your thoughts.',{exact:true}).boundingBox();
     expect(text!.width).toBeGreaterThan(20);
 
+    // Source SVGs retain group transforms, including their order and each shape's own transform.
+    await frame.evaluate(()=>{
+      const root=document.getElementById('exact-root')!;
+      const add=(id:string,url:string,x:number)=>{
+        const node=document.createElement('div');node.id=id;
+        node.style.cssText=`position:fixed;left:${x}px;top:40px;width:24px;height:24px;background:black;mask-image:url("${url}")`;
+        root.append(node);
+      };
+      const source=(id:string)=>`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><defs><rect data-plan-excluded="" width="24" height="24"/></defs><g transform="translate(12 12)" stroke="red"><g transform="scale(2)"><rect data-plan-shape="${id}" transform="translate(1 1)" width="3" height="4" style="fill:red;stroke:none"/></g></g></svg>`;
+      add('plan-group-base64','data:image/svg+xml;base64,'+btoa(source('base64')),40);
+      add('plan-group-encoded','data:image/svg+xml,'+encodeURIComponent(source('encoded')),80);
+    });
+    await frame.locator('#ed-plan [data-plan-shape="encoded"]').waitFor();
+    for(const id of ['base64','encoded']){
+      const geometry=await frame.evaluate((id:string)=>{
+        const mask=document.getElementById('plan-group-'+id)!.getBoundingClientRect();
+        const shape=document.querySelector(`#ed-plan [data-plan-shape="${id}"]`)!;
+        const box=shape.getBoundingClientRect();
+        return {x:box.x-mask.x,y:box.y-mask.y,w:box.width,h:box.height,fill:shape.getAttribute('fill'),stroke:shape.getAttribute('stroke'),style:shape.getAttribute('style')};
+      },id);
+      expect(geometry.x).toBeCloseTo(14,1);expect(geometry.y).toBeCloseTo(14,1);
+      expect(geometry.w).toBeCloseTo(6,1);expect(geometry.h).toBeCloseTo(8,1);
+      expect(geometry.fill).toBe('none');expect(geometry.stroke).toBe('var(--ink)');expect(geometry.style).toBeNull();
+    }
+    expect(await frame.locator('#ed-plan [data-plan-excluded]').count()).toBe(0);
+    // A failed decode draws a placeholder and still reaches media later in the paint order, on every redraw.
+    await frame.evaluate(()=>{
+      const root=document.getElementById('exact-root')!;
+      for(const [id,url] of [['bad-percent','data:image/svg+xml,%'],['bad-base64','data:image/svg+xml;base64,%%%'],['after-bad','data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle data-plan-after="" cx="12" cy="12" r="5"/></svg>')]]){
+        const node=document.createElement('div');node.id='plan-'+id;
+        node.style.cssText=`position:fixed;left:120px;top:80px;width:24px;height:24px;background:black;mask-image:url("${url}")`;
+        root.append(node);
+      }
+    });
+    await frame.locator('#ed-plan [data-plan-after]').waitFor({timeout:5000});
+    await frame.evaluate(()=>document.getElementById('plan-after-bad')!.style.left='160px');
+    await frame.waitForFunction(()=>document.querySelector('#ed-plan [data-plan-after]')?.parentElement?.getAttribute('x')==='160',undefined,{polling:50,timeout:5000});
+    expect(errors).toEqual([]);
+    await frame.evaluate(()=>{for(const id of ['group-base64','group-encoded','bad-percent','bad-base64','after-bad'])document.getElementById('plan-'+id)!.remove();});
+
     // Plan view's options: layout boxes outline the wrappers, readable text draws the app's words on their lines.
     const count=(selector:string)=>frame.locator(selector).count();
     expect(await count('#ed-plan [data-layout-box]')).toBe(0);expect(await count('#ed-plan text[data-app]')).toBe(0);

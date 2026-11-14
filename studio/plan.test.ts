@@ -1,5 +1,20 @@
 import {test,expect} from 'bun:test';
-import {fieldText,valueFill,surfaceShape,layoutBox,visibleColor,index,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
+import {maskImageUrl,decodeSvgDataUrl,fieldText,valueFill,surfaceShape,layoutBox,visibleColor,index,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
+
+test('plan mask URLs preserve parentheses in quoted and unquoted SVG data',()=>{
+  const svg='<svg xmlns="http://www.w3.org/2000/svg"><g transform="translate(12 12)"><rect width="10" height="10"/></g></svg>';
+  const url='data:image/svg+xml,'+encodeURIComponent(svg);
+  for(const css of [`url("${url}")`,`url('${url}')`,`url(${url})`]){
+    expect(maskImageUrl(css)).toBe(url);expect(decodeSvgDataUrl(maskImageUrl(css))).toBe(svg);
+  }
+  expect(maskImageUrl('none')).toBe('');expect(maskImageUrl('')).toBe('');
+  expect(maskImageUrl('url("/icon.svg")')).toBe('/icon.svg');
+  expect(decodeSvgDataUrl('data:image/svg+xml;base64,'+btoa(svg))).toBe(svg);
+});
+
+test('plan malformed SVG data URLs fail without throwing',()=>{
+  for(const url of ['data:image/svg+xml,<svg width="100%"/>','data:image/svg+xml,%E0%A4','data:image/svg+xml;base64,%%%','data:image/svg+xml'])expect(decodeSvgDataUrl(url)).toBeNull();
+});
 
 test('plan fields mask passwords before measuring or drawing text',()=>{
   const password='secret123';

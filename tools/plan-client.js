@@ -2,7 +2,7 @@
 // drawing of it sits on top, so hit testing, selection and draft editing still reach the
 // app's own elements. Regions measure everything inside a dragged rectangle.
 // Loaded by canvas-input-client.js on the first plan or region message; never in Preview.
-import {fieldText,isSurface,cornerRadius,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
+import {maskImageUrl,decodeSvgDataUrl,fieldText,isSurface,cornerRadius,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
 import {measureSpacing} from './spacing-geometry.js';
 
 const NS='http://www.w3.org/2000/svg';
@@ -82,8 +82,8 @@ function svgSource(url){
   if(!url)return null;
   if(svgSources.has(url))return svgSources.get(url);
   if(url.startsWith('data:image/svg+xml')){
-    const comma=url.indexOf(','),body=url.slice(comma+1),text=url.slice(0,comma).endsWith(';base64')?atob(body):decodeURIComponent(body);
-    svgSources.set(url,parseSvg(text));return svgSources.get(url);
+    const text=decodeSvgDataUrl(url);
+    svgSources.set(url,text===null?null:parseSvg(text));return svgSources.get(url);
   }
   let same=false;try{const u=new URL(url,location.href);same=u.origin===location.origin&&/\.svg$/i.test(u.pathname);}catch{}
   svgSources.set(url,same?'loading':null);
@@ -128,7 +128,7 @@ function textLines(range){
   return lines;
 }
 const fontOf=s=>({family:s.fontFamily,style:s.fontStyle,spacing:px(s.letterSpacing)});
-const maskUrl=s=>(s.maskImage||s.webkitMaskImage||'').match(/url\("?([^")]+)"?\)/)?.[1]??'';
+const maskUrl=s=>maskImageUrl(s.maskImage||s.webkitMaskImage||'');
 
 function readScene(){
   const root=document.getElementById('exact-root');if(!root)return null;
@@ -239,7 +239,12 @@ function drawIcon(g,m){
   const source=svgSource(m.src);
   if(!source||source==='loading'){if(!source)crossed(g,m);return;}
   const box=el('svg',{x:m.x,y:m.y,width:m.w,height:m.h,viewBox:source.viewBox,overflow:'visible'},g);
-  for(const shape of source.shapes){const copy=document.importNode(shape,false);if(shape.localName==='text')copy.textContent=shape.textContent;outlineShape(copy);box.append(copy);}
+  for(const shape of source.shapes){
+    const copy=document.importNode(shape,false),transforms=[shape.getAttribute('transform')||''];
+    for(let p=shape.parentElement;p&&p.localName!=='svg';p=p.parentElement)if(p.localName==='g'&&p.hasAttribute('transform'))transforms.unshift(p.getAttribute('transform'));
+    if(transforms.some(Boolean))copy.setAttribute('transform',transforms.join(' '));
+    if(shape.localName==='text')copy.textContent=shape.textContent;outlineShape(copy);box.append(copy);
+  }
 }
 function drawInlineSvg(g,m){
   const source=m.node,copy=source.cloneNode(true),set=(n,p,v)=>n.style.setProperty(p,v,'important');

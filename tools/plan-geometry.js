@@ -5,6 +5,15 @@
 //   pad:[t,r,b,l], flow (in normal flow), decorative, label, hint}. `hint` is the first text inside a
 //   container whose label is only its kind, so a copied spec says which row is which. `i` and `p` index the document order.
 
+export function maskImageUrl(value){
+  const match=value.match(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^'"].*))\s*\)/);
+  return match?.[1]??match?.[2]??match?.[3]?.trim()??'';
+}
+export function decodeSvgDataUrl(url){
+  const comma=url.indexOf(',');if(comma<0)return null;
+  try{return url.slice(0,comma).endsWith(';base64')?atob(url.slice(comma+1)):decodeURIComponent(url.slice(comma+1));}catch{return null;}
+}
+
 // Computed colours are `rgb(r, g, b)` when opaque and `rgba(r, g, b, a)` or `rgb(r g b / a)` otherwise.
 // Only an alpha of 0 is invisible: pure black, `rgb(0, 0, 0)`, is a colour.
 export const visibleColor=c=>!!c&&c!=='transparent'&&!/^rgba\([^,]+,[^,]+,[^,]+,\s*0(?:\.0+)?\s*\)$/.test(c)&&!/\/\s*0(?:\.0+)?%?\s*\)$/.test(c);
