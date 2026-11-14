@@ -62,6 +62,10 @@ test('plan view draws previews as line plans, regions measure from the canvas an
     await frame.evaluate(()=>document.getElementById('plan-inline-visibility')!.remove());
     await frame.waitForFunction(()=>!document.querySelector('#ed-plan [data-plan-visible-shape]'));
 
+    const maskPlan=async(id:string)=>frame.locator(await frame.evaluate((id:string)=>{
+      const b=document.getElementById(id)!.getBoundingClientRect();
+      return `#ed-plan svg svg[x="${b.x}"][y="${b.y}"][width="${b.width}"][height="${b.height}"]`;
+    },id));
     // Source SVGs retain group transforms, including their order and each shape's own transform.
     await frame.evaluate(()=>{
       const root=document.getElementById('exact-root')!;
@@ -74,11 +78,13 @@ test('plan view draws previews as line plans, regions measure from the canvas an
       add('plan-group-base64','data:image/svg+xml;base64,'+btoa(source('base64')),40);
       add('plan-group-encoded','data:image/svg+xml,'+encodeURIComponent(source('encoded')),80);
     });
-    await frame.locator('#ed-plan [data-plan-shape="encoded"]').waitFor();
+    await (await maskPlan('plan-group-encoded')).locator('rect').waitFor();
     for(const id of ['base64','encoded']){
-      const geometry=await frame.evaluate((id:string)=>{
+      const drawn=await maskPlan('plan-group-'+id);
+      await drawn.locator('rect').waitFor();
+      expect(await drawn.locator('rect').count()).toBe(1); // The defs rect is excluded.
+      const geometry=await drawn.locator('rect').evaluate((shape:Element,id:string)=>{
         const mask=document.getElementById('plan-group-'+id)!.getBoundingClientRect();
-        const shape=document.querySelector(`#ed-plan [data-plan-shape="${id}"]`)!;
         const box=shape.getBoundingClientRect();
         return {x:box.x-mask.x,y:box.y-mask.y,w:box.width,h:box.height,fill:shape.getAttribute('fill'),stroke:shape.getAttribute('stroke'),style:shape.getAttribute('style')};
       },id);
@@ -86,7 +92,6 @@ test('plan view draws previews as line plans, regions measure from the canvas an
       expect(geometry.w).toBeCloseTo(6,1);expect(geometry.h).toBeCloseTo(8,1);
       expect(geometry.fill).toBe('none');expect(geometry.stroke).toBe('var(--ink)');expect(geometry.style).toBeNull();
     }
-    expect(await frame.locator('#ed-plan [data-plan-excluded]').count()).toBe(0);
     // A failed decode draws a placeholder and still reaches media later in the paint order, on every redraw.
     await frame.evaluate(()=>{
       const root=document.getElementById('exact-root')!;
@@ -96,11 +101,29 @@ test('plan view draws previews as line plans, regions measure from the canvas an
         root.append(node);
       }
     });
-    await frame.locator('#ed-plan [data-plan-after]').waitFor({timeout:5000});
+    await (await maskPlan('plan-after-bad')).locator('circle').waitFor({timeout:5000});
     await frame.evaluate(()=>document.getElementById('plan-after-bad')!.style.left='160px');
-    await frame.waitForFunction(()=>document.querySelector('#ed-plan [data-plan-after]')?.parentElement?.getAttribute('x')==='160',undefined,{polling:50,timeout:5000});
+    await (await maskPlan('plan-after-bad')).locator('circle').waitFor({timeout:5000});
     expect(errors).toEqual([]);
     await frame.evaluate(()=>{for(const id of ['group-base64','group-encoded','bad-percent','bad-base64','after-bad'])document.getElementById('plan-'+id)!.remove();});
+
+    // File SVGs are inert in the app; their plan outlines must not acquire handlers or focus.
+    const active=await frame.evaluateHandle(()=>document.activeElement);
+    await frame.evaluate(()=>{
+      const node=document.createElement('div');node.id='plan-hostile-mask';
+      const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path onfocus="window.planMaskFocused=true" tabindex="0" autofocus="" d="M2 2L22 22"/></svg>';
+      node.style.cssText=`position:fixed;left:200px;top:80px;width:24px;height:24px;background:black;mask-image:url("data:image/svg+xml;base64,${btoa(svg)}")`;
+      document.getElementById('exact-root')!.append(node);
+    });
+    const hostile=(await maskPlan('plan-hostile-mask')).locator('path');await hostile.waitFor();
+    for(const name of ['onfocus','tabindex','autofocus'])expect(await hostile.getAttribute(name)).toBeNull();
+    await frame.evaluate(()=>document.getElementById('plan-hostile-mask')!.style.left='240px');
+    await (await maskPlan('plan-hostile-mask')).locator('path').waitFor();
+    await frame.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    expect(await frame.evaluate((before:Element)=>document.activeElement===before,active)).toBe(true);
+    expect(await frame.evaluate(()=>(window as any).planMaskFocused)).toBeUndefined();
+    await frame.evaluate(()=>{document.getElementById('plan-hostile-mask')!.remove();delete (window as any).planMaskFocused;});
+    await active.dispose();
 
     // Plan view's options: layout boxes outline the wrappers, readable text draws the app's words on their lines.
     const count=(selector:string)=>frame.locator(selector).count();

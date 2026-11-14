@@ -61,6 +61,37 @@ test('plan scenes retain zero-opacity modals and their stacking key but skip hid
   expect(scene.records.map((r:any)=>r.key[0])).toEqual([1,1]);
 });
 
+test('file SVG plans copy only geometry and text attributes',()=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const node=(localName:string,attrs:Record<string,string>={}):any=>({localName,attrs:{...attrs},children:[],
+    getAttribute(name:string){return this.attrs[name]??null;},hasAttribute(name:string){return name in this.attrs;},
+    setAttribute(name:string,value:any){this.attrs[name]=String(value);},removeAttribute(name:string){delete this.attrs[name];},
+    append(child:any){this.children.push(child);}});
+  const unsafe={onfocus:'window.stolen=true',onload:'window.stolen=true',tabindex:'0',autofocus:'',href:'javascript:alert(1)','xlink:href':'#app',id:'app',class:'app',style:'fill:red','data-plan-shape':'app'};
+  const path=node('path',{...unsafe,d:'M0 0L4 4',transform:'translate(1 1)'}),text=node('text',{...unsafe,x:'2',y:'3','font-size':'12','text-anchor':'middle'});
+  path.parentElement=node('g',{transform:'scale(2)'});text.textContent='Label';
+  const draw=runInNewContext(script.slice(script.indexOf('function outlineShape('),script.indexOf('function drawInlineSvg('))+'\ndrawIcon;',{
+    svgSource:()=>({viewBox:'0 0 24 24',shapes:[path,text]}),k:()=>1,
+    el:(tag:string,attrs:any,parent:any)=>{const n=node(tag,attrs);parent?.append(n);return n;},
+    document:{importNode:(n:any)=>node(n.localName,n.attrs)},
+  });
+  const g=node('g');draw(g,{src:'mask',x:20,y:40,w:24,h:24});
+  const [p,t]=g.children[0].children,outline={fill:'none',stroke:'var(--ink)','stroke-width':'1','vector-effect':'non-scaling-stroke','stroke-linejoin':'round','stroke-linecap':'round'};
+  expect(p.attrs).toEqual({d:'M0 0L4 4',transform:'scale(2) translate(1 1)',...outline});
+  expect(t.attrs).toEqual({x:'2',y:'3','font-size':'12','text-anchor':'middle',...outline});expect(t.textContent).toBe('Label');
+});
+
+test('inline SVG plans strip handlers and focus attributes from the root and descendants',()=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const node=()=>({attrs:new Map([['onfocus','window.stolen=true'],['onClick','window.stolen=true'],['tabindex','0'],['autofocus',''],['id','app'],['data-visible','yes'],['href','#app']]),
+    get attributes(){return [...this.attrs.keys()].map(name=>({name}));},removeAttribute(name:string){this.attrs.delete(name);},setAttribute:()=>{}});
+  const child=node(),copy={...node(),querySelectorAll:(s:string)=>s==='*'||s==='[id]'?[child]:[]};
+  const source={cloneNode:()=>copy,getScreenCTM:()=>null,querySelectorAll:()=>[]};
+  const draw=runInNewContext(script.slice(script.indexOf('function drawInlineSvg('),script.indexOf('function drawPlan('))+'\ndrawInlineSvg;',{SHAPES:'path'});
+  draw({append:()=>{}},{node:source,x:0,y:0,w:24,h:24});
+  for(const n of [copy,child])expect([...n.attrs]).toEqual([['data-visible','yes'],['href','#app']]);
+});
+
 test('inline SVG plans omit hidden shapes before outlining or cloning wide strokes',()=>{
   const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
   const style={display:'inline',visibility:'visible',opacity:'1',stroke:'black',strokeWidth:'6',strokeOpacity:'1',fill:'none',fillOpacity:'1',strokeDasharray:'none',getPropertyValue:()=>''};
@@ -82,7 +113,7 @@ test('inline SVG plans omit hidden shapes before outlining or cloning wide strok
   for(const {own,group,root,drawn} of cases){
     let removed=false,clones=0;
     const shape:any={style:{setProperty:()=>{}},remove:()=>{removed=true;},cloneNode:()=>{clones++;return shape;},after:()=>{},setAttribute:()=>{}};
-    const copy={querySelectorAll:(s:string)=>s==='path'?[shape]:[],removeAttribute:()=>{},setAttribute:()=>{}};
+    const copy={attributes:[],querySelectorAll:(s:string)=>s==='path'?[shape]:[],removeAttribute:()=>{},setAttribute:()=>{}};
     const source:any={computed:{...style,...root},parentElement:{computed:{...style,opacity:'0'}},cloneNode:()=>copy,getScreenCTM:()=>null};
     const parent={computed:{...style,...group},parentElement:source};
     source.querySelectorAll=()=>[{localName:'path',computed:{...style,...own},parentElement:parent}];

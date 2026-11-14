@@ -234,14 +234,15 @@ function drawText(g,t){
 function outlineShape(n){
   n.setAttribute('fill','none');n.setAttribute('stroke','var(--ink)');n.setAttribute('stroke-width',k());
   n.setAttribute('vector-effect','non-scaling-stroke');n.setAttribute('stroke-linejoin','round');n.setAttribute('stroke-linecap','round');
-  n.removeAttribute('style');n.removeAttribute('class');
 }
 function drawIcon(g,m){
   const source=svgSource(m.src);
   if(!source||source==='loading'){if(!source)crossed(g,m);return;}
   const box=el('svg',{x:m.x,y:m.y,width:m.w,height:m.h,viewBox:source.viewBox,overflow:'visible'},g);
   for(const shape of source.shapes){
-    const copy=document.importNode(shape,false),transforms=[shape.getAttribute('transform')||''];
+    const copy=el(shape.localName),transforms=[shape.getAttribute('transform')||''];
+    const attrs='d cx cy r rx ry x y width height points x1 y1 x2 y2 transform'+(shape.localName==='text'?' dx dy rotate textLength lengthAdjust font-family font-size font-weight font-style font-stretch font-variant letter-spacing word-spacing text-anchor dominant-baseline alignment-baseline baseline-shift direction writing-mode':'');
+    for(const name of attrs.split(' '))if(shape.hasAttribute(name))copy.setAttribute(name,shape.getAttribute(name));
     for(let p=shape.parentElement;p&&p.localName!=='svg';p=p.parentElement)if(p.localName==='g'&&p.hasAttribute('transform'))transforms.unshift(p.getAttribute('transform'));
     if(transforms.some(Boolean))copy.setAttribute('transform',transforms.join(' '));
     if(shape.localName==='text')copy.textContent=shape.textContent;outlineShape(copy);box.append(copy);
@@ -250,7 +251,7 @@ function drawIcon(g,m){
 function drawInlineSvg(g,m){
   const source=m.node,copy=source.cloneNode(true),set=(n,p,v)=>n.style.setProperty(p,v,'important');
   for(const n of copy.querySelectorAll('style,script,foreignObject'))n.remove();
-  for(const n of [copy,...copy.querySelectorAll('[id]')])n.removeAttribute('id');
+  for(const n of [copy,...copy.querySelectorAll('*')])for(const {name} of [...n.attributes])if(/^(on.*|tabindex|autofocus|id)$/i.test(name))n.removeAttribute(name);
   copy.removeAttribute('class');copy.removeAttribute('style');
   Object.entries({x:m.x,y:m.y,width:m.w,height:m.h,overflow:'visible'}).forEach(([a,v])=>copy.setAttribute(a,v));
   const ctm=source.getScreenCTM(),unit=ctm?Math.hypot(ctm.a,ctm.b)||1:1;
