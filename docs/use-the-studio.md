@@ -80,12 +80,12 @@ The studio checks the token with Expo and creates an Expo project for the app (`
 **Test a screen.**
 
 1. Select a screen and click **Test remotely**. The drawer shows four steps: **Build your latest code**, **Start a cloud iPhone**, **Upload the app**, and **Open this screen**. The first test takes about a minute after any build: starting the simulator takes about 30 seconds and uploading about 30.
-2. Click **Open simulator** to use the cloud iPhone in a new tab. Sign in to expo.dev if it asks.
-3. To check another screen, select it and click **Show this screen**. The open tab shows the change in a few seconds. When your saved code changes, the button reads **Update & show**: it rebuilds and uploads the app first.
+2. Click **Open in Simulator**. A new tab shows the same steps, then becomes the cloud iPhone, at the selected screen. Sign in to expo.dev if it asks.
+3. To check another screen, select it and click **Open in Simulator** again. It reuses the running iPhone, so it takes a few seconds. If your saved code changed, it rebuilds and uploads the app first; the drawer says "Your code changed" until then. Each click opens a new tab, and every tab shows the same iPhone, so you can close the older ones.
 
 The cloud iPhone uses the drawer's device. Choosing another device and testing again replaces the session. Unapplied drafts aren't in the build; **Apply** them first. The drawer's **Light** and **Dark** apply only to local captures.
 
-A running cloud iPhone uses your plan's simulator time. It stops when you click **Stop**, after 15 idle minutes, after an hour in all, or when you stop `bun run dev`.
+A running cloud iPhone uses your plan's simulator time. It stops when you click **Stop**, after 15 idle minutes, after an hour in all, or when you stop `bun run dev`. The studio checks the session with Expo every 20 seconds, so one you end on expo.dev, or one that times out, leaves the drawer within about 20 seconds.
 
 ## Review and apply edits
 

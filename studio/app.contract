@@ -16,6 +16,7 @@ shape SnapTarget
 
 fn propertyIcon(property: string, value: string): string = property == "flex-direction" ? (value.startsWith("row") ? "columns-2" : "rows-2") : property == "align-items" ? (value == "flex-start" ? "align-vertical-justify-start" : value == "center" ? "align-vertical-justify-center" : value == "flex-end" ? "align-vertical-justify-end" : value == "stretch" ? "move-vertical" : "align-vertical-justify-end") : value == "flex-start" ? "align-horizontal-justify-start" : value == "center" ? "align-horizontal-justify-center" : value == "flex-end" ? "align-horizontal-justify-end" : "between-horizontal-start"
 
+fn minutes(n: number): string = `${n} ${n == 1 ? "minute" : "minutes"}`
 fn duration(s: number): string = s < 60 ? `${s} s` : `${floor(s / 60)}:${s % 60 < 10 ? "0" : ""}${s % 60}`
 fn deviceIcon(name: string): string = name.includes("Phone") or name == "Android" ? "smartphone" : name.includes("iPad") or name == "Tablet" ? "tablet" : "monitor"
 fn propertyPrefix(property: string): string = property == "left" ? "X" : property == "top" ? "Y" : property == "width" ? "W" : property == "height" ? "H" : ""
@@ -64,6 +65,9 @@ shape NativeStep
 // The project's Expo Simulators session, from the helper. `state` is idle, working, error or unavailable; `running` says a
 // cloud session is up on `device`, at `url`; `stale` that the app's source changed since its build was uploaded.
 shape ExpoStatus
+  open: string
+  idleMinutes: number
+  maxMinutes: number
   configured: bool
   account: string
   state: string
@@ -397,7 +401,7 @@ component Studio
   derive nativeSize = match first(doc.nativeDevices.filter(d => d.slug == nativeDevice)) { case some(d) => d, case none => DeviceOption(name="iPhone 17", slug="native-iphone-17", kind="phone", width=402, height=874, label="", remote="iPhone 17") }
   // Fit the simulator's screen in the drawer: 288px wide inside its padding, and the drawer's height less its header,
   // device controls, actions, the Expo Simulators section and padding (about 302px, plus room for a status or error line).
-  derive nativeFit = min(288 / nativeSize.width, max(120, viewport.height - (rightOpen ? 12 : 64) - (viewport.width >= 1000 ? 64 : 120) - 302 - (expoWorking ? 128 : expo.running ? 28 : 0) - (nativeFrameError != "" or native.state == "working" or nativeDone ? 36 : 0) - (nativeDrafts > 0 ? 52 : 0)) / nativeSize.height)
+  derive nativeFit = min(288 / nativeSize.width, max(120, viewport.height - (rightOpen ? 12 : 64) - (viewport.width >= 1000 ? 64 : 120) - 302 - (expoWorking ? 128 : expo.running ? 44 : 0) - (nativeFrameError != "" or native.state == "working" or nativeDone ? 36 : 0) - (nativeDrafts > 0 ? 52 : 0)) / nativeSize.height)
   // Read again when editing ends, since finishing saves the session's drafts without applying them.
   resource savedDrafts = savedDrafts((nativeOpen and not editing ? doc.projectUrl : "")) as shape SavedDrafts else empty()
   derive nativeDrafts = editing ? (match designChanged { case some(r) => r.draftCount, case none => 0 }) : savedDrafts.count
@@ -1234,18 +1238,17 @@ component Studio
                       else if expoWorking
                         ExpoProgress(status=expo, still=still)
                       else if expo.running
-                        row gap=8
-                          button press=testRemotely disabled=(doc.route == "") class=SecondaryButton flex=1 min-width=0 aria-label=(expo.stale ? "Update and show this screen" : "Show this screen") data-tip=(expo.stale ? `Update and show · Upload your latest saved code, then open ${doc.route} on the cloud ${expoDeviceName}` : `Show this screen · Open ${doc.route} on the cloud ${expoDeviceName}`) testId="expo-show"
-                            Icon(name=(expo.stale ? "refresh-cw" : "play"), size=14, angle=0)
-                            text (expo.stale ? "Update & show" : "Show this screen")
-                          link href=expo.url class=SecondaryButton text-decoration="none" aria-label="Open the cloud simulator" data-tip="Open simulator · Use the cloud iPhone in a new tab" testId="expo-open"
-                            text "Open simulator"
-                            column color="ink.muted"
-                              Icon(name="external-link", size=12, angle=0)
-                        row gap=6 align-items="center" min-width=0 color="ink.secondary" role="status"
-                          column width=6 height=6 flex-shrink=0 border-radius=3 background-color=(expo.stale ? "ink.muted" : "ink.diff-add") aria-hidden=true
-                          text (expo.stale ? "Your code changed since the last upload" : `Running on a cloud ${expoDeviceName}`) font="type.caption" color="ink.primary" flex=1 min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" testId="expo-running"
-                          button press=stopRemote class=RowButton width="auto" height=24 padding="0 6px" color="ink.secondary" font="type.caption" aria-label="Stop the cloud simulator" data-tip="Stop · End the session so it stops using your Expo plan. It also stops after 15 idle minutes" testId="expo-stop"
+                        link href=`${expo.open}&device=${encodeURIComponent(nativeDevice)}&route=${encodeURIComponent(doc.route)}` class=SecondaryButton text-decoration="none" aria-label="Open in Simulator" data-tip=(expo.stale ? `Open in Simulator · Upload your latest saved code, then show ${doc.route == "" ? "the app" : doc.route} on the cloud ${expoDeviceName}` : `Open in Simulator · Show ${doc.route == "" ? "the app" : doc.route} on the cloud ${expoDeviceName}, in its tab`) testId="expo-open"
+                          Icon(name="play", size=14, angle=0)
+                          text "Open in Simulator"
+                          column color="ink.muted"
+                            Icon(name="external-link", size=12, angle=0)
+                        row gap=6 align-items="flex-start" min-width=0 color="ink.secondary" role="status"
+                          column width=6 height=6 flex-shrink=0 margin-top=5 border-radius=3 background-color=(expo.stale ? "ink.muted" : "ink.diff-add") aria-hidden=true
+                          column flex=1 min-width=0 gap=0
+                            text (expo.stale ? "Your code changed since the last upload" : `Running on a cloud ${expoDeviceName}`) font="type.caption" color="ink.primary" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" testId="expo-running"
+                            text `Ends after ${minutes(expo.idleMinutes)} of inactivity` font="type.caption" color="ink.muted" data-tip=`Expo ends the session after ${minutes(expo.idleMinutes)} without activity, or ${minutes(expo.maxMinutes)} in all` testId="expo-idle"
+                          button press=stopRemote class=RowButton width="auto" height=24 padding="0 6px" color="ink.secondary" font="type.caption" aria-label="Stop the cloud simulator" data-tip="Stop · End the session now so it stops using your Expo plan" testId="expo-stop"
                             text "Stop"
                       else if expo.configured
                         button press=testRemotely disabled=(doc.route == "") class=SecondaryButton aria-label="Test remotely on Expo Simulators" data-tip=`Test remotely · Build your latest saved code and open ${doc.route == "" ? "this screen" : doc.route} on a cloud ${nativeSize.name}` testId="expo-test"
@@ -1255,7 +1258,7 @@ component Studio
                         row gap=6 align-items="flex-start" color="ink.danger"
                           Icon(name="circle-alert", size=14, angle=0)
                           text expo.error role="alert" flex=1 min-width=0 font="type.caption" color="ink.primary" testId="expo-error"
-                      else if expo.message != "" and not expoWorking and not expo.running and expo.state == "idle" and expoRun != ""
+                      else if expo.message != "" and not expoWorking and not expo.running and expo.state == "idle"
                         row gap=6 align-items="flex-start" color="ink.secondary" role="status"
                           Icon(name="check", size=14, angle=0)
                           text expo.message flex=1 min-width=0 font="type.caption" color="ink.primary" testId="expo-message"

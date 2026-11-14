@@ -116,7 +116,7 @@ const sources: Sources = {
   // Expo Simulators for the connected project: the helper builds the latest saved source, uploads it to the project's
   // cloud session and opens `route` on `device`. A new `run` token starts `action` (test or stop); the token stays in the helper.
   expo: ([project,device,route,run,action]) => {
-    const idle={configured:false,account:'',state:'idle',message:'',error:'',steps:[] as {id:string;label:string;state:string;detail:string}[],elapsed:0,estimate:0,running:false,device:'',url:'',stale:false};
+    const idle={open:'',idleMinutes:15,maxMinutes:60,configured:false,account:'',state:'idle',message:'',error:'',steps:[] as {id:string;label:string;state:string;detail:string}[],elapsed:0,estimate:0,running:false,device:'',url:'',stale:false};
     if(!project)return idle;
     let latest=idle;
     const unavailable=()=>({...latest,state:'unavailable',error:'Expo Simulators need the studio helper. Run bun run dev.'});
@@ -124,7 +124,7 @@ const sources: Sources = {
       if(event.type==='error')return unavailable();
       if(event.type!=='message'||typeof event.data!=='string')return latest;
       const v=JSON.parse(event.data);
-      return latest={configured:!!v.configured,account:String(v.account??''),state:String(v.state??'idle'),message:String(v.message??''),error:String(v.error??''),
+      return latest={idleMinutes:Number(v.idleMinutes)||15,maxMinutes:Number(v.maxMinutes)||60,open:typeof v.open==='string'&&v.open.startsWith('http://127.0.0.1:')?v.open:'',configured:!!v.configured,account:String(v.account??''),state:String(v.state??'idle'),message:String(v.message??''),error:String(v.error??''),
         steps:Array.isArray(v.steps)?v.steps.map((s:any)=>({id:String(s.id),label:String(s.label),state:String(s.state),detail:String(s.detail??'')})):[],
         elapsed:Number(v.elapsed)||0,estimate:Number(v.estimate)||0,running:!!v.running,device:String(v.device??''),url:typeof v.url==='string'&&v.url.startsWith('https://')?v.url:'',stale:!!v.stale};
     }}).catch(unavailable);

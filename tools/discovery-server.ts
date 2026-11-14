@@ -37,7 +37,7 @@ export async function readRoutes(origin: string, request: typeof fetch = fetch) 
 type NativeModule={nativeScreens(body:unknown,request:Request):Response;nativeShot(path:string):Response};
 const nativeModule=():Promise<NativeModule>=>process.env.EXACT_DESIGN_TEST==='1'?import('./native-fixture'):import('./native-previews');
 /** Expo Simulators: `expo-sessions.ts` runs EAS CLI; the test launchers use `expo-fixture.ts` instead. */
-type ExpoModule={expoStream(body:unknown,request:Request):Response;expoSetup(body:unknown):Promise<{ok:boolean;error:string;account:string}>};
+type ExpoModule={expoStream(body:unknown,request:Request):Response;expoSetup(body:unknown):Promise<{ok:boolean;error:string;account:string}>;expoOpen(url:URL):Promise<Response>;expoStatus(url:URL):Promise<Response>};
 const expoModule=():Promise<ExpoModule>=>process.env.EXACT_DESIGN_TEST==='1'?import('./expo-fixture'):import('./expo-sessions');
 export function startDiscoveryServer(port=5175) {
   return Bun.serve({hostname:'127.0.0.1',port,maxRequestBodySize:524288,idleTimeout:255,
@@ -52,6 +52,9 @@ export function startDiscoveryServer(port=5175) {
         for(const [key,value]of Object.entries(headers))response.headers.set(key,value);
         return response;
       }
+      // Open in Simulator: a top-level tab, so no CORS headers; the per-process key in the link guards it.
+      if(url.pathname==='/expo/open'&&req.method==='GET')return (await expoModule()).expoOpen(url);
+      if(url.pathname==='/expo/status'&&req.method==='GET')return (await expoModule()).expoStatus(url);
       if(url.pathname==='/design/events'&&req.method==='GET'){
         const response=designEvents(url.searchParams.get('session')??'',req);
         for(const [key,value]of Object.entries(headers))response.headers.set(key,value);

@@ -3,26 +3,26 @@ import {mkdtemp,mkdir,writeFile,readFile,stat} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {AppSession,easError,expoRequest,type Eas} from '../tools/expo-sessions';
+import {AppSession,easError,expoOpen,expoRequest,expoStatus,sessionStatus,type Eas} from '../tools/expo-sessions';
 
 /** A session over a fake build and a fake EAS CLI that records each command and the token it ran with. */
-async function harness(options:{whoami?:string;alive?:boolean}={}){
+async function harness(options:{whoami?:string;alive?:boolean;watchMs?:number}={}){
   const root=await mkdtemp(join(tmpdir(),'expo-sessions-')),appDir=join(root,'app'),cache=join(root,'cache'),bundle=join(root,'build','Ember.app');
   await mkdir(appDir,{recursive:true});await mkdir(bundle,{recursive:true});await mkdir(cache,{recursive:true});
   await writeFile(join(appDir,'app.json'),JSON.stringify({name:'Ember',app:{id:'dev.exactdesign.ember'},protocol_handlers:[{protocol:'web+ember',url:'/open?u=%s'}]}));
   await writeFile(join(bundle,'Info.plist'),'plist');
-  const calls:string[][]=[],tokens:string[]=[];let signature='s1',builds=0,alive=options.alive??true;
+  const calls:string[][]=[],tokens:string[]=[];let signature='s1',builds=0,alive=options.alive??true,getFails=false;
   const run:Eas=async(args,{token})=>{calls.push(args);tokens.push(token);
     if(args[0]==='whoami'){if(options.whoami===undefined)return 'fixture-team (authenticated using EXPO_TOKEN)\nme@example.com\n';throw new Error(options.whoami);}
     if(args[0]==='init')return 'Creating…\n{"status":"created","projectId":"0657a9ef-78f2-4956-86be-071dc82383dc","owner":"fixture-team","slug":"exact-design-ember"}';
     if(args[0]==='simulator:start')return JSON.stringify({id:`session-${calls.filter(c=>c[0]==='simulator:start').length}`,deviceRunSessionUrl:'https://expo.dev/accounts/fixture-team/projects/exact-design-ember/simulator-sessions/x',remoteConfig:{webPreviewUrl:'https://expo.dev/accounts/fixture-team/projects/exact-design-ember/simulator-sessions/x/preview',agentDeviceRemoteSessionToken:'secret'}});
-    if(args[0]==='simulator:get')return JSON.stringify({status:alive?'IN_PROGRESS':'STOPPED'});
+    if(args[0]==='simulator:get'){if(getFails)throw new Error('network down');return JSON.stringify({status:alive?'IN_PROGRESS':'STOPPED'});}
     return '';};
   const app={dir:cache,appDir,get signature(){return signature;},refresh:async()=>signature,subscribe:()=>()=>true,
     build:async(_app:unknown,sig:string,hooks:any)=>{builds++;hooks.step('done','Built in 1 s');expect(sig).toBe(signature);return bundle;}};
   const service={stopping:false,enqueue:(job:()=>Promise<void>)=>job(),target:{available:async()=>{}},checkRunning(){},now:()=>0};
-  const session=new AppSession(app as any,service as any,run);
-  return {session,calls,tokens,cache,setSignature:(s:string)=>{signature=s;},builds:()=>builds,setAlive:(a:boolean)=>{alive=a;}};
+  const session=new AppSession(app as any,service as any,run,options.watchMs??60000);
+  return {session,calls,tokens,cache,setSignature:(s:string)=>{signature=s;},builds:()=>builds,setAlive:(a:boolean)=>{alive=a;},setGetFails:(f:boolean)=>{getFails=f;}};
 }
 const commands=(calls:string[][])=>calls.map(c=>c.slice(0,2).join(' '));
 
@@ -106,4 +106,42 @@ test('requests name a native device, a route and an action',()=>{
   expect(expoRequest({project:'http://127.0.0.1:5174',run:'1',device:'native-iphone-17',route:'/diary/add',action:'test'})).toEqual({project:'http://127.0.0.1:5174',run:'1',device:'native-iphone-17',route:'/diary/add',action:'test'});
   expect(expoRequest({project:'http://127.0.0.1:5174',run:'',device:'native-iphone-17',route:''}).action).toBe('test');
   for(const bad of [{project:'x',run:'',device:'phone',route:'/'},{project:'x',run:'',device:'native-iphone-17',route:'//evil'},{project:'x',run:'',device:'native-iphone-17',route:'/',action:'delete'}])expect(()=>expoRequest(bad)).toThrow();
+});
+
+test('the open tab needs the studio’s key, starts the test, and its status never carries the token',async()=>{
+  const h=await harness();await h.session.setup('expo_token');
+  const service={project:async()=>h.session} as any;
+  const page=(key:string,route='/diary/add')=>new URL(`http://127.0.0.1:5175/expo/open?project=${encodeURIComponent('http://127.0.0.1:5174')}&key=${key}&device=native-iphone-17&route=${encodeURIComponent(route)}`);
+  expect((await expoOpen(page('wrong'),service)).status).toBe(403);
+  expect((await expoStatus(new URL('http://127.0.0.1:5175/expo/status?project=x&key=wrong'),service)).status).toBe(403);
+  expect(h.calls.filter(c=>c[0]==='simulator:start')).toEqual([]);
+  // The key reaches the studio only inside the origin-checked stream's `open` link.
+  const {expoStream}=await import('../tools/expo-sessions');
+  const stream=expoStream({project:'http://127.0.0.1:5174',run:'',device:'native-iphone-17',route:'/'},new Request('http://127.0.0.1:5175/expo',{method:'POST'}),service);
+  const reader=stream.body!.getReader(),first=new TextDecoder().decode((await reader.read()).value);await reader.cancel();
+  const open=new URL(JSON.parse(first.slice(first.indexOf('{'))).open);
+  expect(open.pathname).toBe('/expo/open');expect(open.searchParams.get('project')).toBe('http://127.0.0.1:5174');
+  const key=open.searchParams.get('key')!;
+  const response=await expoOpen(page(key),service);
+  expect(response.status).toBe(200);
+  const html=await response.text();
+  expect(html).toContain('/diary/add on a cloud iPhone 17');expect(html).not.toContain('expo_token');
+  await Bun.sleep(50);
+  expect(h.calls.some(c=>c[0]==='simulator:start')).toBe(true);
+  const status=await (await expoStatus(new URL(`http://127.0.0.1:5175/expo/status?project=x&key=${key}`),service)).json();
+  expect(status.running).toBe(true);expect(JSON.stringify(status)).not.toContain('expo_token');
+  expect((await expoOpen(page(key,'//evil'),service)).status).toBe(400);
+});
+
+test('a session ended on expo.dev leaves the drawer; a failed check keeps it',async()=>{
+  const h=await harness({watchMs:20});await h.session.setup('expo_token');
+  await h.session.start('a','test','native-iphone-17','/');
+  h.setGetFails(true);await Bun.sleep(80);
+  expect(h.session.snapshot().running).toBe(true);
+  h.setGetFails(false);h.setAlive(false);await Bun.sleep(80);
+  expect(h.session.snapshot()).toMatchObject({running:false,url:'',state:'idle',message:'The cloud iPhone ended on expo.dev.'});
+  // The watch stops with the session.
+  const checks=h.calls.filter(c=>c[0]==='simulator:get').length;await Bun.sleep(80);
+  expect(h.calls.filter(c=>c[0]==='simulator:get').length).toBe(checks);
+  expect([sessionStatus('IN_PROGRESS'),sessionStatus('starting'),sessionStatus('STOPPED'),sessionStatus('errored'),sessionStatus(undefined)]).toEqual(['running','running','ended','ended','unknown']);
 });
