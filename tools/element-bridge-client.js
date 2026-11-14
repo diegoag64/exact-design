@@ -136,6 +136,7 @@ async function deliver(task){
   if(!Number.isSafeInteger(task.seq)||task.seq<=command)return;
   command=task.seq;
   if(task.op==='select'){selectionCommand=task.seq;if(task.plan===globalThis.exact?.plan)await select(task.id,task.seq);}
+  if(task.op==='deselect'){selectionCommand=task.seq;if(document.getElementById('exact-inspect')){nativeInspector??=import('/__dev/inspect.js');(await nativeInspector).clearStudioSelection?.();}}
   if(task.op==='hover'&&(!task.page||task.page===page))hover(task.id,task.plan);
   if(task.op==='measure'){measurement={id:task.id,plan:task.plan};spacingObserver?.select(task.id,task.plan);}
   if(task.op==='draft'){draft={patches:task.patches||[],revision:task.draftRevision};void renderDraft();}

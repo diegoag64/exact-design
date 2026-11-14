@@ -299,6 +299,54 @@ test "reduced preview effects toggle and persist"
   tap "reduce-effects"
   expect state reducedEffects == false
 
+test "plan view toggles from the toolbar and persists"
+  size 1440x900
+  expect state planView == false
+  tap "toggle-plan"
+  expect state planView == true
+  reload
+  clock data
+  expect state planView == true
+  tap "toggle-plan"
+  expect state planView == false
+
+test "plan view options switch from their menu and persist"
+  size 1440x900
+  expect state planBoxes == false
+  expect state planText == false
+  tap "plan-options"
+  tap "plan-boxes"
+  tap "plan-text"
+  expect state planBoxes == true
+  expect state planText == true
+  reload
+  clock data
+  expect state planBoxes == true
+  expect state planText == true
+  tap "plan-options"
+  tap "plan-text"
+  expect state planText == false
+  tap "plan-options"
+
+test "appearance sets the studio and screens themes and persists"
+  size 1440x900
+  expect state studioTheme == "system"
+  expect state screenTheme == "system"
+  tap "appearance"
+  tap "theme-studio-dark"
+  tap "theme-screens-light"
+  expect state studioTheme == "dark"
+  expect state screenTheme == "light"
+  reload
+  clock data
+  expect state studioTheme == "dark"
+  expect state screenTheme == "light"
+  tap "appearance"
+  tap "theme-studio-system"
+  tap "theme-screens-system"
+  expect state studioTheme == "system"
+  expect state screenTheme == "system"
+
 test "project screens share a server and group their viewports"
   size 1440x900
   tap "project-connection"

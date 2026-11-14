@@ -227,8 +227,8 @@ test('canvas picks are pushed to the tree without waiting for the inspection pol
 
 test('canvas frames relay gestures independently of inspection while Preview input stays local',()=>{
   const script=readFileSync(new URL('../tools/canvas-input-client.js',import.meta.url),'utf8');
-  const handlers:Record<string,Function>={},packets:any[]=[],frameWindow={};let inspecting=true;
-  runInNewContext(script,{URL,location:{href:'http://localhost/?__ed_canvas=1'},window:frameWindow,parent:{postMessage:(packet:any)=>packets.push(packet)},document:{getElementById:()=>inspecting?{}:null},addEventListener:(name:string,fn:Function)=>{handlers[name]=fn;}});
+  const handlers:Record<string,Function>={},packets:any[]=[],frameWindow={},parentWindow={postMessage:(packet:any)=>packets.push(packet)};let inspecting=true;
+  runInNewContext(script,{URL,location:{href:'http://localhost/?__ed_canvas=1'},window:frameWindow,parent:parentWindow,document:{getElementById:()=>inspecting?{}:null},addEventListener:(name:string,fn:Function)=>{handlers[name]=fn;},dispatchEvent:()=>true,Event:class{}},{importModuleDynamically:(async()=>import('data:text/javascript,export const detail=()=>{};export const region=()=>false;export const hasRegion=()=>false;')) as any});
   const event=(extra:any={})=>({code:'Space',target:{closest:()=>null},preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...extra});
   let wheel=event({clientX:12,clientY:34,deltaX:5,deltaY:20,deltaMode:0,ctrlKey:true});handlers.wheel(wheel);
   expect(wheel.prevented).toBe(true);expect(packets.at(-1)).toMatchObject({kind:'exact-design:canvas',op:'wheel',x:12,y:34,dx:5,dy:20,mode:0,ctrl:true});
@@ -236,6 +236,13 @@ test('canvas frames relay gestures independently of inspection while Preview inp
   expect(packets.filter(p=>p.op==='space').map(p=>p.down)).toEqual([true,true,false]);
   handlers.keydown(event({code:'KeyH'}));handlers.keydown(event({code:'KeyV'}));
   expect(packets.slice(-2).map(p=>p.tool)).toEqual(['Pan','Select']);
+  // Shift+P toggles plan view in the studio, matched by physical key.
+  handlers.keydown(event({code:'KeyP',key:'P',shiftKey:true}));expect(packets.at(-1)).toMatchObject({kind:'exact-design:canvas',op:'plan'});
+  // Shift+B and Shift+T are plan view's options, so they stay the app's keys until the plan shows.
+  const quiet=packets.length;handlers.keydown(event({code:'KeyB',key:'B',shiftKey:true}));expect(packets.length).toBe(quiet);
+  inspecting=false;handlers.message({source:parentWindow,data:{kind:'exact-design:preview-detail',plan:true,zoom:1}});inspecting=true;
+  handlers.keydown(event({code:'KeyB',key:'B',shiftKey:true}));handlers.keydown(event({code:'KeyT',key:'T',shiftKey:true}));
+  expect(packets.slice(-2).map(p=>p.op)).toEqual(['plan-boxes','plan-text']);
   const before=packets.length,typing=event({target:{closest:()=>({})}});handlers.keydown(typing);expect(typing.prevented).toBeUndefined();
   expect(packets.length).toBe(before);
   // Native inspection may stop or not be ready yet. Canvas navigation still owns input.

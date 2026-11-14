@@ -188,6 +188,19 @@ test('precision editing: nudges, math, distances, theme colours, alignment and s
     await frame.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="create"]')!).paddingLeft==='24px',undefined,{polling:50});
     await settled();
     await page.screenshot({path:resolve(root,'.exact/precision-editing.png')});
+    // Escape clears the selection whether the preview or the studio has focus, and keeps inspecting.
+    const title=frame.locator('#exact-root').getByText('Room for your thoughts.',{exact:true});
+    const empty=page.getByText('Select an element in a screen.',{exact:true}),clear=page.getByTestId('clear-selection');
+    await title.click({force:true});await clear.waitFor();
+    await page.keyboard.press('Escape');await empty.waitFor();
+    expect(await page.getByRole('button',{name:'Finish editing app',exact:true}).isVisible()).toBe(true);
+    expect(await frame.evaluate(()=>!!document.getElementById('exact-inspect'))).toBe(true);
+    await title.click({force:true});await clear.waitFor();
+    await page.evaluate(()=>{(document.activeElement as HTMLElement|null)?.blur();});
+    await page.keyboard.press('Escape');await empty.waitFor();
+    // The same element can be selected again, and Escape with nothing selected finishes editing.
+    await title.click({force:true});await clear.waitFor();await clear.click();await empty.waitFor();
+    await page.keyboard.press('Escape');await page.getByRole('button',{name:'Edit app design',exact:true}).waitFor();
     expect(errors).toEqual([]);
   }catch(error){console.log('PAGE ERRORS',errors);if(page)await page.screenshot({path:resolve(root,'.exact/precision-editing-failure.png')}).catch(()=>{});throw error;}finally{
     if(page)await page.context().close();if(suite)await suite.browser.close();

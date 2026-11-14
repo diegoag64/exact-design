@@ -378,6 +378,16 @@ export class DesignSession {
     this.pick(frame.frame,id);this.bridge!.select(frame.frame,id);
     return this.view();
   }
+  /** Clears the selection and Exact's own selection in the preview, without ending inspection.
+   *  Reports already queued, such as the click's own, are taken in first so they cannot select it again. */
+  async deselect(){
+    await this.poll();
+    const frame=this.picked?.frame??'';
+    this.picked=null;this.selection=null;this.pendingSelection=null;this.restoring=null;this.deferredSelections=[];
+    this.version++;this.selectionRevision++;
+    if(frame)this.bridge?.deselect(frame);
+    return this.view();
+  }
   pick(frameId:string,id:string){
     const frame=this.bridge?.frames.get(frameId),node=frame?.nodes.find(n=>n.id===id);
     if(!frame||!node)return;
@@ -451,6 +461,7 @@ export async function designRequest(body:any) {
     return s.view();
   }
   if(body.op==='select')return s.navigate(String(body.row));
+  if(body.op==='deselect')return await s.deselect();
   throw new Error('Unknown design action.');
 }
 

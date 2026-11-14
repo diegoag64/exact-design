@@ -148,7 +148,8 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
     await panEveryScreen();
     // Exact closes its native inspector before the studio polls the ended session.
     // Navigation must keep working through that asynchronous transition.
-    await frame.evaluate(()=>dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true})));
+    // Escape now reaches the studio first, so the inspector's own close control ends it here.
+    await frame.evaluate(()=>(document.querySelector('#exact-inspect [aria-label^="Stop inspecting"]') as HTMLElement).click());
     expect(await frame.evaluate(()=>!!document.getElementById('exact-inspect'))).toBe(false);
     await panEveryScreen();
     // Start Space-drag with focus inside the now uninspected app frame.

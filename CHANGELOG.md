@@ -6,6 +6,10 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Added
 
+- **Plan view** in the bottom toolbar (⇧P). Canvas previews become line plans: surfaces as outlines with their corners, text as bars that follow each wrapped line, icons and inline SVGs as their outlines, and photos as crossed boxes. Progress bars and rings keep a light tint so their values stay readable. Lines stay one pixel wide at every zoom. The plan uses paper and graphite in light mode and a blueprint in dark mode, following the screens' theme, and the setting is remembered. Selection, spacing labels and app editing work as usual.
+- Plan view options, in the arrow beside the plan view button. **Layout boxes** (⇧B) outlines the rows, columns and other containers the app never paints. **Readable text** (⇧T) shows the app's own words in place of the bars. Both are remembered.
+- An **Appearance** menu beside the zoom controls sets light or dark for the studio and, separately, for your app in canvas previews. Each can match the system, and both are remembered. Plan view follows the screens' choice.
+- Regions. Shift-drag over a screen to measure everything inside the rectangle: padding, gaps and margins in the spacing colours, sizes, corner radius and the region's own size. Rows with the same structure are labeled once and marked ×N. **Copy** puts the region's spec on the clipboard as an outline of its layers. Alt+A measures the whole screen under the pointer, and Escape or a click outside clears the region. Regions work with or without plan view.
 - Precise number editing. In the inspector, ↑ and ↓ step a value (Shift by 10, Option by 0.1) and keep its unit, dragging a field's letter or icon scrubs it, and math such as `16*2` evaluates on Enter. Canvas spacing labels can be dragged to adjust padding, margins and gaps.
 - Hold Option (Alt) over another element to measure the distance from the selection to it, or to each edge of its parent.
 - Theme colours in the inspector. Colour fields show the swatch of their theme token, such as `ember`. The swatch opens a picker that lists the app's theme colours first, with a custom value below, and raw colours that are not theme tokens are flagged.
@@ -19,6 +23,10 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 - Hide screens and individual viewports with the eye button that appears when you hover a row in the Screens panel, or from a viewport's context menu. Hidden frames leave the canvas, stop loading their previews, and are skipped by hit testing, snapping, and **Fit all screens**. Visibility is saved with the workspace and can be undone.
 - A loading veil over the canvas when the page opens. It hides the canvas from the first frame, counts live previews as they render, then fades out so the screens appear together. Fast loads show only the empty canvas, workspaces without visible live previews skip it, a click or **Edit app** dismisses it, it leaves on its own if loading stalls, and it never returns after the first load.
 - **Reduce preview effects** beside the zoom controls. Canvas previews omit backdrop blur at every zoom and skip CSS animations, which keeps the GPU nearly idle while the canvas is still. Full-screen Preview is unchanged, and the setting is remembered.
+
+### Changed
+
+- While editing an app, Escape clears the selected element, from the canvas or the studio, and inspection continues. With nothing selected, Escape finishes editing. The inspector also has a **×** beside the selected element's name.
 
 ### Fixed
 

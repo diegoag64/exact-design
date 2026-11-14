@@ -36,8 +36,13 @@
     "nudge",
     "nudge-min",
     "preview-effects",
+    "plan-view",
+    "plan-boxes",
+    "plan-text",
+    "screen-theme",
     "scrub",
     "scrub-spacing",
+    "studio-theme",
     "tip"
   ]
 }
