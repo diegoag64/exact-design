@@ -22,6 +22,8 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Fixed
 
+- Grouped draft edits roll back on failure and undo both alignment axes even at the history limit. Number scrubbing preserves valid negative values, alignment follows reversed flows, and Fixed sizing accounts for padding and borders.
+
 - The inspector's **Flow** shows the direction an element renders when its source leaves `flex-direction` unset. A button or row laid out as a row read as Column.
 - Draft previews of a theme colour named like a CSS colour keyword, such as `AccentColor`, show the theme's value. The preview showed the browser's system accent instead.
 - Clicking the selected element again no longer hides its spacing overlay.

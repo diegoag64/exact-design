@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {parseNumber,formatNumber,evaluate} from './modules/web/number-fields.js';
+import {parseNumber,formatNumber,evaluate,clampNumber} from './modules/web/number-fields.js';
 
 test('number fields step lengths and keep their unit',()=>{
   expect(parseNumber('16')).toEqual({value:16,unit:''});
@@ -15,4 +15,11 @@ test('number fields evaluate simple math and refuse anything else',()=>{
   expect(evaluate('-4 + 10')).toBe('6');
   expect(evaluate('10/3')).toBe('3.33');
   for(const text of ['16','-8','auto','1px + 1rem','2 *','alert(1)','1/0','(1+2'])expect(evaluate(text)).toBeNull();
+});
+
+test('arrow steps and scrubs clamp only fields with an explicit minimum',()=>{
+  for(const min of [undefined,''])expect(clampNumber(-9,min)).toBe(-9);
+  expect(clampNumber(-9,'0')).toBe(0);
+  expect(clampNumber(0.5,'0')).toBe(0.5);
+  expect(clampNumber(-9,'-10')).toBe(-9);
 });

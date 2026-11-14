@@ -1,3 +1,12 @@
+// CSS dimensions that preserve the layout box, independent of transforms.
+export function fixedSize(el, css=getComputedStyle(el)) {
+  const number=name=>parseFloat(css[name])||0;
+  const content=css.boxSizing!=='border-box';
+  return {
+    width:Math.max(0,el.offsetWidth-(content?number('paddingLeft')+number('paddingRight')+number('borderLeftWidth')+number('borderRightWidth'):0)),
+    height:Math.max(0,el.offsetHeight-(content?number('paddingTop')+number('paddingBottom')+number('borderTopWidth')+number('borderBottomWidth'):0))
+  };
+}
 import {measureSpacing,measureDistance} from './spacing-geometry.js';
 
 export function observeSpacing(nodeFor,report){
@@ -16,7 +25,7 @@ export function observeSpacing(nodeFor,report){
     const rect=el.getBoundingClientRect(),target=measuring?.isConnected&&measuring!==el?measuring.getBoundingClientRect():null;
     // Holding Alt over another element replaces the spacing overlay with distances to it.
     const distances=target?measureDistance(rect,target):[];
-    send(distances.length?distances:measureSpacing(el,getComputedStyle,{width:innerWidth,height:innerHeight}),{width:rect.width,height:rect.height,direction:flow(el)});
+    send(distances.length?distances:measureSpacing(el,getComputedStyle,{width:innerWidth,height:innerHeight}),{...fixedSize(el),direction:flow(el)});
     animation=requestAnimationFrame(draw);
   }
   function select(id,plan){

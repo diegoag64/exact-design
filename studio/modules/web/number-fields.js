@@ -61,6 +61,11 @@ export function evaluate(text) {
 /** The step for a key or drag: Shift is ten, Alt a tenth. */
 const step = e => (e.shiftKey ? 10 : e.altKey ? 0.1 : 1);
 
+export function clampNumber(value, minimum) {
+  const min = minimum === undefined || minimum === '' ? NaN : Number(minimum);
+  return Number.isFinite(min) ? Math.max(min, value) : value;
+}
+
 export function installNumberFields(root) {
   const pending = new Map();
   let refocus = null, scrub = null, swallowClick = false;
@@ -92,7 +97,7 @@ export function installNumberFields(root) {
       const parsed = parseNumber(input.value);
       if (!parsed) return;
       e.preventDefault();
-      const next = formatNumber(parsed.value + (e.key === 'ArrowUp' ? 1 : -1) * step(e), parsed.unit);
+      const next = formatNumber(clampNumber(parsed.value + (e.key === 'ArrowUp' ? 1 : -1) * step(e), input.dataset.nudgeMin), parsed.unit);
       if (write(input, next) && input.dataset.nudge === 'commit') schedule(input);
     } else if (e.key === 'Enter') {
       // Runs before Exact's own key and submit handlers, so they read the result.
@@ -153,7 +158,7 @@ export function installNumberFields(root) {
     e.preventDefault();
     const delta = Math.round((scrub.spacing ? dx + dy : dx) / 2) * step(e);
     let value = scrub.start.value + delta;
-    if (scrub.spacing || scrub.input.dataset.testid?.startsWith('design-')) value = Math.max(0, value);
+    value = clampNumber(value, scrub.input.dataset.nudgeMin);
     write(scrub.input, formatNumber(value, scrub.start.unit));
   };
   function end() {

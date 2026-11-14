@@ -116,3 +116,27 @@ test('grouped edits stage together and undo as one step',()=>{
   expect(draft.count).toBe(3);expect(draft.past.length).toBe(2);
   draft.undo();expect(draft.snapshot().map(p=>p.key)).toEqual(['gap']);
 });
+
+test('groups roll back a later patch-limit failure including history and revision',()=>{
+  const d=new DesignDraft(),files={'app.contract':digest(source)};
+  for(let i=0;i<63;i++)d.stage(patch('gap','24','file-'+i),files);
+  const before=d.serialize(),past=d.past.slice(),revision=d.revision;
+  expect(()=>d.group(()=>{
+    d.stage(patch('gap','30','alignment-x'),files);
+    d.stage(patch('gap','40','alignment-y'),files);
+  })).toThrow('Apply or discard');
+  expect(d.serialize()).toBe(before);expect(d.past).toEqual(past);expect(d.revision).toBe(revision);
+  d.stage(patch('gap','25','file-0'),files);d.undo();
+  expect(d.serialize()).toBe(before);
+});
+
+test('a group adds exactly one undo snapshot at the history cap; no-ops add none',()=>{
+  const d=new DesignDraft(),files={'app.contract':digest(source)};
+  for(let i=0;i<105;i++)d.stage(patch('gap',String(100+i)),files);
+  expect(d.past.length).toBe(100);
+  const before=d.serialize(),past=d.past.slice();
+  d.group(()=>d.stage(patch('gap','204'),files));
+  expect(d.past).toEqual(past);
+  d.group(()=>{d.stage(patch('gap','300'),files);d.stage(patch('color','#123456'),files);});
+  expect(d.past.length).toBe(100);d.undo();expect(d.serialize()).toBe(before);
+});

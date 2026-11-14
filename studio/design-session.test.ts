@@ -83,3 +83,15 @@ test('theme colours come from the design and mark literal colours that are off t
   expect(colorFacts('color','currentcolor',colors)).toEqual({swatch:'',token:false,offTheme:false});
   expect(colorFacts('width','ember',colors)).toEqual({swatch:'',token:false,offTheme:false});
 });
+
+test('failed editMany preserves the draft version and preview error',async()=>{
+  const s=new DesignSession('http://localhost:5174','test');
+  s.selection={rows:[row]} as any;s.files={};s.poll=async()=>s.view();
+  await s.edit(s.version,0,'32');
+  s.draftError='Existing preview error';
+  const version=s.version,revision=s.drafts.revision,before=s.drafts.serialize(),past=s.drafts.past.slice();
+  s.prepare=async(_index,value)=>()=>{if(value==='fail')throw Error('stage failed');s.drafts.stage({...s.drafts.snapshot()[0],value},s.files);};
+  await expect(s.editMany(version,[[0,'40'],[0,'fail']])).rejects.toThrow('stage failed');
+  expect(s.version).toBe(version);expect(s.draftError).toBe('Existing preview error');
+  expect(s.drafts.revision).toBe(revision);expect(s.drafts.serialize()).toBe(before);expect(s.drafts.past).toEqual(past);expect(s.busy).toBe(false);
+});

@@ -305,6 +305,8 @@ export class DesignSession {
       if(version!==this.version || !this.selection) throw new Error('The source or selection changed. Select the element again.');
       const staged:(()=>void)[]=[];
       for(const [index,value] of edits)staged.push(await this.prepare(index,value));
+      // A failed group restores its revision and patches; keep the version and
+      // preview error tied to that unchanged draft. Only success clears them.
       this.drafts.group(()=>{for(const stage of staged)stage();});
       this.draftError='';this.version++;this.applied=false;
       return this.view();

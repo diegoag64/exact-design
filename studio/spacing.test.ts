@@ -1,3 +1,4 @@
+import {fixedSize} from '../tools/spacing-client.js';
 import {test,expect} from 'bun:test';
 import {decodeSpacing,spacingRows} from './spacing';
 import {spacingOperation} from '../tools/design-session';
@@ -91,4 +92,12 @@ test('Alt-hover distances measure gaps between siblings and insets inside a pare
   // A child inside the selection measures from its edges outward to the selection's.
   expect(measureDistance(rect(0,0,100,50),a).filter((b:any)=>b.property==='measure-x').map((b:any)=>b.value)).toEqual(['10','50']);
   expect(measureDistance(a,rect(10,10,40,20)).filter((b:any)=>b.property!=='measure-target')).toEqual([]);
+});
+
+
+test('Fixed dimensions subtract content-box edges and ignore transformed bounds',()=>{
+  const el={offsetWidth:140,offsetHeight:80,getBoundingClientRect:()=>({width:280,height:160})};
+  const css={boxSizing:'content-box',paddingLeft:'12.5px',paddingRight:'7.5px',paddingTop:'5px',paddingBottom:'5px',borderLeftWidth:'2px',borderRightWidth:'2px',borderTopWidth:'1px',borderBottomWidth:'1px'};
+  expect(fixedSize(el,css)).toEqual({width:116,height:68});
+  expect(fixedSize(el,{...css,boxSizing:'border-box'})).toEqual({width:140,height:80});
 });

@@ -27,7 +27,7 @@ export function decodeSpacing(frame:string,text:string){
     const counts=new Map<string,number>();
     for(const box of value.boxes)counts.set(box.property,(counts.get(box.property)??0)+1);
     const boxes:SpacingBox[]=value.boxes.map((box:SpacingBox)=>({key:box.key,property:box.property,x:box.x,y:box.y,width:box.width,height:box.height,labelX:box.labelX,labelY:box.labelY,value:box.value,label:box.label,linked:counts.get(box.property)!}));
-    // The selection's border-box size, which Fixed sizing starts from.
+    // The selection's untransformed CSS size (content box unless box-sizing is border-box), which Fixed sizing starts from.
     const size=(n:unknown)=>typeof n==='number'&&Number.isFinite(n)&&n>=0&&n<=20000?Math.round(n*10)/10:0;
     const direction=['row','row-reverse','column','column-reverse'].includes(value.direction)?value.direction as string:'';
     return {frame,id:value.id as string,plan:value.plan as string,width:size(value.width),height:size(value.height),direction,boxes};

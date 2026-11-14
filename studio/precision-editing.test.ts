@@ -55,8 +55,17 @@ test('precision editing: nudges, math, distances, theme colours, alignment and s
     await page.keyboard.press('Shift+ArrowDown');expect(await spacing.inputValue()).toBe('-9px');
     await frame.waitForFunction(()=>getComputedStyle([...document.querySelectorAll('#exact-root *')].find(e=>e.textContent==='Room for your thoughts.')!).letterSpacing==='-9px',undefined,{polling:50});
     await settled();
+    // Prefix scrubbing preserves a negative letter spacing.
+    const prefix=await spacing.locator('..').locator('[data-scrub]').boundingBox();
+    await page.mouse.move(prefix!.x+prefix!.width/2,prefix!.y+prefix!.height/2);await page.mouse.down();
+    await page.mouse.move(prefix!.x+prefix!.width/2-4,prefix!.y+prefix!.height/2,{steps:3});
+    expect(await spacing.inputValue()).toBe('-11px');await page.mouse.up();
+    await frame.waitForFunction(()=>getComputedStyle([...document.querySelectorAll('#exact-root *')].find(e=>e.textContent==='Room for your thoughts.')!).letterSpacing==='-11px',undefined,{polling:50});
+    await settled();
     // Simple math evaluates on Enter.
     const lineHeight=page.getByRole('textbox',{name:'Line height',exact:true});
+    expect(await lineHeight.getAttribute('data-nudge-min')).toBe('0');
+    await lineHeight.fill('0');await lineHeight.press('ArrowDown');expect(await lineHeight.inputValue()).toBe('0');
     await lineHeight.fill('1+0.5');await lineHeight.press('Enter');
     await wait(()=>(document.querySelector('input[aria-label="Line height"]') as HTMLInputElement)?.value==='1.5');
     await settled();
@@ -98,6 +107,18 @@ test('precision editing: nudges, math, distances, theme colours, alignment and s
     await frame.waitForFunction((b:any)=>{const s=getComputedStyle(document.querySelector('[data-testid="create"]')!);return s.justifyContent===b.justify&&s.alignItems===b.align;},before,{polling:50});
     await settled();expect(await drafts()).toBe(count);
 
+    // Reversed flows mirror only the main axis, including the selected cell.
+    for(const flow of ['row-reverse','column-reverse']){
+      await frame.locator('[data-testid="create"]').evaluate((el:HTMLElement,f:string)=>el.style.flexDirection=f,flow);
+      await page.locator(`button[aria-label="Flow: ${flow==='row-reverse'?'Row reversed':'Column reversed'}"][aria-pressed="true"]`).waitFor({timeout:6000});
+      await page.locator('[data-testid="align-0-0"]').click();
+      await frame.waitForFunction(()=>{const s=getComputedStyle(document.querySelector('[data-testid="create"]')!);return s.justifyContent==='flex-end'&&s.alignItems==='flex-start';},undefined,{polling:50});
+      await settled();
+      expect(await page.locator('[data-testid="align-0-0"]').getAttribute('aria-pressed')).toBe('true');
+      await page.getByRole('button',{name:'Undo draft change',exact:true}).click();await settled();
+    }
+    await frame.locator('[data-testid="create"]').evaluate((el:HTMLElement)=>el.style.removeProperty('flex-direction'));
+
     // Theme colours: the fill shows its token's swatch and the picker lists the theme first.
     const swatch=page.locator('[data-testid="color-swatch-background-color"]');
     expect(await swatch.locator(':scope > *').first().evaluate((el:Element)=>getComputedStyle(el).backgroundColor)).toBe('rgb(41, 77, 158)');
@@ -119,8 +140,12 @@ test('precision editing: nudges, math, distances, theme colours, alignment and s
     // Sizing: the button hugs its content; Fixed starts from its measured width.
     const mode=page.locator('[data-testid="design-size-width"]');
     expect(await mode.inputValue()).toBe('hug');
+    expect(parseFloat((await button()).paddingLeft)).toBeGreaterThan(0);
+    expect(await frame.locator('[data-testid="create"]').evaluate((el:Element)=>getComputedStyle(el).boxSizing)).toBe('content-box');
+    const widthBeforeFixed=(await button()).width;
     await mode.selectOption('fixed');await settled();
-    await wait((w:number)=>Math.abs(Number((document.querySelector('[data-testid="design-size-width"]')!.parentElement!.querySelector('input') as HTMLInputElement).value)-w)<=1,before.width);
+    await frame.waitForFunction((w:number)=>Math.abs(document.querySelector('[data-testid="create"]')!.getBoundingClientRect().width-w)<=1,widthBeforeFixed,{polling:50});
+    expect(Math.abs((await button()).width-widthBeforeFixed)).toBeLessThanOrEqual(1);
     expect(await mode.inputValue()).toBe('fixed');
 
     // Dragging a canvas spacing label adjusts it and applies on release.

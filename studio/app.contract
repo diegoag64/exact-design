@@ -41,7 +41,9 @@ fn rowValue(rows: DesignRow[], property: string): string = match first(rows.filt
 // The 3×3 alignment grid: rows run top to bottom, columns left to right, whatever the flow.
 fn axisIndex(value: string): number = value == "center" ? 1 : value == "flex-end" or value == "end" ? 2 : value == "flex-start" or value == "start" or value == "normal" ? 0 : -1
 fn axisValue(i: number): string = i == 0 ? "flex-start" : i == 1 ? "center" : "flex-end"
-fn alignOn(flow: string, rows: DesignRow[], r: number, c: number): bool = flow.startsWith("row") ? (axisIndex(rowValue(rows, "justify-content")) == -1 or axisIndex(rowValue(rows, "justify-content")) == c) and (axisIndex(rowValue(rows, "align-items")) == -1 or axisIndex(rowValue(rows, "align-items")) == r) : (axisIndex(rowValue(rows, "justify-content")) == -1 or axisIndex(rowValue(rows, "justify-content")) == r) and (axisIndex(rowValue(rows, "align-items")) == -1 or axisIndex(rowValue(rows, "align-items")) == c)
+fn mainAxis(flow: string, i: number): number = flow.endsWith("-reverse") ? 2 - i : i
+fn nudgeMin(property: string): string = property.startsWith("padding") or property.endsWith("gap") or property.endsWith("width") or property.endsWith("height") or property == "border-radius" or property == "font-size" or property == "opacity" or property == "font-weight" ? "0" : ""
+fn alignOn(flow: string, rows: DesignRow[], r: number, c: number): bool = flow.startsWith("row") ? (axisIndex(rowValue(rows, "justify-content")) == -1 or axisIndex(rowValue(rows, "justify-content")) == mainAxis(flow, c)) and (axisIndex(rowValue(rows, "align-items")) == -1 or axisIndex(rowValue(rows, "align-items")) == r) : (axisIndex(rowValue(rows, "justify-content")) == -1 or axisIndex(rowValue(rows, "justify-content")) == mainAxis(flow, r)) and (axisIndex(rowValue(rows, "align-items")) == -1 or axisIndex(rowValue(rows, "align-items")) == c)
 fn alignName(r: number, c: number): string = r == 1 and c == 1 ? "Center" : `${r == 0 ? "Top" : r == 1 ? "Middle" : "Bottom"} ${c == 0 ? "left" : c == 1 ? "center" : "right"}`
 
 fn snappedDelta(targets: SnapTarget[], origin: number, delta: number, zoom: number): number = match first(sortBy(targets, t => magnitude(t.value - origin - delta))) { case some(t) => magnitude(t.value - origin - delta) <= 8 / zoom ? t.value - origin : delta, case none => delta }
@@ -623,11 +625,11 @@ component Studio
   action alignDesign(r: number, c: number)
     let row = selectionFlow.startsWith("row")
     designWriting = true
-    send designChanged = design("align", designSession, "", designVersion, "", `${axisValue(row ? c : r)}|${axisValue(row ? r : c)}`, time.epochAtZero + performanceNow())
+    send designChanged = design("align", designSession, "", designVersion, "", `${axisValue(mainAxis(selectionFlow, row ? c : r))}|${axisValue(row ? r : c)}`, time.epochAtZero + performanceNow())
   // Hug keeps the content's size, Fill takes the parent's, and Fixed starts from the size the preview measured.
   action sizeDesign(row: string, property: string, mode: string)
     let measured = property == "width" ? selectionWidth : selectionHeight
-    editDesign(row, mode == "hug" ? "auto" : mode == "fill" ? "100%" : `${measured > 0 ? round(measured) : 100}`)
+    editDesign(row, mode == "hug" ? "auto" : mode == "fill" ? "100%" : `${measured > 0 ? measured : 100}`)
   state colorRow = ""
   state colorValue = ""
   action openColor(row: string, value: string)
@@ -1242,7 +1244,7 @@ component Studio
                                                 else
                                                   for target in targets key=target.property
                                                     if spacingProperty == target.property and host == box.key
-                                                      input id="spacing-value" value=spacingValue input=editSpacing key=spacingKey blur=cancelSpacing data-nudge="live" position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" width=72 height=26 padding=4 box-sizing="border-box" border-width=1 border-style="solid" border-color=spacingInk(box.property) border-radius=5 background-color="surface.panel" color="ink.primary" font="type.caption" text-align="center" pointer-events="auto" aria-label=spacingName(box.property) data-tip=(linked > 1 ? `Updates all ${linked} gaps · Enter to apply · Escape to cancel` : "Enter to apply · Escape to cancel") testId="spacing-value"
+                                                      input id="spacing-value" value=spacingValue input=editSpacing key=spacingKey blur=cancelSpacing data-nudge="live" data-nudge-min=nudgeMin(box.property) position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" width=72 height=26 padding=4 box-sizing="border-box" border-width=1 border-style="solid" border-color=spacingInk(box.property) border-radius=5 background-color="surface.panel" color="ink.primary" font="type.caption" text-align="center" pointer-events="auto" aria-label=spacingName(box.property) data-tip=(linked > 1 ? `Updates all ${linked} gaps · Enter to apply · Escape to cancel` : "Enter to apply · Escape to cancel") testId="spacing-value"
                                                     else if spacingProperty == target.property
                                                       text (spacingValue == "" ? box.value : spacingValue) position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" display="flex" align-items="center" justify-content="center" box-sizing="border-box" min-width="1.5rem" min-height="1.25rem" padding="0.1875rem" border-width=1 border-style="solid" border-color=spacingInk(box.property) border-radius=4 background-color="surface.panel" color=spacingInk(box.property) font-size="0.625rem" font-weight=600 aria-hidden=true testId=`spacing-mirror-${box.property}`
                                                     else
@@ -1509,12 +1511,12 @@ component Studio
                                                 text "Override" font="type.caption"
                                       else if property.fields.length > 0
                                         if property.linked and not independentFields.includes(property.binding)
-                                          InlineField(prefix="", icon=compoundIcon(property.property), value=firstField(property.fields), accessibleLabel=`${property.name} all`, hint=(property.property == "gap" ? "Both axes" : "All sides"), testId=`design-field-${property.id}-all`, disabled=designWriting, change=editDesignField(property.id, "all"))
+                                          InlineField(minimum=nudgeMin(property.property), prefix="", icon=compoundIcon(property.property), value=firstField(property.fields), accessibleLabel=`${property.name} all`, hint=(property.property == "gap" ? "Both axes" : "All sides"), testId=`design-field-${property.id}-all`, disabled=designWriting, change=editDesignField(property.id, "all"))
                                         else
                                           row flex-wrap="wrap" gap=8
                                             for field in property.fields key=field.id
                                               column width="calc(50% - 4px)"
-                                                InlineField(prefix=fieldPrefix(field.label), icon="", value=field.value, accessibleLabel=`${property.name} ${field.label}`, hint=field.label, testId=`design-field-${property.id}-${field.id}`, disabled=designWriting, change=editDesignField(property.id, field.id))
+                                                InlineField(minimum=nudgeMin(property.property), prefix=fieldPrefix(field.label), icon="", value=field.value, accessibleLabel=`${property.name} ${field.label}`, hint=field.label, testId=`design-field-${property.id}-${field.id}`, disabled=designWriting, change=editDesignField(property.id, field.id))
                                       else if property.property == "text-content"
                                         textarea value=property.value change=editDesign(property.id) class=Field height=72 padding=8 resize="vertical" aria-label="Text content" disabled=designWriting
                                       else if property.property == "align-items" and designRows.filter(r => r.property == "justify-content" and not r.readonly).length > 0
@@ -1538,7 +1540,7 @@ component Studio
                                         row class=FieldShell
                                           row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" cursor="ew-resize" aria-hidden=true data-scrub=true
                                             text propertyPrefix(property.property) font="type.caption"
-                                          input value=property.value change=editDesign(property.id) class=Field flex=1 min-width=0 background-color="transparent" padding="0 2px 0 0" aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting data-tip=property.binding data-nudge="commit"
+                                          input value=property.value change=editDesign(property.id) class=Field flex=1 min-width=0 background-color="transparent" padding="0 2px 0 0" aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting data-tip=property.binding data-nudge="commit" data-nudge-min=nudgeMin(property.property)
                                           select value=sizeMode(property.value) change=sizeDesign(property.id, property.property) class=Field width=56 flex-shrink=0 padding="0 4px" background-color="transparent" color="ink.secondary" font="type.caption" aria-label=`${property.name} sizing` data-tip="Sizing · Hug fits the content · Fill takes the parent's size · Fixed sets a size" disabled=designWriting testId=`design-size-${property.property}`
                                             option "Fixed" value="fixed"
                                             option "Hug" value="hug"
@@ -1565,7 +1567,7 @@ component Studio
                                                 Icon(name=propertyGlyph(property.property), size=14, angle=0)
                                               else
                                                 text propertyPrefix(property.property) font="type.caption"
-                                          input value=property.value change=editDesign(property.id) class=Field flex=1 background-color="transparent" padding-left=(swatchable(property.property, property.value) or propertyPrefix(property.property) != "" or propertyGlyph(property.property) != "" ? 0 : 8)  aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting data-tip=property.binding data-nudge="commit"
+                                          input value=property.value change=editDesign(property.id) class=Field flex=1 background-color="transparent" padding-left=(swatchable(property.property, property.value) or propertyPrefix(property.property) != "" or propertyGlyph(property.property) != "" ? 0 : 8)  aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting data-tip=property.binding data-nudge="commit" data-nudge-min=nudgeMin(property.property)
                         match designChanged
                           case some(result)
                             if result.source != "" and result.availableProperties.length > 0
@@ -1608,7 +1610,7 @@ component Studio
                             column gap=4
                               FieldLabel(label=(doc.route != "" ? "Route" : "Preview URL"))
                               if doc.route != ""
-                                InlineField(prefix="", icon="route", value=doc.route, accessibleLabel="Screen route", hint="Route in the connected project", testId="screen-route", disabled=false, change=prop("route"))
+                                InlineField(minimum="", prefix="", icon="route", value=doc.route, accessibleLabel="Screen route", hint="Route in the connected project", testId="screen-route", disabled=false, change=prop("route"))
                                 button press=toggleNative class=RowButton height=26 color=(nativeOpen ? "ink.selected" : "ink.secondary") aria-pressed=nativeOpen data-tip=(nativeOpen ? "Hide native preview" : "Show native preview · See this screen in the app's native iOS build") testId="screen-native"
                                   Icon(name="smartphone", size=14, angle=0)
                                   text (nativeOpen ? "Hide native preview" : "Preview on iOS")
@@ -1690,7 +1692,7 @@ component Studio
                             row class=SectionHead
                               SectionHeading(label="Appearance")
                             row gap=8
-                              InlineField(prefix="", icon="radius", value=`${n.radius}`, accessibleLabel="Border radius", hint="Border radius", testId="radius", disabled=false, change=prop("radius"))
+                              InlineField(minimum="0", prefix="", icon="radius", value=`${n.radius}`, accessibleLabel="Border radius", hint="Border radius", testId="radius", disabled=false, change=prop("radius"))
                               column flex=1
                         if n.kind != "rectangle"
                           column class=PanelSection
@@ -1698,7 +1700,7 @@ component Studio
                               SectionHeading(label="Text")
                             input value=n.text change=prop("text") class=Field aria-label="Text content" testId="text-content"
                             row gap=8
-                              InlineField(prefix="", icon="a-large-small", value=`${n.fontSize}`, accessibleLabel="Font size", hint="Font size", testId="font-size", disabled=false, change=prop("fontSize"))
+                              InlineField(minimum="0", prefix="", icon="a-large-small", value=`${n.fontSize}`, accessibleLabel="Font size", hint="Font size", testId="font-size", disabled=false, change=prop("fontSize"))
                               column flex=1
             if timelineOpen
               column height=(historySelected == "" ? 104 : 248) flex-shrink=0 background-color="surface.panel" border-top="1px solid line.subtle" testId="design-timeline"

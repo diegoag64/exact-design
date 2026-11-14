@@ -45,6 +45,7 @@ export class DesignDraft {
   past:DesignPatch[][]=[];
   files:Record<string,string>={};
   revision=0;
+  private grouping=false;
   get count(){return this.patches.size;}
   snapshot(){return [...this.patches.values()];}
   conflict(files:Record<string,string>){return this.count>0&&Object.keys({...this.files,...files}).some(key=>this.files[key]!==files[key]);}
@@ -58,14 +59,24 @@ export class DesignDraft {
     patch={...patch,original:current?.original??patch.original};
     if(current?.value===patch.value||(!current&&patch.value===patch.original))return;
     if(!current&&this.count>=64)throw new Error('Apply or discard this draft before adding more changes.');
-    this.past.push(this.snapshot());if(this.past.length>100)this.past.shift();
+    if(!this.grouping){this.past.push(this.snapshot());if(this.past.length>100)this.past.shift();}
     if(patch.value===patch.original)this.patches.delete(patch.key);else this.patches.set(patch.key,patch);
     this.revision++;
   }
   /** Stage several changes as one undo step, such as alignment on both axes. */
   group(stage:()=>void){
-    const depth=this.past.length;
-    try{stage();}finally{if(this.past.length>depth+1)this.past.splice(depth+1);}
+    const patches=new Map(this.patches),past=this.past.slice(),revision=this.revision,files={...this.files},grouping=this.grouping;
+    this.grouping=true;
+    try{
+      stage();
+      if(!grouping&&this.revision!==revision){
+        this.past.push([...patches.values()]);
+        if(this.past.length>100)this.past.shift();
+      }
+    }catch(error){
+      this.patches=patches;this.past=past;this.revision=revision;this.files=files;
+      throw error;
+    }finally{this.grouping=grouping;}
   }
   /** Remove one staged change, keeping the rest of the draft and one undo step. */
   revert(key:string){
