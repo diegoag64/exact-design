@@ -5,6 +5,9 @@
 //   pad:[t,r,b,l], flow (in normal flow), decorative, label, hint}. `hint` is the first text inside a
 //   container whose label is only its kind, so a copied spec says which row is which. `i` and `p` index the document order.
 
+// Computed colours are `rgb(r, g, b)` when opaque and `rgba(r, g, b, a)` or `rgb(r g b / a)` otherwise.
+// Only an alpha of 0 is invisible: pure black, `rgb(0, 0, 0)`, is a colour.
+export const visibleColor=c=>!!c&&c!=='transparent'&&!/^rgba\([^,]+,[^,]+,[^,]+,\s*0(?:\.0+)?\s*\)$/.test(c)&&!/\/\s*0(?:\.0+)?%?\s*\)$/.test(c);
 export const near=(a,b,t=0.75)=>Math.abs(a-b)<=t;
 export const isSurface=e=>e.surface||e.borders.some(Boolean);
 export const cornerRadius=e=>Math.min(e.radius,e.w/2,e.h/2);

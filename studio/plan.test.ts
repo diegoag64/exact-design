@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {valueFill,surfaceShape,layoutBox,index,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
+import {valueFill,surfaceShape,layoutBox,visibleColor,index,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
 
 // A record as plan-client.js reads it: document order, parent index and computed layout.
 const box=(i:number,p:number,x:number,y:number,w:number,h:number,extra:any={})=>({i,p,x,y,w,h,radius:0,radii:[0,0,0,0],surface:false,borders:[false,false,false,false],
@@ -68,4 +68,9 @@ test('layout boxes outline wrappers that hold elements, but not surfaces, the sc
   const drawn=records.filter(e=>layoutBox(e,byI,kids,390,844)).map(e=>e.i);
   // The row holds elements; the icon wrapper holds media. The screen, the card, the repeat, the text and the empty box draw nothing.
   expect(drawn).toEqual([2,5]);
+});
+
+test('only a zero alpha makes a colour invisible, so pure black text, borders and fills are kept',()=>{
+  for(const c of ['rgb(0, 0, 0)','rgb(20, 19, 23)','rgba(0, 0, 0, 0.5)','rgb(0 0 0 / 50%)','rgba(118, 118, 128, 0.12)','color(srgb 0 0 0)'])expect(visibleColor(c)).toBe(true);
+  for(const c of ['','transparent','rgba(0, 0, 0, 0)','rgba(255, 255, 255, 0.0)','rgb(0 0 0 / 0)','rgb(0 0 0 / 0%)'])expect(visibleColor(c)).toBe(false);
 });

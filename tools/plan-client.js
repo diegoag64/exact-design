@@ -2,7 +2,7 @@
 // drawing of it sits on top, so hit testing, selection and draft editing still reach the
 // app's own elements. Regions measure everything inside a dragged rectangle.
 // Loaded by canvas-input-client.js on the first plan or region message; never in Preview.
-import {isSurface,cornerRadius,index,valueFill,surfaceShape,layoutBox,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
+import {isSurface,cornerRadius,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
 import {measureSpacing} from './spacing-geometry.js';
 
 const NS='http://www.w3.org/2000/svg';
@@ -60,7 +60,6 @@ function watch(){
 }
 
 /* Reading the layout ---------------------------------------------------------------- */
-const visibleColor=c=>!!c&&c!=='transparent'&&!/rgba?\([^)]*[,/]\s*0\)$/.test(c);
 const px=v=>/^-?\d*\.?\d+px$/.test(v)?parseFloat(v):0;
 function layerName(node,s){
   // The names the Layers panel shows, so a copied spec reads like the tree.
@@ -110,7 +109,21 @@ function lineTexts(node,lines){
     const mid=r.top+r.height/2,at=lines.findIndex(l=>mid>=l.top&&mid<=l.bottom&&r.left>=l.left-1&&r.left<=l.right+1);
     if(at>=0)words[at].push(m[0]);
   }
-  const out=words.map(w=>w.join(' '));lineCache.set(node,{sig,words:out});return out;
+  const out=words.map(w=>w.join(' '));
+  // A line that no word starts on stays empty, but a node must not lose all its words.
+  if(!out.some(Boolean))out[0]=text.trim().replace(/\s+/g,' ');
+  lineCache.set(node,{sig,words:out});return out;
+}
+// One box per line. An ellipsized line reports its full text and its visible part as two boxes on
+// the same line, so overlapping boxes at one height collapse to the widest.
+function textLines(range){
+  const lines=[];
+  for(const r of range.getClientRects()){
+    if(r.width<=0.5)continue;
+    const same=lines.findIndex(l=>Math.abs(l.top-r.top)<1&&Math.abs(l.height-r.height)<1&&r.left<l.right&&r.right>l.left);
+    if(same<0)lines.push(r);else if(r.width>lines[same].width)lines[same]=r;
+  }
+  return lines;
 }
 const fontOf=s=>({family:s.fontFamily,style:s.fontStyle,spacing:px(s.letterSpacing)});
 const maskUrl=s=>(s.maskImage||s.webkitMaskImage||'').match(/url\("?([^")]+)"?\)/)?.[1]??'';
@@ -152,20 +165,20 @@ function readScene(){
         flow:!['absolute','fixed'].includes(s.position),decorative:false,label:layerName(node,s),hint:'',media:0,visible:onScreen};
       if(['Row','Column','Grid','Container','Screen'].includes(record.label)){const t=firstText(node);record.hint=t.length>24?t.slice(0,23)+'…':t;}
       records.push(record);byI.set(i,record);
-      if(onScreen){
-        if(['input','textarea','select'].includes(tag)){
-          const value=tag==='select'?node.selectedOptions?.[0]?.text??'':node.value||node.placeholder||'';
-          if(value)texts.push({x:r.left+px(s.paddingLeft)+px(s.borderLeftWidth),y:r.top,w:Math.min(textWidth(value,s.font),r.width-px(s.paddingLeft)-px(s.paddingRight)),h:r.height,fs:parseFloat(s.fontSize),weight:node.value?400:300,key:[...own,1],clip,text:value,field:true,...fontOf(s)});
-        }else for(const child of node.childNodes){
-          if(child.nodeType!==3||!child.textContent.trim()||!visibleColor(s.color))continue;
-          const range=document.createRange();range.selectNodeContents(child);
-          const lines=[...range.getClientRects()].filter(line=>line.width>0.5),words=planText?lineTexts(child,lines):[];
-          lines.forEach((line,j)=>texts.push({x:line.left,y:line.top,w:line.width,h:line.height,fs:parseFloat(s.fontSize),weight:Number(s.fontWeight)||400,key:[...own,1],clip,text:cased(words[j]??'',s),...fontOf(s)}));
-        }
-      }
       let inner=clip;
       if(/auto|scroll|hidden|clip/.test(s.overflowX))inner={...inner,x:Math.max(inner.x,r.left),r:Math.min(inner.r,r.right)};
       if(/auto|scroll|hidden|clip/.test(s.overflowY))inner={...inner,y:Math.max(inner.y,r.top),b:Math.min(inner.b,r.bottom)};
+      if(onScreen){
+        if(['input','textarea','select'].includes(tag)){
+          const value=tag==='select'?node.selectedOptions?.[0]?.text??'':node.value||node.placeholder||'';
+          if(value)texts.push({x:r.left+px(s.paddingLeft)+px(s.borderLeftWidth),y:r.top,w:Math.min(textWidth(value,s.font),r.width-px(s.paddingLeft)-px(s.paddingRight)),h:r.height,fs:parseFloat(s.fontSize),weight:node.value?400:300,key:[...own,1],clip:inner,text:value,field:true,...fontOf(s)});
+        }else for(const child of node.childNodes){
+          if(child.nodeType!==3||!child.textContent.trim()||!visibleColor(s.color))continue;
+          const range=document.createRange();range.selectNodeContents(child);
+          const lines=textLines(range),words=planText?lineTexts(child,lines):[];
+          lines.forEach((line,j)=>texts.push({x:line.left,y:line.top,w:line.width,h:line.height,fs:parseFloat(s.fontSize),weight:Number(s.fontWeight)||400,key:[...own,1],clip:inner,text:cased(words[j]??'',s),...fontOf(s)}));
+        }
+      }
       visit(node,i,inner,own);
     }
   };
@@ -200,7 +213,9 @@ function crossed(g,b){
   el('path',{d:`M${b.x} ${b.y}L${b.x+b.w} ${b.y+b.h}M${b.x+b.w} ${b.y}L${b.x} ${b.y+b.h}`,stroke:'var(--ink)','stroke-width':k()*.6,'stroke-opacity':.45},g);
 }
 function drawText(g,t){
-  if(planText&&t.text){
+  // Readable text draws words only: a line with none draws nothing, not a bar.
+  if(planText){
+    if(!t.text)return;
     // The app's own words in its own font, in ink. Each line keeps its measured width, so wrapping and alignment hold.
     const n=el('text',{'data-app':'',x:t.x,y:t.y+t.h/2,'dominant-baseline':'central','font-size':t.fs,'font-weight':t.weight,'font-style':t.style,'font-family':t.family,fill:'var(--ink)','fill-opacity':t.field&&t.weight<400?.45:.8},g);
     if(t.spacing)n.setAttribute('letter-spacing',t.spacing);
