@@ -4,7 +4,7 @@
 //
 // `data-nudge="commit"` fields apply a change after the keys go quiet, as one edit.
 // `data-nudge="live"` fields (the canvas spacing editor) only update their text;
-// Enter still applies them.
+// Enter still applies them. `data-nudge="off"` fields keep their text as typed.
 
 const NUMBER = /^(-?(?:\d+(?:\.\d+)?|\.\d+))([a-z%]*)$/i;
 const COMMIT_AFTER = 450;
@@ -88,7 +88,7 @@ export function installNumberFields(root) {
     clearTimeout(pending.get(input));
     pending.set(input, setTimeout(() => commit(input), COMMIT_AFTER));
   };
-  const field = target => target?.closest?.('input[data-nudge]');
+  const field = target => target?.closest?.('input[data-nudge="commit"],input[data-nudge="live"]');
 
   const keydown = e => {
     const input = field(e.target);
@@ -133,7 +133,7 @@ export function installNumberFields(root) {
     const handle = e.target.closest?.('[data-scrub],[data-scrub-spacing]');
     if (!handle || !root.contains(handle)) return;
     const spacing = handle.hasAttribute('data-scrub-spacing');
-    const input = spacing ? null : handle.parentElement?.querySelector('input[data-nudge]');
+    const input = spacing ? null : handle.parentElement?.querySelector('input[data-nudge="commit"]');
     if (!spacing && (!input || input.disabled || input.readOnly)) return;
     const parsed = spacing ? parseNumber(handle.textContent) : parseNumber(input.value);
     if (!parsed) return;

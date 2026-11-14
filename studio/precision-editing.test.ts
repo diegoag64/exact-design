@@ -148,6 +148,14 @@ test('precision editing: nudges, math, distances, theme colours, alignment and s
     expect(Math.abs((await button()).width-widthBeforeFixed)).toBeLessThanOrEqual(1);
     expect(await mode.inputValue()).toBe('fixed');
 
+    // A ratio is not math: 16/9 stays as written.
+    await page.getByRole('combobox',{name:'Add property',exact:true}).selectOption('aspect-ratio');await settled();
+    const ratio=page.getByRole('textbox',{name:'Aspect ratio',exact:true});
+    expect(await ratio.getAttribute('data-nudge')).toBe('off');
+    await ratio.fill('16/9');await ratio.press('Enter');await settled();
+    expect(await ratio.inputValue()).toBe('16/9');
+    await frame.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="create"]')!).aspectRatio==='16 / 9',undefined,{polling:50});
+
     // Dragging a canvas spacing label adjusts it and applies on release.
     // Labels show once a segment is large enough on screen; zoom in to the selection.
     const label=page.locator('[data-testid="spacing-padding-left"]');

@@ -42,7 +42,9 @@ fn rowValue(rows: DesignRow[], property: string): string = match first(rows.filt
 fn axisIndex(value: string): number = value == "center" ? 1 : value == "flex-end" or value == "end" ? 2 : value == "flex-start" or value == "start" or value == "normal" ? 0 : -1
 fn axisValue(i: number): string = i == 0 ? "flex-start" : i == 1 ? "center" : "flex-end"
 fn mainAxis(flow: string, i: number): number = flow.endsWith("-reverse") ? 2 - i : i
-fn nudgeMin(property: string): string = property.startsWith("padding") or property.endsWith("gap") or property.endsWith("width") or property.endsWith("height") or property == "border-radius" or property == "font-size" or property == "opacity" or property == "font-weight" ? "0" : ""
+// Values that are not lengths or numbers keep their text: math would rewrite an aspect ratio such as 16/9.
+fn nudgeKind(property: string): string = ["aspect-ratio", "font-family", "grid-template-columns", "grid-template-rows", "box-shadow", "transform-origin"].includes(property) ? "off" : "commit"
+fn nudgeMin(property: string): string = property.startsWith("padding") or property.endsWith("gap") or property.endsWith("width") or property.endsWith("height") or property.endsWith("radius") or property == "font-size" or property == "line-height" or property == "opacity" or property == "font-weight" ? "0" : ""
 fn alignOn(flow: string, rows: DesignRow[], r: number, c: number): bool = flow.startsWith("row") ? (axisIndex(rowValue(rows, "justify-content")) == -1 or axisIndex(rowValue(rows, "justify-content")) == mainAxis(flow, c)) and (axisIndex(rowValue(rows, "align-items")) == -1 or axisIndex(rowValue(rows, "align-items")) == r) : (axisIndex(rowValue(rows, "justify-content")) == -1 or axisIndex(rowValue(rows, "justify-content")) == mainAxis(flow, r)) and (axisIndex(rowValue(rows, "align-items")) == -1 or axisIndex(rowValue(rows, "align-items")) == c)
 fn alignName(r: number, c: number): string = r == 1 and c == 1 ? "Center" : `${r == 0 ? "Top" : r == 1 ? "Middle" : "Bottom"} ${c == 0 ? "left" : c == 1 ? "center" : "right"}`
 
@@ -519,8 +521,10 @@ component Studio
   mutation hoverChanged as shape DesignReply queue
   resource previewSignal = previewSignal(designSession) as shape PreviewSignal else empty()
   derive spacingMeasured = editing ? some(previewSignal.measurement) : none
-  derive selectionWidth = editing ? previewSignal.measurement.width : 0
-  derive selectionHeight = editing ? previewSignal.measurement.height : 0
+  // The preview's measurement of the current selection only: one from the previous selection can still be current.
+  derive selectionMeasured = match designChanged { case some(r) => editing and previewSignal.measurement.id != "" and previewSignal.measurement.id == r.spacingId and previewSignal.measurement.frame == r.spacingFrame, case none => false }
+  derive selectionWidth = selectionMeasured ? previewSignal.measurement.width : 0
+  derive selectionHeight = selectionMeasured ? previewSignal.measurement.height : 0
   // The flex direction the preview renders for the selection; source may leave it unset.
   derive selectionFlow = match designChanged { case some(r) => (previewSignal.measurement.id == r.spacingId and previewSignal.measurement.direction != "" ? previewSignal.measurement.direction : rowValue(r.rows, "flex-direction")), case none => "" }
   derive themeColors = match designChanged { case some(r) => r.colors, case none => [] }
@@ -1567,7 +1571,7 @@ component Studio
                                                 Icon(name=propertyGlyph(property.property), size=14, angle=0)
                                               else
                                                 text propertyPrefix(property.property) font="type.caption"
-                                          input value=property.value change=editDesign(property.id) class=Field flex=1 background-color="transparent" padding-left=(swatchable(property.property, property.value) or propertyPrefix(property.property) != "" or propertyGlyph(property.property) != "" ? 0 : 8)  aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting data-tip=property.binding data-nudge="commit" data-nudge-min=nudgeMin(property.property)
+                                          input value=property.value change=editDesign(property.id) class=Field flex=1 background-color="transparent" padding-left=(swatchable(property.property, property.value) or propertyPrefix(property.property) != "" or propertyGlyph(property.property) != "" ? 0 : 8)  aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting data-tip=property.binding data-nudge=nudgeKind(property.property) data-nudge-min=nudgeMin(property.property)
                         match designChanged
                           case some(result)
                             if result.source != "" and result.availableProperties.length > 0

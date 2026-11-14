@@ -7,7 +7,8 @@ export function designPreview(){
     const literal=/^[#\d.-]|\(/.test(value);
     if(literal&&CSS.supports(property,value))return value;
     const plan=globalThis.exact?.plan;
-    if(tablePlan!==plan){table=await(await fetch('dev-inspect.json',{cache:'no-store'})).json();tablePlan=table.plan;}
+    // Without the table (a failed fetch, a rebuild in progress), keywords still preview as plain CSS.
+    if(tablePlan!==plan){try{table=await(await fetch('dev-inspect.json',{cache:'no-store'})).json();tablePlan=table.plan;}catch{table=null;tablePlan='';}}
     const token=Object.entries(table?.props??{}).find(([,name])=>name===value)?.[0];
     if(token&&/^--[\w-]+$/.test(token))return `var(${token})`;
     // A role such as AccentColor has no variable; its folded value is the colour the app draws.
