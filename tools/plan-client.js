@@ -55,6 +55,8 @@ function schedule(){
   scheduled=requestAnimationFrame(()=>{scheduled=0;draw();});
 }
 function watch(){
+  // Clearing can make the preview idle, so report it without waiting for a draw.
+  if(!regionBox)report(null);
   if(active()){mount();observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});schedule();}
   else{observer?.disconnect();host?.remove();}
 }

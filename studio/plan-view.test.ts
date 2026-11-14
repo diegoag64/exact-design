@@ -123,6 +123,28 @@ test('plan view draws previews as line plans, regions measure from the canvas an
     // Turning plan view off restores the app's own painting.
     await toggle.click();expect(await planView()).toBe(false);
     await frame.waitForFunction(()=>getComputedStyle(document.getElementById('exact-root')!).opacity==='1'&&!document.getElementById('ed-plan')?.isConnected,undefined,{polling:50,timeout:5000});
+    // With plan view off, clearing must reach the studio even when no redraw is pending.
+    // With no element selected, the next Escape should finish editing, not clear a stale region.
+    for(const clear of ['escape','all','tiny']){
+      await page.getByRole('button',{name:'Edit app design',exact:true}).click();
+      await page.getByRole('button',{name:'Finish editing app',exact:true}).waitFor();await empty.waitFor();
+      const bounds=await iframe.boundingBox();
+      await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2);
+      await page.getByTestId('canvas-stage').focus();await page.keyboard.press('Alt+KeyA');
+      await copyButton.waitFor({timeout:5000});
+      await frame.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+      if(clear==='tiny'){
+        await page.keyboard.down('Shift');await page.mouse.down();
+        await frame.locator('#ed-plan text',{hasText:'0 × 0'}).waitFor();
+        await frame.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+        await page.mouse.up();await page.keyboard.up('Shift');
+      }else await page.keyboard.press(clear==='all'?'Alt+KeyA':'Escape');
+      await frame.locator('#ed-plan').waitFor({state:'detached',timeout:3000});
+      // The preview's report reaches the studio as a message from another process, so let it land first.
+      await page.waitForTimeout(300);
+      await page.getByTestId('canvas-stage').focus();await page.keyboard.press('Escape');
+      await page.getByRole('button',{name:'Edit app design',exact:true}).waitFor({timeout:3000});
+    }
     expect(errors).toEqual([]);
   }finally{
     await page?.context().close();await suite?.browser.close();helper.stop(true);stopElementBridges();
