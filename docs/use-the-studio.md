@@ -125,6 +125,8 @@ The arrow beside the compass button opens two options, and both are remembered:
 - **Layout boxes** (⇧B) outlines the containers your app never paints, such as rows and columns, with faint dashed lines. Use it to see how the layout is nested and where each group starts and ends.
 - **Readable text** (⇧T) replaces the bars with the app's own words, in their font and on the same lines. Use it to check copy, truncation and baseline alignment.
 
+Password fields use bullets in readable text and measure their bars from those bullets. Non-text inputs, such as checkboxes and sliders, contribute no text.
+
 The shortcuts work while plan view is on.
 
 To measure part of a screen, hold Shift and drag a rectangle over it. The region shows every padding, gap and margin inside it, the size of each surface and image, and the corner radius. Rows with the same structure are labeled once and marked, for example, ×3. Click **Copy** above the region to copy its spec as an indented outline, such as `Column "Energy" · 342 × 455 · padding 22 · gap 20 · radius 28`. Press Alt+A (Option+A) over a screen to measure the whole screen. Press Escape or click outside the region to clear it. Regions also work without plan view, over the app's real styling.

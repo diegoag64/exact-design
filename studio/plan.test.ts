@@ -1,5 +1,34 @@
 import {test,expect} from 'bun:test';
-import {valueFill,surfaceShape,layoutBox,visibleColor,index,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
+import {fieldText,valueFill,surfaceShape,layoutBox,visibleColor,index,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
+
+test('plan fields mask passwords before measuring or drawing text',()=>{
+  const password='secret123';
+  expect(fieldText('password',password,'Password')).toBe('•'.repeat(password.length));
+  expect(fieldText('password',password)).not.toContain(password);
+  expect(fieldText('password','  ')).toBe('••');
+  expect(fieldText('password','','Password')).toBe('Password');
+  expect(fieldText('password')).toBe('');
+});
+
+test('plan text fields keep values and empty-field placeholders',()=>{
+  for(const type of ['text','search','email','url','tel','number','date','datetime','datetime-local','month','week','time','','unknown',undefined,'textarea','select']){
+    expect(fieldText(type,'Value','Placeholder')).toBe('Value');
+    expect(fieldText(type,'','Placeholder')).toBe('Placeholder');
+    expect(fieldText(type,'0')).toBe('0');
+    expect(fieldText(type)).toBe('');
+  }
+});
+
+test('plan buttons show only their value and non-text inputs show no text',()=>{
+  for(const type of ['button','submit','reset']){
+    expect(fieldText(type,'Action','Placeholder')).toBe('Action');
+    expect(fieldText(type,'','Placeholder')).toBe('');
+  }
+  for(const type of ['checkbox','radio','range','color','file','image','hidden']){
+    expect(fieldText(type,'on','Placeholder')).toBe('');
+    expect(fieldText(type,'','Placeholder')).toBe('');
+  }
+});
 
 // A record as plan-client.js reads it: document order, parent index and computed layout.
 const box=(i:number,p:number,x:number,y:number,w:number,h:number,extra:any={})=>({i,p,x,y,w,h,radius:0,radii:[0,0,0,0],surface:false,borders:[false,false,false,false],

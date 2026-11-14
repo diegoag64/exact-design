@@ -2,7 +2,7 @@
 // drawing of it sits on top, so hit testing, selection and draft editing still reach the
 // app's own elements. Regions measure everything inside a dragged rectangle.
 // Loaded by canvas-input-client.js on the first plan or region message; never in Preview.
-import {isSurface,cornerRadius,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
+import {fieldText,isSurface,cornerRadius,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
 import {measureSpacing} from './spacing-geometry.js';
 
 const NS='http://www.w3.org/2000/svg';
@@ -172,7 +172,7 @@ function readScene(){
       if(/auto|scroll|hidden|clip/.test(s.overflowY))inner={...inner,y:Math.max(inner.y,r.top),b:Math.min(inner.b,r.bottom)};
       if(onScreen){
         if(['input','textarea','select'].includes(tag)){
-          const value=tag==='select'?node.selectedOptions?.[0]?.text??'':node.value||node.placeholder||'';
+          const value=fieldText(tag==='input'?node.type:tag,tag==='select'?node.selectedOptions?.[0]?.text??'':node.value,node.placeholder);
           if(value)texts.push({x:r.left+px(s.paddingLeft)+px(s.borderLeftWidth),y:r.top,w:Math.min(textWidth(value,s.font),r.width-px(s.paddingLeft)-px(s.paddingRight)),h:r.height,fs:parseFloat(s.fontSize),weight:node.value?400:300,key:[...own,1],clip:inner,text:value,field:true,...fontOf(s)});
         }else for(const child of node.childNodes){
           if(child.nodeType!==3||!child.textContent.trim()||!visibleColor(s.color))continue;

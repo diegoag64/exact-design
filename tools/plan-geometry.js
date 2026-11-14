@@ -13,6 +13,13 @@ export const isSurface=e=>e.surface||e.borders.some(Boolean);
 export const cornerRadius=e=>Math.min(e.radius,e.w/2,e.h/2);
 const round=n=>Math.round(n*10)/10;
 
+export function fieldText(type,value='',placeholder=''){
+  if(type==='password')return value?'•'.repeat(value.length):placeholder;
+  if(['checkbox','radio','range','color','file','image','hidden'].includes(type))return '';
+  if(['button','submit','reset'].includes(type))return value;
+  return value||placeholder;
+}
+
 export function index(records){
   const byI=new Map(records.map(e=>[e.i,e])),kids=new Map();
   for(const e of records){if(!kids.has(e.p))kids.set(e.p,[]);kids.get(e.p).push(e);}
