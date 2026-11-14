@@ -1,8 +1,8 @@
 // Plan view geometry over plain element records, in the guest's viewport coordinates.
 // plan-client.js reads the records from the DOM; everything here is testable without a browser.
 //
-// A record: {i, p, x, y, w, h, radius, surface, borders:[t,r,b,l], display, dir, gap:[row,column],
-//   pad:[t,r,b,l], flow (in normal flow), decorative, label, hint}. `hint` is the first text inside a
+// A record: {i, p, x, y, w, h, radius, radii:[tl,tr,br,bl], surface, borders:[t,r,b,l], display, dir, gap:[row,column],
+//   pad:[t,r,b,l], margin:[t,r,b,l], flow (in normal flow), decorative, label, hint}. `hint` is the first text inside a
 //   container whose label is only its kind, so a copied spec says which row is which. `i` and `p` index the document order.
 
 export function maskImageUrl(value){
@@ -77,9 +77,9 @@ const visibleIn=(e,c)=>!c||(e.y>=c.y-1&&e.y+e.h<=c.b+1&&e.x>=c.x-1&&e.x+e.w<=c.r
 export function measureRegion(records,media,R){
   const {byI,kids}=index(records);
   const leafCount=e=>(kids.get(e.i)?.length||0)+media.filter(m=>m.p===e.i).length;
-  // Width is compared for the siblings themselves only: a child's width follows its text or value
-  // (a label, a progress fill), so rows of the same structure would never group.
-  const shape=(e,top=true)=>[...(top?[e.w]:[]),e.h,...e.pad,...e.gap,e.radius].map(Math.round).join(',')+';'+e.display+';'+e.dir+'('+
+  // Width and margins are compared for the siblings themselves only: a child's width or used
+  // auto margin follows its text or value, so rows of the same structure would never group.
+  const shape=(e,top=true)=>[...(top?[e.w,...e.margin]:[]),e.h,...e.pad,...e.gap,...e.radii].map(Math.round).join(',')+';'+e.display+';'+e.dir+'('+
     [...(kids.get(e.i)||[]).map(k=>shape(k,false)),...media.filter(m=>m.p===e.i).map(m=>'m'+Math.round(m.w)+','+Math.round(m.h))].join(';')+')';
   const inside=records.filter(e=>!e.decorative&&within(e,R)&&visibleIn(e,e.clip));
   const inM=new Set(inside.map(e=>e.i)),skip=new Set(),badges=[],repeats=[],siblings=new Map();

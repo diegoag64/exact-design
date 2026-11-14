@@ -47,7 +47,7 @@ test('plan buttons show only their value and non-text inputs show no text',()=>{
 
 // A record as plan-client.js reads it: document order, parent index and computed layout.
 const box=(i:number,p:number,x:number,y:number,w:number,h:number,extra:any={})=>({i,p,x,y,w,h,radius:0,radii:[0,0,0,0],surface:false,borders:[false,false,false,false],
-  display:'block',dir:'row',gap:[0,0],pad:[0,0,0,0],flow:true,decorative:false,label:'Container',hint:'',media:0,clip:{x:0,y:0,r:390,b:844},...extra});
+  display:'block',dir:'row',gap:[0,0],pad:[0,0,0,0],margin:[0,0,0,0],flow:true,decorative:false,label:'Container',hint:'',media:0,clip:{x:0,y:0,r:390,b:844},...extra});
 
 test('a fill that starts at its track and shares its height reads as a value; full-width bars drop edges on the screen edge',()=>{
   const track=box(1,0,37,664,316,10,{surface:true,radius:5}),fill=box(2,1,37,664,136,10,{surface:true,radius:5}),dot=box(3,1,37,640,8,8,{surface:true});
@@ -98,9 +98,9 @@ test('the copied spec indents like the Layers panel and names each row by its fi
 
 // Two sibling cards at different x and y positions, each with a child and media.
 function cards(){
-  const records=[box(1,0,10,10,180,80,{surface:true,radius:12,pad:[8,8,8,8],display:'flex',gap:[8,8],media:1,hint:'First'}),
+  const records=[box(1,0,10,10,180,80,{surface:true,radius:12,radii:[12,12,12,12],pad:[8,8,8,8],display:'flex',gap:[8,8],media:1,hint:'First'}),
     box(2,1,18,18,32,32),
-    box(3,0,200,110,180,80,{surface:true,radius:12,pad:[8,8,8,8],display:'flex',gap:[8,8],media:1,hint:'Second'}),
+    box(3,0,200,110,180,80,{surface:true,radius:12,radii:[12,12,12,12],pad:[8,8,8,8],display:'flex',gap:[8,8],media:1,hint:'Second'}),
     box(4,3,208,118,32,32)];
   const media=[{p:1,x:58,y:18,w:24,h:24},{p:3,x:248,y:118,w:24,h:24}];
   return {records,media,R:{x:0,y:0,w:390,h:200}};
@@ -108,7 +108,7 @@ function cards(){
 
 const differences=[['width',{w:100}],['height',{h:60}],
   ...[0,1,2,3].map(i=>['padding '+i,{pad:[8,8,8,8].map((v,j)=>i===j?24:v)}]),
-  ['row gap',{gap:[24,8]}],['column gap',{gap:[8,24]}],['radius',{radius:20}],
+  ['row gap',{gap:[24,8]}],['column gap',{gap:[8,24]}],['radius',{radius:20,radii:[20,20,20,20]}],
   ['display',{display:'grid'}],['direction',{dir:'column'}]] as const;
 // A descendant's width follows its content, so only the siblings' own widths split a group.
 for(const [name,change] of differences)for(const descendant of [false,true])if(!(descendant&&name==='width'))test(`regions keep cards with differing ${descendant?'descendant ':''}${name} separate`,()=>{
@@ -122,6 +122,34 @@ for(const [name,change] of differences)for(const descendant of [false,true])if(!
   expect(spec).toContain('Container "First"');
   expect(spec).toContain('Container "Second"');
   expect(spec).not.toContain('×2');
+});
+
+for(const corner of [0,1,2,3])for(const descendant of [false,true])test(`regions compare corner ${corner} on ${descendant?'descendants':'siblings'}`,()=>{
+  const {records,media,R}=cards();
+  for(const e of records){e.radius=12;e.radii=[12,12,12,12];}
+  records[descendant?3:2].radii[corner]=0;
+  const m=measureRegion(records,media,R);
+  expect(m.badges).toEqual([]);
+  expect(m.repeats).toEqual([]);
+  expect(m.live.map(e=>e.i)).toEqual([1,2,3,4]);
+});
+
+for(const side of [0,1,2,3])test(`regions keep rows with differing margin ${side} separate`,()=>{
+  const records=macros();
+  for(const e of records.filter(e=>e.h===36))e.margin=[8,8,8,8];
+  records.find(e=>e.hint==='Fat'&&e.h===36)!.margin[side]=0;
+  const m=measureRegion(records,[],{x:12,y:574,w:366,h:233});
+  expect(m.badges.map(b=>[b.e.hint,b.n])).toEqual([['Protein',2]]);
+  expect(m.repeats.map(e=>e.hint)).toEqual(['Carbs']);
+  expect(m.live.filter(e=>e.h===36).map(e=>e.hint)).toEqual(['Protein','Fat']);
+});
+
+test('macro rows still group when descendant widths and used auto margins differ',()=>{
+  const records=macros();
+  for(const e of records.filter(e=>e.h===18)){e.w-=e.i;e.margin=[0,0,0,e.i];}
+  const m=measureRegion(records,[],{x:12,y:574,w:366,h:233});
+  expect(m.badges.map(b=>[b.e.hint,b.n])).toEqual([['Protein',3]]);
+  expect(m.repeats.map(e=>e.hint)).toEqual(['Carbs','Fat']);
 });
 
 for(const dimension of ['w','h'] as const)test(`regions keep cards with differing media ${dimension} separate`,()=>{
@@ -138,6 +166,7 @@ test('regions group identical cards at different positions despite subpixel nois
     const {records,media,R}=cards();
     for(const e of records.slice(2)){
       e.w+=noise;e.h+=noise;e.radius+=noise;
+      e.radii=e.radii.map(v=>v+noise);e.margin=e.margin.map(v=>v+noise);
       e.pad=e.pad.map(v=>v+noise);e.gap=e.gap.map(v=>v+noise);
     }
     media[1].w+=noise;media[1].h+=noise;

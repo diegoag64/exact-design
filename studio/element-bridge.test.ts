@@ -20,7 +20,9 @@ test('plan scenes retain zero-opacity modals and their stacking key but skip hid
     document:{getElementById:()=>root,documentElement:{clientWidth:400,clientHeight:800}},host:null,
     getComputedStyle:(node:any)=>node.style,px:(v:string)=>parseFloat(v)||0,maskUrl:()=>'',visibleColor:()=>false,layerName:()=> 'Dialog',
   });
+  visible.style={...visible.style,marginTop:'1.5px',marginRight:'2px',marginBottom:'0px',marginLeft:'-4px'};
   const scene=read();
+  expect(scene.records.map((r:any)=>r.margin)).toEqual([[0,0,0,0],[1.5,2,0,-4]]);
   expect(scene.records.map((r:any)=>r.node)).toEqual([modal,visible]);
   expect(scene.records.map((r:any)=>r.key[0])).toEqual([1,1]);
 });

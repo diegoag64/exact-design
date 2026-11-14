@@ -163,6 +163,7 @@ function readScene(){
       if(decorative)continue;
       const radii=[s.borderTopLeftRadius,s.borderTopRightRadius,s.borderBottomRightRadius,s.borderBottomLeftRadius].map(v=>parseFloat(v)||0);
       const record={...box,node,tag,radius:Math.max(...radii),radii,surface,image,borders,display:s.display,dir:s.flexDirection,
+        margin:[s.marginTop,s.marginRight,s.marginBottom,s.marginLeft].map(px),
         gap:[px(s.rowGap),px(s.columnGap)],pad:[s.paddingTop,s.paddingRight,s.paddingBottom,s.paddingLeft].map(px),
         flow:!['absolute','fixed'].includes(s.position),decorative:false,label:layerName(node,s),hint:'',media:0,visible:onScreen};
       if(['Row','Column','Grid','Container','Screen'].includes(record.label)){const t=firstText(node);record.hint=t.length>24?t.slice(0,23)+'…':t;}
