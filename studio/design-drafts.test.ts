@@ -61,7 +61,7 @@ test('preview updates and geometry are pushed immediately and close with the ses
   const reader=response.body!.getReader(),decode=(value?:Uint8Array)=>new TextDecoder().decode(value);
   expect(decode((await reader.read()).value)).toContain('"updateRevision":0');
   channel.publish(true);expect(decode((await reader.read()).value)).toContain('"updateRevision":1');
-  channel.publish(false,{frame:'phone',id:'layer',plan:'plan',boxes:[]});
+  channel.publish(false,{frame:'phone',id:'layer',plan:'plan',width:0,height:0,direction:'',boxes:[]});
   expect(decode((await reader.read()).value)).toContain('"id":"layer"');
   channel.close();expect((await reader.read()).done).toBe(true);expect(channel.listeners.size).toBe(0);
 });
@@ -107,4 +107,36 @@ test('reverting one change keeps the rest of the draft and remains undoable',()=
   d.undo();expect(d.count).toBe(2);
   const restored=new DesignDraft();restored.restore(d.serialize());
   expect(restored.snapshot().find(p=>p.key===color.key)?.label).toBe('Greeting');
+});
+test('grouped edits stage together and undo as one step',()=>{
+  const draft=new DesignDraft(),binding=(property:string)=>({file:'app.contract',line:4,col:5,sha256:'a',property,shared:false});
+  const patch=(property:string,value:string)=>({key:property,binding:binding(property),original:'flex-start',value,preview:{key:property,site:1,plan:'p',property,value,scope:'site' as const},operation:null});
+  draft.stage(patch('gap','8'),{});
+  draft.group(()=>{draft.stage(patch('justify-content','center'),{});draft.stage(patch('align-items','flex-end'),{});});
+  expect(draft.count).toBe(3);expect(draft.past.length).toBe(2);
+  draft.undo();expect(draft.snapshot().map(p=>p.key)).toEqual(['gap']);
+});
+
+test('groups roll back a later patch-limit failure including history and revision',()=>{
+  const d=new DesignDraft(),files={'app.contract':digest(source)};
+  for(let i=0;i<63;i++)d.stage(patch('gap','24','file-'+i),files);
+  const before=d.serialize(),past=d.past.slice(),revision=d.revision;
+  expect(()=>d.group(()=>{
+    d.stage(patch('gap','30','alignment-x'),files);
+    d.stage(patch('gap','40','alignment-y'),files);
+  })).toThrow('Apply or discard');
+  expect(d.serialize()).toBe(before);expect(d.past).toEqual(past);expect(d.revision).toBe(revision);
+  d.stage(patch('gap','25','file-0'),files);d.undo();
+  expect(d.serialize()).toBe(before);
+});
+
+test('a group adds exactly one undo snapshot at the history cap; no-ops add none',()=>{
+  const d=new DesignDraft(),files={'app.contract':digest(source)};
+  for(let i=0;i<105;i++)d.stage(patch('gap',String(100+i)),files);
+  expect(d.past.length).toBe(100);
+  const before=d.serialize(),past=d.past.slice();
+  d.group(()=>d.stage(patch('gap','204'),files));
+  expect(d.past).toEqual(past);
+  d.group(()=>{d.stage(patch('gap','300'),files);d.stage(patch('color','#123456'),files);});
+  expect(d.past.length).toBe(100);d.undo();expect(d.serialize()).toBe(before);
 });

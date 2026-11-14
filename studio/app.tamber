@@ -38,6 +38,8 @@ theme
   spacing.gap-strong = #d946ef38 scheme=fixed
   spacing.gap-edge = #c026d373 scheme=fixed
   spacing.gap-ink = light-dark(#a21caf, #efabf5)
+  measure.line = #f24822 scheme=fixed
+  measure.ink = #ffffff scheme=fixed
   radius.control: length = 5px
   radius.panel: length = 8px
   radius.menu: length = 12px

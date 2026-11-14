@@ -34,6 +34,19 @@ fn spacingEdge(property: string): string = spacingKind(property) == "gap" ? "spa
 fn spacingInk(property: string): string = spacingKind(property) == "gap" ? "spacing.gap-ink" : spacingKind(property) == "margin" ? "spacing.margin-ink" : "spacing.padding-ink"
 fn spacingHatch(property: string, lit: bool): string = spacingKind(property) != "gap" ? "none" : lit ? "repeating-linear-gradient(-45deg, #c026d38c 0 1px, transparent 1px 6px)" : "repeating-linear-gradient(-45deg, #c026d359 0 1px, transparent 1px 6px)"
 fn spacingName(property: string): string = property == "padding-top" ? "Top padding" : property == "padding-right" ? "Right padding" : property == "padding-bottom" ? "Bottom padding" : property == "padding-left" ? "Left padding" : property == "row-gap" ? "Vertical gap" : property == "column-gap" ? "Horizontal gap" : property == "margin-top" ? "Top margin" : property == "margin-right" ? "Right margin" : property == "margin-bottom" ? "Bottom margin" : "Left margin"
+fn isMeasure(property: string): bool = property.startsWith("measure")
+fn isColor(property: string): bool = property == "color" or property == "background-color" or property == "border-color"
+fn sizeMode(value: string): string = value == "auto" or value == "fit-content" or value == "max-content" or value == "min-content" ? "hug" : value == "100%" or value == "stretch" ? "fill" : "fixed"
+fn rowValue(rows: DesignRow[], property: string): string = match first(rows.filter(r => r.property == property)) { case some(r) => r.value, case none => "" }
+// The 3×3 alignment grid: rows run top to bottom, columns left to right, whatever the flow.
+fn axisIndex(value: string): number = value == "center" ? 1 : value == "flex-end" or value == "end" ? 2 : value == "flex-start" or value == "start" or value == "normal" ? 0 : -1
+fn axisValue(i: number): string = i == 0 ? "flex-start" : i == 1 ? "center" : "flex-end"
+fn mainAxis(flow: string, i: number): number = flow.endsWith("-reverse") ? 2 - i : i
+// Values that are not lengths or numbers keep their text: math would rewrite an aspect ratio such as 16/9.
+fn nudgeKind(property: string): string = ["aspect-ratio", "font-family", "grid-template-columns", "grid-template-rows", "box-shadow", "transform-origin"].includes(property) ? "off" : "commit"
+fn nudgeMin(property: string): string = property.startsWith("padding") or property.endsWith("gap") or property.endsWith("width") or property.endsWith("height") or property.endsWith("radius") or property == "font-size" or property == "line-height" or property == "opacity" or property == "font-weight" ? "0" : ""
+fn alignOn(flow: string, rows: DesignRow[], r: number, c: number): bool = flow.startsWith("row") ? (axisIndex(rowValue(rows, "justify-content")) == -1 or axisIndex(rowValue(rows, "justify-content")) == mainAxis(flow, c)) and (axisIndex(rowValue(rows, "align-items")) == -1 or axisIndex(rowValue(rows, "align-items")) == r) : (axisIndex(rowValue(rows, "justify-content")) == -1 or axisIndex(rowValue(rows, "justify-content")) == mainAxis(flow, r)) and (axisIndex(rowValue(rows, "align-items")) == -1 or axisIndex(rowValue(rows, "align-items")) == c)
+fn alignName(r: number, c: number): string = r == 1 and c == 1 ? "Center" : `${r == 0 ? "Top" : r == 1 ? "Middle" : "Bottom"} ${c == 0 ? "left" : c == 1 ? "center" : "right"}`
 
 fn snappedDelta(targets: SnapTarget[], origin: number, delta: number, zoom: number): number = match first(sortBy(targets, t => magnitude(t.value - origin - delta))) { case some(t) => magnitude(t.value - origin - delta) <= 8 / zoom ? t.value - origin : delta, case none => delta }
 
@@ -254,6 +267,15 @@ shape DesignRow
   reason: string
   fields: DesignField[]
   linked: bool
+  swatch: string
+  token: bool
+  offTheme: bool
+
+// A theme colour token from the connected app's design, with its light and dark values.
+shape ColorToken
+  name: string
+  light: string
+  dark: string
 
 fn firstField(fields: DesignField[]): string = match first(fields) { case some(field) => field.value, case none => "" }
 
@@ -288,6 +310,9 @@ shape SpacingMeasurement
   frame: string
   id: string
   plan: string
+  width: number
+  height: number
+  direction: string
   boxes: SpacingBox[]
 
 shape PreviewSignal
@@ -327,6 +352,7 @@ shape DesignReply
   spacingPlan: string
   spacingFrame: string
   spacingInputs: SpacingInput[]
+  colors: ColorToken[]
 
 shape DraftChange
   key: string
@@ -495,6 +521,15 @@ component Studio
   mutation hoverChanged as shape DesignReply queue
   resource previewSignal = previewSignal(designSession) as shape PreviewSignal else empty()
   derive spacingMeasured = editing ? some(previewSignal.measurement) : none
+  // The preview's measurement of the current selection only: one from the previous selection can still be current.
+  derive selectionMeasured = match designChanged { case some(r) => editing and previewSignal.measurement.id != "" and previewSignal.measurement.id == r.spacingId and previewSignal.measurement.frame == r.spacingFrame and previewSignal.measurement.plan == r.spacingPlan, case none => false }
+  derive selectionWidth = selectionMeasured ? previewSignal.measurement.width : 0
+  derive selectionHeight = selectionMeasured ? previewSignal.measurement.height : 0
+  // The flex direction the preview renders for the selection; source may leave it unset.
+  derive selectionFlow = match designChanged { case some(r) => (selectionMeasured and previewSignal.measurement.direction != "" ? previewSignal.measurement.direction : rowValue(r.rows, "flex-direction")), case none => "" }
+  // The alignment grid maps flex axes, so it shows only once the preview confirms the selection renders as flex.
+  derive selectionFlex = selectionMeasured and previewSignal.measurement.direction != ""
+  derive themeColors = match designChanged { case some(r) => r.colors, case none => [] }
   state previewUpdateSeen = -1
   action previewUpdated
     previewUpdateSeen = previewSignal.updateRevision
@@ -592,6 +627,26 @@ component Studio
   action editDesign(row: string, value: string)
     designWriting = true
     send designChanged = design("edit", designSession, "", designVersion, row, value, time.epochAtZero + performanceNow())
+  // Both flex axes from one grid cell, staged as a single change and undo step.
+  action alignDesign(r: number, c: number)
+    let row = selectionFlow.startsWith("row")
+    designWriting = true
+    send designChanged = design("align", designSession, "", designVersion, "", `${axisValue(mainAxis(selectionFlow, row ? c : r))}|${axisValue(row ? r : c)}`, time.epochAtZero + performanceNow())
+  // Hug keeps the content's size, Fill takes the parent's, and Fixed starts from the size the preview measured.
+  action sizeDesign(row: string, property: string, mode: string)
+    let measured = property == "width" ? selectionWidth : selectionHeight
+    // Fixed needs the current selection's measurement; zero is a real size. The option is disabled until it arrives.
+    if mode != "fixed" or selectionMeasured
+      editDesign(row, mode == "hug" ? "auto" : mode == "fill" ? "100%" : `${measured}`)
+  state colorRow = ""
+  state colorValue = ""
+  action openColor(row: string, value: string)
+    colorRow = row
+    colorValue = value
+  action pickColor(value: string)
+    if value.trim() != "" and colorRow != ""
+      colorValue = value.trim()
+      editDesign(colorRow, value.trim())
   action editSpacing(value: string)
     spacingValue = value
   action openSpacing(property: string, value: string, box: string)
@@ -636,7 +691,7 @@ component Studio
   action afterDesign
     match designChanged
       case some(r)
-        if ["open", "close", "edit", "field", "spacing", "override", "add-property", "undo", "revert", "apply", "discard"].includes(r.operation)
+        if ["open", "close", "edit", "field", "align", "spacing", "override", "add-property", "undo", "revert", "apply", "discard"].includes(r.operation)
           designWriting = false
         if r.ok and r.draftCount == 0
           reviewOpen = false
@@ -1046,6 +1101,22 @@ component Studio
     clicks = clicks + 1
   view
     main hatch="preview-engines" data-canvas-editing=editing data-preview-effects=(reducedEffects ? "reduced" : "full") navigationKey=`${top(nav).id}` navigationBack="closeLibrary" navigate=follow testId="editor" width="100%" height="100%" display="flex" flex-direction="column" background-color="surface.canvas" color="ink.primary" font="type.body"
+      // Theme colours come first, so a pick follows the app's light and dark values; a custom value stays available.
+      column id="color-picker" popover="auto" role="dialog" aria-label="Choose a color" class=Menu width=248 padding=10 gap=10 testId="color-picker"
+        row align-items="center" gap=8
+          text "Theme colors" font="type.caption" font-weight=600 color="ink.secondary" flex=1
+          text `${themeColors.length}` font="type.caption" color="ink.muted"
+        if themeColors.length == 0
+          text "This app's theme has no color tokens. Enter a color below." font="type.caption" color="ink.muted"
+        else
+          row flex-wrap="wrap" gap=6 max-height=196 overflow-y="auto" padding=2 testId="color-tokens"
+            for token in themeColors key=token.name
+              button press=pickColor(token.name) popovertarget="color-picker" popovertargetaction="hide" width=24 height=24 padding=0 flex-shrink=0 box-sizing="border-box" border-radius=5 border-width=(colorValue == token.name ? 2 : 1) border-style="solid" border-color=(colorValue == token.name ? "accent" : "line.strong") background-color=token.light background-image=(token.light == token.dark ? "none" : `linear-gradient(135deg, transparent 50%, ${token.dark} 50%)`) aria-label=token.name aria-pressed=(colorValue == token.name) data-tip=(token.light == token.dark ? `${token.name} · ${token.light}` : `${token.name} · Light ${token.light} · Dark ${token.dark}`) testId=`color-token-${token.name}`
+        column gap=4
+          text "Custom" font="type.caption" color="ink.secondary"
+          row class=FieldShell
+            column width=14 height=14 flex-shrink=0 margin="0 6px 0 7px" box-sizing="border-box" border-radius=3 border="1px solid line.strong" background-color=(colorValue.startsWith("#") or colorValue.startsWith("rgb") or colorValue.startsWith("hsl") ? colorValue : "transparent") aria-hidden=true
+            input value=colorValue change=pickColor class=Field flex=1 background-color="transparent" padding-left=0 placeholder="#000000" aria-label="Custom color" testId="color-custom"
       column id="studio-menu" popover="auto" role="menu" aria-label="Canvas actions" class=Menu
         MenuItem(label="Undo", icon="undo-2", shortcut="⌘Z", disabled=(editing ? not appCanUndo : not doc.canUndo), destructive=false, menu="studio-menu", testId="menu-undo", press=command("undo", ""))
         if not editing
@@ -1160,9 +1231,16 @@ component Studio
                           if measured.id != "" and measured.id == result.spacingId and measured.plan == result.spacingPlan and measured.frame == result.spacingFrame
                             for v in scene.views.filter(v => v.id == measured.frame) key=v.id
                               column position="absolute" inset=0 pointer-events="none" testId="spacing-overlay"
+                                // Alt-hover distances replace the spacing overlay while they show.
+                                for box in measured.boxes.filter(b => isMeasure(b.property)) key=box.key
+                                  if box.property == "measure-target"
+                                    column position="absolute" left=(cameraX + (v.x + box.x) * zoom) top=(cameraY + (v.y + box.y) * zoom) width=(box.width * zoom) height=(box.height * zoom) border="1px solid measure.line" box-sizing="border-box" aria-hidden=true testId="measure-target"
+                                  else
+                                    column position="absolute" left=(cameraX + (v.x + box.x) * zoom) top=(cameraY + (v.y + box.y) * zoom) width=(box.property == "measure-x" ? box.width * zoom : 1) height=(box.property == "measure-y" ? box.height * zoom : 1) background-color="measure.line" aria-hidden=true
+                                    text box.value position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" padding="0.125rem 0.25rem" border-radius=3 background-color="measure.line" color="measure.ink" font-size="0.625rem" font-weight=600 white-space="nowrap" testId=`measure-${box.key}`
                                 for hosts in [measured.boxes.filter(b => b.property == spacingProperty and b.label and max(b.width, b.height) * zoom >= 32).map(b => b.key)] key=v.id
                                   for host in [hosts.includes(spacingBox) ? spacingBox : match hosts.at(0) { case some(k) => k, case none => "" }] key=v.id
-                                    for box in measured.boxes key=box.key
+                                    for box in (measured.boxes.filter(b => isMeasure(b.property)).length > 0 ? [] : measured.boxes) key=box.key
                                       for linked in [box.linked] key=box.key
                                         for lit in [spacingHover == box.property or spacingProperty == box.property] key=box.key
                                           column position="absolute" left=(cameraX + (v.x + box.x) * zoom) top=(cameraY + (v.y + box.y) * zoom) width=(box.width * zoom) height=(box.height * zoom) background-color=spacingFill(box.property, lit) background-image=spacingHatch(box.property, lit) border-width=1 border-style=(spacingKind(box.property) == "margin" ? "dashed" : "solid") border-color=spacingEdge(box.property) box-sizing="border-box" aria-hidden=true testId=(lit ? "spacing-linked" : "spacing-box")
@@ -1174,11 +1252,11 @@ component Studio
                                                 else
                                                   for target in targets key=target.property
                                                     if spacingProperty == target.property and host == box.key
-                                                      input id="spacing-value" value=spacingValue input=editSpacing key=spacingKey blur=cancelSpacing position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" width=72 height=26 padding=4 box-sizing="border-box" border-width=1 border-style="solid" border-color=spacingInk(box.property) border-radius=5 background-color="surface.panel" color="ink.primary" font="type.caption" text-align="center" pointer-events="auto" aria-label=spacingName(box.property) data-tip=(linked > 1 ? `Updates all ${linked} gaps · Enter to apply · Escape to cancel` : "Enter to apply · Escape to cancel") testId="spacing-value"
+                                                      input id="spacing-value" value=spacingValue input=editSpacing key=spacingKey blur=cancelSpacing data-nudge="live" data-nudge-min=nudgeMin(box.property) position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" width=72 height=26 padding=4 box-sizing="border-box" border-width=1 border-style="solid" border-color=spacingInk(box.property) border-radius=5 background-color="surface.panel" color="ink.primary" font="type.caption" text-align="center" pointer-events="auto" aria-label=spacingName(box.property) data-tip=(linked > 1 ? `Updates all ${linked} gaps · Enter to apply · Escape to cancel` : "Enter to apply · Escape to cancel") testId="spacing-value"
                                                     else if spacingProperty == target.property
                                                       text (spacingValue == "" ? box.value : spacingValue) position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" display="flex" align-items="center" justify-content="center" box-sizing="border-box" min-width="1.5rem" min-height="1.25rem" padding="0.1875rem" border-width=1 border-style="solid" border-color=spacingInk(box.property) border-radius=4 background-color="surface.panel" color=spacingInk(box.property) font-size="0.625rem" font-weight=600 aria-hidden=true testId=`spacing-mirror-${box.property}`
                                                     else
-                                                      button press=openSpacing(target.property, target.value, box.key) hover=hoverSpacing(box.property) position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" display="flex" align-items="center" justify-content="center" box-sizing="border-box" min-width="1.5rem" min-height="1.25rem" padding="0.1875rem" border-width=1 border-style="solid" border-color=(lit ? spacingInk(box.property) : spacingEdge(box.property)) border-radius=4 background-color="surface.panel" color=spacingInk(box.property) font-size="0.625rem" font-weight=600 pointer-events="auto" aria-label=`Edit ${spacingName(box.property)}` data-tip=(target.shared ? `${tip} · Shared style` : tip) testId=`spacing-${box.property}`
+                                                      button press=openSpacing(target.property, target.value, box.key) hover=hoverSpacing(box.property) position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" display="flex" align-items="center" justify-content="center" box-sizing="border-box" min-width="1.5rem" min-height="1.25rem" padding="0.1875rem" border-width=1 border-style="solid" border-color=(lit ? spacingInk(box.property) : spacingEdge(box.property)) border-radius=4 background-color="surface.panel" color=spacingInk(box.property) font-size="0.625rem" font-weight=600 pointer-events="auto" aria-label=`Edit ${spacingName(box.property)}` data-tip=(target.shared ? `${tip} · Shared style · Drag to adjust` : `${tip} · Drag to adjust`) data-scrub-spacing=true testId=`spacing-${box.property}`
                                                         text box.value
                         case none
                           column display="none"
@@ -1441,14 +1519,28 @@ component Studio
                                                 text "Override" font="type.caption"
                                       else if property.fields.length > 0
                                         if property.linked and not independentFields.includes(property.binding)
-                                          InlineField(prefix="", icon=compoundIcon(property.property), value=firstField(property.fields), accessibleLabel=`${property.name} all`, hint=(property.property == "gap" ? "Both axes" : "All sides"), testId=`design-field-${property.id}-all`, disabled=designWriting, change=editDesignField(property.id, "all"))
+                                          InlineField(minimum=nudgeMin(property.property), prefix="", icon=compoundIcon(property.property), value=firstField(property.fields), accessibleLabel=`${property.name} all`, hint=(property.property == "gap" ? "Both axes" : "All sides"), testId=`design-field-${property.id}-all`, disabled=designWriting, change=editDesignField(property.id, "all"))
                                         else
                                           row flex-wrap="wrap" gap=8
                                             for field in property.fields key=field.id
                                               column width="calc(50% - 4px)"
-                                                InlineField(prefix=fieldPrefix(field.label), icon="", value=field.value, accessibleLabel=`${property.name} ${field.label}`, hint=field.label, testId=`design-field-${property.id}-${field.id}`, disabled=designWriting, change=editDesignField(property.id, field.id))
+                                                InlineField(minimum=nudgeMin(property.property), prefix=fieldPrefix(field.label), icon="", value=field.value, accessibleLabel=`${property.name} ${field.label}`, hint=field.label, testId=`design-field-${property.id}-${field.id}`, disabled=designWriting, change=editDesignField(property.id, field.id))
                                       else if property.property == "text-content"
                                         textarea value=property.value change=editDesign(property.id) class=Field height=72 padding=8 resize="vertical" aria-label="Text content" disabled=designWriting
+                                      else if property.property == "align-items" and selectionFlex and designRows.filter(r => r.property == "justify-content" and not r.readonly).length > 0
+                                        row gap=8 align-items="flex-start"
+                                          column gap=2 padding=2 align-self="flex-start" border-radius="radius.control" background-color="surface.field" role="group" aria-label="Alignment" testId="align-grid"
+                                            for r in [0, 1, 2] key=`${r}`
+                                              row gap=2
+                                                for c in [0, 1, 2] key=`${c}`
+                                                  for on in [alignOn(selectionFlow, designRows, r, c)] key=`${c}`
+                                                    button press=alignDesign(r, c) class=Segment flex="none" width=26 height=20 padding=0 aria-label=`Align ${alignName(r, c).toLowerCase()}` aria-pressed=on data-tip=`${alignName(r, c)} · Sets alignment on both axes` disabled=designWriting testId=`align-${r}-${c}`
+                                                      column width=(on ? 8 : 3) height=(on ? 8 : 3) border-radius=(on ? 2 : 2) background-color=(on ? "accent" : "ink.muted") aria-hidden=true
+                                          // Stretch and baseline have no cell: they stay one press away beside the grid.
+                                          column gap=2 padding=2 border-radius="radius.control" background-color="surface.field" role="group" aria-label="Cross-axis alignment"
+                                            for choice in ["stretch", "baseline"] key=choice
+                                              button press=editDesign(property.id, choice) class=Segment flex="none" height=20 padding="0 8px" aria-label=`Align items: ${choice == "stretch" ? "Stretch" : "Baseline"}` aria-pressed=(property.value == choice) data-tip=(choice == "stretch" ? "Stretch · Children fill the cross axis" : "Baseline · Children line up on their text baseline") disabled=designWriting testId=`align-${choice}`
+                                                text (choice == "stretch" ? "Stretch" : "Baseline") font="type.caption"
                                       else if property.property == "flex-direction" or property.property == "align-items" or property.property == "justify-content"
                                         row class=Segmented
                                           for choice in property.options key=choice.value
@@ -1458,17 +1550,38 @@ component Studio
                                         select value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
                                           for choice in property.options key=choice.value
                                             option choice.label value=choice.value
+                                      else if (property.property == "width" or property.property == "height") and not property.readonly
+                                        row class=FieldShell
+                                          row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" cursor="ew-resize" aria-hidden=true data-scrub=true
+                                            text propertyPrefix(property.property) font="type.caption"
+                                          input value=property.value change=editDesign(property.id) class=Field flex=1 min-width=0 background-color="transparent" padding="0 2px 0 0" aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting data-tip=property.binding data-nudge="commit" data-nudge-min=nudgeMin(property.property)
+                                          select value=sizeMode(property.value) change=sizeDesign(property.id, property.property) class=Field width=56 flex-shrink=0 padding="0 4px" background-color="transparent" color="ink.secondary" font="type.caption" aria-label=`${property.name} sizing` data-tip="Sizing · Hug fits the content · Fill takes the parent's size · Fixed sets a size" disabled=designWriting testId=`design-size-${property.property}`
+                                            option "Fixed" value="fixed" disabled=(sizeMode(property.value) != "fixed" and not selectionMeasured)
+                                            option "Hug" value="hug"
+                                            option "Fill" value="fill"
+                                      else if isColor(property.property) and not property.readonly
+                                        row class=FieldShell
+                                          button popovertarget="color-picker" press=openColor(property.id, property.value) display="flex" align-items="center" justify-content="center" width=27 align-self="stretch" flex-shrink=0 padding=0 border-width=0 background-color="transparent" aria-label=`Choose ${property.name.toLowerCase()}` data-tip=`Choose ${property.name.toLowerCase()} · Theme colors first` disabled=designWriting testId=`color-swatch-${property.property}`
+                                            if property.swatch != ""
+                                              column width=14 height=14 box-sizing="border-box" border-radius=3 border="1px solid line.strong" background-color=property.swatch aria-hidden=true
+                                            else
+                                              column color="ink.muted" aria-hidden=true
+                                                Icon(name="paint-bucket", size=14, angle=0)
+                                          input value=property.value change=editDesign(property.id) class=Field flex=1 background-color="transparent" padding-left=0 aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting data-tip=(property.token ? `Theme color · ${property.binding}` : property.binding)
+                                          if property.offTheme
+                                            column width=24 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" data-tip="Not a theme color · Choose a theme color so it follows light and dark mode" aria-label="Not a theme color" testId=`off-theme-${property.property}`
+                                              Icon(name="circle-alert", size=12, angle=0)
                                       else
                                         row class=FieldShell
                                           if swatchable(property.property, property.value)
                                             column width=14 height=14 flex-shrink=0 margin="0 6px 0 7px" box-sizing="border-box" border-radius=3 border="1px solid line.strong" background-color=property.value pointer-events="none" aria-hidden=true
                                           else if propertyPrefix(property.property) != "" or propertyGlyph(property.property) != ""
-                                            row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" pointer-events="none" aria-hidden=true
+                                            row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" cursor="ew-resize" aria-hidden=true data-scrub=true
                                               if propertyGlyph(property.property) != ""
                                                 Icon(name=propertyGlyph(property.property), size=14, angle=0)
                                               else
                                                 text propertyPrefix(property.property) font="type.caption"
-                                          input value=property.value change=editDesign(property.id) class=Field flex=1 background-color="transparent" padding-left=(swatchable(property.property, property.value) or propertyPrefix(property.property) != "" or propertyGlyph(property.property) != "" ? 0 : 8)  aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting data-tip=property.binding
+                                          input value=property.value change=editDesign(property.id) class=Field flex=1 background-color="transparent" padding-left=(swatchable(property.property, property.value) or propertyPrefix(property.property) != "" or propertyGlyph(property.property) != "" ? 0 : 8)  aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting data-tip=property.binding data-nudge=nudgeKind(property.property) data-nudge-min=nudgeMin(property.property)
                         match designChanged
                           case some(result)
                             if result.source != "" and result.availableProperties.length > 0
@@ -1511,7 +1624,7 @@ component Studio
                             column gap=4
                               FieldLabel(label=(doc.route != "" ? "Route" : "Preview URL"))
                               if doc.route != ""
-                                InlineField(prefix="", icon="route", value=doc.route, accessibleLabel="Screen route", hint="Route in the connected project", testId="screen-route", disabled=false, change=prop("route"))
+                                InlineField(minimum="", prefix="", icon="route", value=doc.route, accessibleLabel="Screen route", hint="Route in the connected project", testId="screen-route", disabled=false, change=prop("route"))
                                 button press=toggleNative class=RowButton height=26 color=(nativeOpen ? "ink.selected" : "ink.secondary") aria-pressed=nativeOpen data-tip=(nativeOpen ? "Hide native preview" : "Show native preview · See this screen in the app's native iOS build") testId="screen-native"
                                   Icon(name="smartphone", size=14, angle=0)
                                   text (nativeOpen ? "Hide native preview" : "Preview on iOS")
@@ -1593,7 +1706,7 @@ component Studio
                             row class=SectionHead
                               SectionHeading(label="Appearance")
                             row gap=8
-                              InlineField(prefix="", icon="radius", value=`${n.radius}`, accessibleLabel="Border radius", hint="Border radius", testId="radius", disabled=false, change=prop("radius"))
+                              InlineField(minimum="0", prefix="", icon="radius", value=`${n.radius}`, accessibleLabel="Border radius", hint="Border radius", testId="radius", disabled=false, change=prop("radius"))
                               column flex=1
                         if n.kind != "rectangle"
                           column class=PanelSection
@@ -1601,7 +1714,7 @@ component Studio
                               SectionHeading(label="Text")
                             input value=n.text change=prop("text") class=Field aria-label="Text content" testId="text-content"
                             row gap=8
-                              InlineField(prefix="", icon="a-large-small", value=`${n.fontSize}`, accessibleLabel="Font size", hint="Font size", testId="font-size", disabled=false, change=prop("fontSize"))
+                              InlineField(minimum="0", prefix="", icon="a-large-small", value=`${n.fontSize}`, accessibleLabel="Font size", hint="Font size", testId="font-size", disabled=false, change=prop("fontSize"))
                               column flex=1
             if timelineOpen
               column height=(historySelected == "" ? 104 : 248) flex-shrink=0 background-color="surface.panel" border-top="1px solid line.subtle" testId="design-timeline"

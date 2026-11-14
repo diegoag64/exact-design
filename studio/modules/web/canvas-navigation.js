@@ -16,7 +16,7 @@ export function installCanvasNavigation(root){
   const canvas=()=>root.querySelector('[aria-label="Design canvas"]');
   const available=()=>{
     const surface=canvas();
-    return surface&&!surface.closest('[inert]')&&!root.querySelector('#closeLibrary,button[aria-label="Close preview"],button[aria-label="Close export"],[role="dialog"],:popover-open');
+    return surface&&!surface.closest('[inert]')&&!root.querySelector('#closeLibrary,button[aria-label="Close preview"],button[aria-label="Close export"],[role="dialog"]:not([popover]),:popover-open');
   };
   const typing=target=>target?.closest?.('input,textarea,select,[contenteditable]:not([contenteditable="false"])');
   function start(){

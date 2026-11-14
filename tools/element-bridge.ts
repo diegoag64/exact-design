@@ -169,7 +169,7 @@ export class ElementBridge {
       }else if(packet.kind==='spacing'){
         const measured=decodeSpacing(frame.frame,JSON.stringify({...packet,kind:'exact-design:spacing'}));
         if(measured.id!==packet.id)return new Response(null,{status:400});
-        packet.boxes=measured.boxes;
+        packet.boxes=measured.boxes;packet.width=measured.width;packet.height=measured.height;packet.direction=measured.direction;
       }else if(packet.kind==='size'){
         if(!this.size(frame,packet))return new Response(null,{status:400});
       }else if(packet.kind==='draft-status'){

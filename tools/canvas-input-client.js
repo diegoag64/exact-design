@@ -41,7 +41,8 @@ addEventListener('blur',endMiddle,true);
 // The studio owns hover before Exact's local gate can retain a per-frame box.
 addEventListener('pointermove',e=>{
   if(!canvasMode||!inspecting()||!window.__exactDesignHover)return;
-  e.stopImmediatePropagation();window.__exactDesignHover(e);
+  // Alt-hover distances read the same pointer before the studio takes it.
+  e.stopImmediatePropagation();window.__exactDesignMeasure?.(e);window.__exactDesignHover(e);
 },true);
 addEventListener('pointerout',e=>{if(canvasMode&&!e.relatedTarget)window.__exactDesignHover?.(null);},true);
 for(const type of ['pointercancel','blur','pagehide'])addEventListener(type,()=>{if(canvasMode)window.__exactDesignHover?.(null);},true);
