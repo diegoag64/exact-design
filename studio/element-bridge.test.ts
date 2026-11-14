@@ -173,6 +173,25 @@ test('the first selection waits for instance paths in the next hierarchy snapsho
   node.instance=[{region:1,key:'home'}];
   const confirmed=await s.poll();expect(confirmed.selecting).toBe(false);expect(confirmed.source).toBe('app.contract:3');expect(confirmed.spacingId).toBe('node');
 });
+test('picking the selected element again keeps its spacing measurement',async()=>{
+  const request=(async(url:string,init:any)=>{
+    const body=JSON.parse(init.body);
+    if(url.endsWith('/events'))return Response.json({files:{},events:[],seq:1,epoch:'run'});
+    return Response.json({ok:body.method==='hello'?{protocol:'tamber/1.18',files:{}}:{builds:['page']}});
+  }) as typeof fetch;
+  const nodes=[{id:'card',identity:'[1,[]]',path:'root/0:div',parent:'',depth:0,label:'Card',tag:'div',site:1,instance:[]},{id:'title',identity:'[2,[]]',path:'root/0:div/0:span',parent:'card',depth:1,label:'Title',tag:'span',site:2,instance:[]}];
+  const frame={frame:'phone',build:'page',plan:'plan',inspecting:true,nodes,seen:Date.now()};
+  const s=new DesignSession('http://localhost:5174','fixture',request);
+  s.bridge={frames:new Map([['phone',frame]]),origin:'http://localhost:9999',select(){}} as any;await s.start();
+  const boxes=[{key:'padding-top-0',property:'padding-top',x:0,y:0,width:100,height:20,labelX:50,labelY:10,value:'20',label:true,linked:1}];
+  s.receivePreview(frame,{kind:'pick',id:'card'});
+  s.receivePreview(frame,{kind:'spacing',id:'card',plan:'plan',boxes});
+  expect(s.preview.measurement.boxes).toHaveLength(1);
+  s.receivePreview(frame,{kind:'pick',id:'card'});
+  expect(s.preview.measurement).toMatchObject({id:'card',boxes});
+  s.receivePreview(frame,{kind:'pick',id:'title'});
+  expect(s.preview.measurement.boxes).toEqual([]);
+});
 test('undo before a rebuild retains the source location and restores on the original plan',async()=>{
   let events:any[]=[];const commands:any[]=[];
   const request=(async(url:string)=>url.endsWith('/events')?Response.json({files:{'app.contract':'before'},events:events.splice(0),seq:1,epoch:'run'}):Response.json({ok:{protocol:'tamber/1.18',files:{'app.contract':'before'},builds:['page']}})) as typeof fetch;

@@ -6,7 +6,7 @@ import { projectUrl } from '../studio/project';
 import {relative,isAbsolute,resolve} from 'node:path';
 import {layoutProperties,layoutOptions,layoutValue,sourceLiteral,digest,ownFile,type LayoutSite} from './layout-source';
 import {ElementBridge,bridgeFor,liveFrames,type ElementNode} from './element-bridge';
-import {spacingProperties,spacingRows} from '../studio/spacing';
+import {spacingProperties,spacingRows,spacingShorthand,expandSpacing} from '../studio/spacing';
 import {emptySpacing} from '../studio/spacing';
 import {PreviewChannel} from './preview-channel';
 import {DesignDraft,applyDesignDraft,bindingTargets,bindingKey,previewValue,type DesignBinding,type DesignPatch} from './design-drafts';
@@ -38,17 +38,12 @@ export function rowOperation(row:Row,value:string) {
 export function spacingOperation(rows:Row[],property:string,value:string){
   if(!spacingProperties.includes(property)||value.trim().split(/\s+/).length!==1)throw new Error('Enter one spacing value.');
   layoutValue(property,value);
+  const {name,index:side}=spacingShorthand(property);
   let index=rows.findIndex(r=>r.editable.row===property);
-  if(index<0)index=rows.findIndex(r=>r.editable.row===(property.startsWith('padding-')?'padding':'gap'));
+  if(index<0)index=rows.findIndex(r=>r.editable.row===name);
   if(index<0)throw new Error('This spacing is computed. Edit it in source.');
-  if(rows[index].editable.row==='padding'){
-    const parts=rows[index].editable.text.trim().split(/\s+/);
-    const sides=[parts[0],parts[1]??parts[0],parts[2]??parts[0],parts[3]??parts[1]??parts[0]];
-    sides[spacingProperties.indexOf(property)]=value.trim();value=sides.join(' ');
-  }
-  if(rows[index].editable.row==='gap'){
-    const parts=rows[index].editable.text.trim().split(/\s+/),axes=[parts[0],parts[1]??parts[0]];
-    axes[property==='row-gap'?0:1]=value.trim();value=axes.join(' ');
+  if(rows[index].editable.row===name){
+    const values=expandSpacing(name,rows[index].editable.text);values[side]=value.trim();value=values.join(' ');
   }
   return {index,value};
 }
@@ -65,8 +60,11 @@ export class DesignSession {
   handoff:DesignPatch[]=[];
   receivePreview=(frame:any,packet:any)=>{
     if(packet.kind==='pick'){
+      // Picking the selected element again keeps its measurement: the preview
+      // sends spacing only when it changes, so a cleared one would not return.
+      const same=this.picked?.frame===frame.frame&&this.picked.node.id===packet.id;
       this.pick(frame.frame,packet.id);
-      this.preview.publish(true,emptySpacing(frame.frame));
+      this.preview.publish(true,same?undefined:emptySpacing(frame.frame));
     }else if(packet.kind==='ready'){this.syncDrafts();this.preview.publish(true);}
     else if(packet.kind==='spacing'&&frame.frame===this.picked?.frame&&packet.id===this.picked.node.id)this.preview.publish(false,{frame:frame.frame,id:packet.id,plan:packet.plan,boxes:packet.boxes});
     else if(packet.kind==='draft-status'&&packet.revision===this.drafts.revision&&packet.error!==this.draftError){this.draftError=packet.error;this.preview.publish(true);}

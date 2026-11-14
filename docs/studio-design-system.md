@@ -1,6 +1,6 @@
 # Studio design system
 
-The studio follows Figma's UI3 layout: two full-height panels around an unobstructed canvas, with no top bar. The left panel opens with the project header; the right panel opens with the document actions. Floating chrome — the tool bar, zoom control, status toast, and collapsed-panel headers — sits on the canvas. Blue identifies selection and primary actions; pink identifies spacing measurements. App previews retain their own appearance. The shell supports light and dark system themes.
+The studio follows Figma's UI3 layout: two full-height panels around an unobstructed canvas, with no top bar. The left panel opens with the project header; the right panel opens with the document actions. Floating chrome — the tool bar, zoom control, status toast, and collapsed-panel headers — sits on the canvas. Blue identifies selection and primary actions. Spacing overlays follow the browser developer-tools convention: green for padding, orange (dashed) for margin, and hatched magenta for gaps. App previews retain their own appearance. The shell supports light and dark system themes.
 
 ## Source of truth
 
@@ -143,6 +143,8 @@ Exact's native pointer gate runs after the studio's hover handler. The local pro
 Properties are grouped into collapsible Position, Layout, Spacing, Text, Typography, Appearance, Fill, Stroke, and Effects sections. Dimensions and typography metrics use paired fields. The source adapter in `tools/inspector-fields.ts` supplies property names, groups, and compound-field metadata; the view does not infer source semantics from displayed labels.
 
 Padding and margin follow Top, Right, Bottom, Left order. Border radius follows Top left, Top right, Bottom right, Bottom left. Gap uses Row and Column. A selected chain control means one value updates every edge or axis. Unlinking exposes independent fields; editing one preserves the others. Linking unequal values uses the first value, as its tooltip explains. Each edit remains one draft operation and one undo step.
+
+On the canvas, every padding side, positive margin, and gap segment of the selection carries its value, colored by kind (`spacing.padding`, `spacing.margin`, `spacing.gap` tokens, each with `-strong`, `-edge`, and `-ink` variants). Spacing rows in the inspector carry a dot in the same color. Hovering a label strengthens its fill. Clicking the selected element again keeps its overlay. Segments of one gap property are linked: hovering any of their labels highlights all of them, editing one mirrors the typed value on the others, and their tooltip names the number of gaps it changes.
 
 Linking values is separate from sharing source. The layers icon identifies a shared style. A repeated template shows its instance count beneath the selected element. Source locations remain visible on the selection and available on property tooltips. Dynamic and responsive style expressions stay read-only until the user chooses **Override**. That action stages a static value and records the original expression in the timeline; inspection alone never freezes responsive behavior. Package-owned sources and data-bound text remain read-only.
 

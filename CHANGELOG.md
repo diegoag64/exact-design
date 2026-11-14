@@ -18,6 +18,9 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Fixed
 
+- Clicking the selected element again no longer hides its spacing overlay.
+- Every gap in a selected flex container now shows its value on the canvas, not just the largest one. Hovering any gap highlights all the gaps that share that value. While you edit one, the others show the new value as you type, and the tooltip says how many gaps it changes.
+
 - Native refreshes retain the pre-build source signature, retry failed Xcode checks, and serialize jobs across projects. Shutdown waits for accessibility cleanup and skips queued work. Projects sharing a bundle ID reinstall the correct build when switching. Capture errors keep the previous screenshot visible and show details in the inspector.
 - Windows setup now points to the supported Ubuntu/WSL2 workflow and rejects native execution before starting SDK builds or the helper.
 - Preserve resource identity across launches while still passing the page timestamp to the data sources. Loading-indicator frames use stable keys, and spacing labels and draft-count badges scale with browser text settings.
@@ -31,6 +34,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Changed
 
+- Spacing overlays are colored by kind: green padding, dashed orange margin, and hatched magenta gaps. Padding, Margin and Gap rows in the inspector show a matching color dot. The selected element's margins now appear on the canvas and can be edited there like padding.
 - Upgrade the Exact SDK from `336a059f` to `114bb88f`, including upstream fixes for development reloads, canvas rendering, and native builds. Adapt shared previews to the SDK's split runtime bundles so controls and data still synchronize across viewports.
 - Screen discovery no longer lists a protocol handler's landing route, such as Ember's `/open`, as a screen.
 - `test:ui` and `verify` now use isolated source copies and private ports, preserving running studio sessions and retaining verification logs.
