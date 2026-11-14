@@ -21,7 +21,8 @@ export function measureSpacing(el,styleOf,viewport){
     if(n<=0||width<=0||height<=0||boxes.length>=36)return;
     const x1=Math.max(x,clip.left),y1=Math.max(y,clip.top),x2=Math.min(x+width,clip.right),y2=Math.min(y+height,clip.bottom);
     if(x2<=x1||y2<=y1)return;
-    boxes.push({key:property+'-'+boxes.length,property,x:x1,y:y1,width:x2-x1,height:y2-y1,labelX:(x1+x2)/2,labelY:(y1+y2)/2,value:value(n),label:false});
+    // Keys count within a property, so clipping one kind never renumbers another.
+    boxes.push({key:property+'-'+boxes.filter(b=>b.property===property).length,property,x:x1,y:y1,width:x2-x1,height:y2-y1,labelX:(x1+x2)/2,labelY:(y1+y2)/2,value:value(n),label:false});
   }
   const pt=number(css.paddingTop),pr=number(css.paddingRight),pb=number(css.paddingBottom),pl=number(css.paddingLeft);
   add('padding-top',left,top,right-left,pt*sy,pt);

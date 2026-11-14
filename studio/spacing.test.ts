@@ -37,6 +37,12 @@ test('scroll clipping, transforms, and distributed space do not report extra spa
   expect(measureSpacing(scaled,styleOf,viewport).find((b:any)=>b.property==='padding-top')).toMatchObject({height:24,value:'12'});
   el.style={...css,columnGap:'10%'};expect(measureSpacing(el,styleOf,viewport).some((b:any)=>b.property==='column-gap')).toBe(false);
 });
+test('segment keys count within each property, so clipping padding does not renumber gaps',()=>{
+  const children=[element(rect(30,32,60,80)),element(rect(106,32,60,80)),element(rect(182,32,60,80))];
+  const keys=(el:any)=>measureSpacing(el,styleOf,viewport).filter((b:any)=>b.property==='column-gap').map((b:any)=>b.key);
+  expect(keys(element(rect(10,20,300,120),css,children))).toEqual(['column-gap-0','column-gap-1']);
+  expect(keys(element(rect(10,20,300,120),{...css,paddingTop:'0px',paddingLeft:'0px'},children))).toEqual(['column-gap-0','column-gap-1']);
+});
 test('positive margins are measured outside the border box',()=>{
   const el=element(rect(40,50,200,100),{...css,display:'block',marginTop:'16px',marginRight:'8px',marginBottom:'-4px',marginLeft:'auto'});
   const boxes=measureSpacing(el,styleOf,viewport).filter((b:any)=>b.property.startsWith('margin'));
