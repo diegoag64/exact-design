@@ -36,6 +36,9 @@ export async function readRoutes(origin: string, request: typeof fetch = fetch) 
 /** Native previews: `native-previews.ts` drives Xcode's simulators; the test launchers use `native-fixture.ts` instead. */
 type NativeModule={nativeScreens(body:unknown,request:Request):Response;nativeShot(path:string):Response};
 const nativeModule=():Promise<NativeModule>=>process.env.EXACT_DESIGN_TEST==='1'?import('./native-fixture'):import('./native-previews');
+/** Expo Simulators: `expo-sessions.ts` runs EAS CLI; the test launchers use `expo-fixture.ts` instead. */
+type ExpoModule={expoStream(body:unknown,request:Request):Response;expoSetup(body:unknown):Promise<{ok:boolean;error:string;account:string}>};
+const expoModule=():Promise<ExpoModule>=>process.env.EXACT_DESIGN_TEST==='1'?import('./expo-fixture'):import('./expo-sessions');
 export function startDiscoveryServer(port=5175) {
   return Bun.serve({hostname:'127.0.0.1',port,maxRequestBodySize:524288,idleTimeout:255,
     async fetch(req) {
@@ -54,12 +57,14 @@ export function startDiscoveryServer(port=5175) {
         for(const [key,value]of Object.entries(headers))response.headers.set(key,value);
         return response;
       }
-      if(!['/discover','/design','/previews','/native'].includes(url.pathname)) return new Response(null,{status:404,headers});
+      if(!['/discover','/design','/previews','/native','/expo','/expo/setup'].includes(url.pathname)) return new Response(null,{status:404,headers});
       if(req.method==='OPTIONS') return new Response(null,{status:204,headers});
       if(req.method!=='POST' || !req.headers.get('content-type')?.startsWith('application/json')) return new Response(null,{status:405,headers});
       try {
         const body=await req.json();
         if(url.pathname==='/native'){const response=(await nativeModule()).nativeScreens(body,req);for(const [key,value]of Object.entries(headers))response.headers.set(key,value);return response;}
+        if(url.pathname==='/expo'){const response=(await expoModule()).expoStream(body,req);for(const [key,value]of Object.entries(headers))response.headers.set(key,value);return response;}
+        if(url.pathname==='/expo/setup')return Response.json(await (await expoModule()).expoSetup(body),{headers});
         if(url.pathname==='/previews'){const response=previewScreens(body,req);for(const [key,value]of Object.entries(headers))response.headers.set(key,value);return response;}
         if(url.pathname==='/design') {
           try {return Response.json({ok:true,error:'',...await designRequest(body)},{headers});}
