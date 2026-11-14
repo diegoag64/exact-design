@@ -58,6 +58,9 @@ export class DesignSession {
   draftError='';
   sourceMap:any=null;
   handoff:DesignPatch[]=[];
+  /** The app's theme colours, read from the design's folded tokens: `light` and `dark` per name. */
+  colors:{name:string;light:string;dark:string}[]=[];
+  colorFiles='';
   receivePreview=(frame:any,packet:any)=>{
     if(packet.kind==='pick'){
       // Picking the selected element again keeps its measurement: the preview
@@ -66,7 +69,7 @@ export class DesignSession {
       this.pick(frame.frame,packet.id);
       this.preview.publish(true,same?undefined:emptySpacing(frame.frame));
     }else if(packet.kind==='ready'){this.syncDrafts();this.preview.publish(true);}
-    else if(packet.kind==='spacing'&&frame.frame===this.picked?.frame&&packet.id===this.picked.node.id)this.preview.publish(false,{frame:frame.frame,id:packet.id,plan:packet.plan,boxes:packet.boxes});
+    else if(packet.kind==='spacing'&&frame.frame===this.picked?.frame&&packet.id===this.picked.node.id)this.preview.publish(false,{frame:frame.frame,id:packet.id,plan:packet.plan,width:packet.width??0,height:packet.height??0,direction:packet.direction??'',boxes:packet.boxes});
     else if(packet.kind==='draft-status'&&packet.revision===this.drafts.revision&&packet.error!==this.draftError){this.draftError=packet.error;this.preview.publish(true);}
   };
   applied=false; busy=false;
@@ -111,6 +114,7 @@ export class DesignSession {
     this.epoch=r.epoch; this.cursor=r.seq;
     if(r.missed || JSON.stringify(this.files)!==JSON.stringify(r.files)) {this.selection=null;this.overrides.clear();this.version++;}
     this.files=r.files;
+    await this.loadColors();
     if(this.pendingSelection&&Date.now()>this.pendingSelection.until)this.pendingSelection=null;
     const selections=[...this.deferredSelections,...(r.events??[]).map((event:any)=>({event,until:Date.now()+1500,plan:''}))];
     this.deferredSelections=[];
@@ -148,6 +152,11 @@ export class DesignSession {
       }
     }
     return this.view();
+  }
+  async loadColors(){
+    const files=JSON.stringify(this.files);if(files===this.colorFiles)return;
+    this.colorFiles=files;
+    try{this.colors=themeColors(await this.call({method:'describe'}));}catch{this.colors=[];}
   }
   selectionTarget(event:any){
     // A reload/shared state checkpoint can give several viewports the same
@@ -258,20 +267,25 @@ export class DesignSession {
       draftCount:this.drafts.count,draftState:this.drafts.serialize(),draftError:this.draftError||(this.drafts.conflict(this.files)?'The source changed. Discard this draft before editing the new source.':''),canApply:this.drafts.count>0&&!this.drafts.conflict(this.files)&&!this.draftError,
       instances:frame&&this.picked?frame.nodes.filter(n=>n.site===this.picked!.node.site).length:1,bridgeOrigin:this.bridge?.origin??'',tree,crumbs,selectedLabel:this.picked?.node.label??'',restoring:!!this.restoring,selecting:!!this.pendingSelection,
       message:this.pendingSelection?'Selecting element…':this.restoring?'Updating selection…':s?.readOnly || (s && !rows.length?'No editable properties.':'Select an element in a screen.'),
-      availableProperties:this.selection?.canAddProperties?Object.keys(propertyCatalog).filter(p=>!rows.some(r=>r.editable.row===p)).map(value=>({value,label:propertyName[value]??value})):[],rows:this.inspectorRows(rows),canUndo:this.drafts.past.length>0,applied:this.applied};
+      availableProperties:this.selection?.canAddProperties?Object.keys(propertyCatalog).filter(p=>!rows.some(r=>r.editable.row===p)).map(value=>({value,label:propertyName[value]??value})):[],rows:this.inspectorRows(rows),canUndo:this.drafts.past.length>0,applied:this.applied,colors:this.colors};
   }
   inspectorRows(rows:Row[]){
     const position=rows.find(r=>r.editable.row==='position')?.editable.text??'static';
-    const result=rows.map((r:Row,i:number)=>{
+    // Unwritten values fall back to catalog defaults. For the flow, the preview reports what it renders,
+    // so a button or row that source leaves unset reads as Row, not the catalog's Column.
+    const measured=this.preview.measurement,flow=measured.id&&measured.id===this.picked?.node.id&&measured.frame===this.picked.frame?measured.direction:'';
+    const result=rows.map((row:Row,i:number)=>{
+      const unset=row.editable.row==='flex-direction'&&row.editable.mode==='insert'&&flow!==''&&!this.drafts.patches.has(bindingKey(this.binding(row)));
+      const r=unset?{...row,editable:{...row.editable,text:flow}}:row;
       const e=r.editable,property=e.row,binding=this.binding(r),fields=compoundFields(property,e.text),key=bindingKey(binding),positionLocked=['left','top','right','bottom'].includes(property)&&position==='static',locked=e.mode==='replace'&&!this.overrides.has(key)&&!this.drafts.patches.has(key);
-      return {id:String(i),property,name:propertyName[property]??property.replaceAll('-',' '),value:property==='opacity'?`${Math.round(Number(e.text)*10000)/100}%`:e.text,shared:binding.shared,group:propertyGroup(property),binding:`${binding.file}:${binding.line}:${binding.col}#${property}`,reason:positionLocked?'Choose Relative or Absolute':locked?'Controlled by code':e.mode==='replace'?'Static override':'',readonly:locked||positionLocked,canOverride:locked&&!positionLocked,added:e.mode==='insert',fields,linked:fields.length>0&&fields.every(f=>f.value===fields[0].value),options:layoutOptions(property).map(value=>({value,label:optionLabels[value]??value}))};
+      return {id:String(i),property,name:propertyName[property]??property.replaceAll('-',' '),value:property==='opacity'?`${Math.round(Number(e.text)*10000)/100}%`:e.text,shared:binding.shared,group:propertyGroup(property),binding:`${binding.file}:${binding.line}:${binding.col}#${property}`,reason:positionLocked?'Choose Relative or Absolute':locked?'Controlled by code':e.mode==='replace'?'Static override':'',readonly:locked||positionLocked,canOverride:locked&&!positionLocked,added:e.mode==='insert',fields,linked:fields.length>0&&fields.every(f=>f.value===fields[0].value),options:layoutOptions(property).map(value=>({value,label:optionLabels[value]??value})),...colorFacts(property,e.text,this.colors)};
     });
     const seen=new Set(result.map(r=>r.property));
     for(const r of this.selection?.rows??[]){
       const property=r.attr??String(r.name).replaceAll('_','-');
       if(seen.has(property)||!(layoutProperties.has(property)||properties.has(property))||r.source==='initial'||r.source==='inherited')continue;
       seen.add(property);
-      result.push({id:'readonly-'+property,property,name:propertyName[property]??property.replaceAll('-',' '),value:String(r.token?.text??r.value??''),shared:false,group:propertyGroup(property),binding:r.at?`${r.at.file}:${r.at.line}:${r.at.col}`:'',reason:r.source==='dynamic'?(property==='text-content'?'Bound to app data · edit its source':'Responsive or data-driven expression'):r.origin==='tag'?'Defined by the element type':r.editable?.reason??'Controlled in source',readonly:true,canOverride:false,added:false,fields:[],linked:false,options:[]});
+      result.push({id:'readonly-'+property,property,name:propertyName[property]??property.replaceAll('-',' '),value:String(r.token?.text??r.value??''),shared:false,group:propertyGroup(property),binding:r.at?`${r.at.file}:${r.at.line}:${r.at.col}`:'',reason:r.source==='dynamic'?(property==='text-content'?'Bound to app data · edit its source':'Responsive or data-driven expression'):r.origin==='tag'?'Defined by the element type':r.editable?.reason??'Controlled in source',readonly:true,canOverride:false,added:false,fields:[],linked:false,options:[],...colorFacts(property,String(r.token?.text??r.value??''),this.colors)});
     }
     return result;
   }
@@ -281,12 +295,23 @@ export class DesignSession {
     if(!row)throw new Error('Select the element again.');
     return this.edit(version,Number(index),compoundValue(row.editable.row,row.editable.text,part,value));
   }
-  async edit(version:number,index:number,value:string) {
+  async edit(version:number,index:number,value:string) {return this.editMany(version,[[index,value]]);}
+  /** Stage one or more property values for the selection as a single undo step. */
+  async editMany(version:number,edits:[number,string][]) {
     if(this.busy) throw new Error('A change is still being applied.');
     this.busy=true;
     try {
       await this.poll();
       if(version!==this.version || !this.selection) throw new Error('The source or selection changed. Select the element again.');
+      const staged:(()=>void)[]=[];
+      for(const [index,value] of edits)staged.push(await this.prepare(index,value));
+      this.drafts.group(()=>{for(const stage of staged)stage();});
+      this.draftError='';this.version++;this.applied=false;
+      return this.view();
+    } finally {this.busy=false;}
+  }
+  /** Validate one edit and return the step that stages it, so a group stages all or nothing. */
+  async prepare(index:number,value:string) {
       const row=editableRows(this.selection)[index];
       if(!row) throw new Error('This property is no longer editable.');
       const binding=this.binding(row),key=bindingKey(binding);
@@ -299,10 +324,18 @@ export class DesignSession {
         if(this.sourceMap?.digest===frame.plan)targets=bindingTargets(this.sourceMap,this.app,binding);
         if(!targets?.length)throw new Error('This build has no matching preview source map. Reconnect after it rebuilds.');
       }else if(binding.shared)throw new Error('Shared style drafts require a local Exact source map.');
-      this.drafts.stage({key,binding,original:binding.mode==='insert'?'[not set]':binding.mode==='replace'?binding.expression??row.editable.text:row.editable.text,value:next.author,preview:{key,site:this.picked?.node.site??0,plan:frame?.plan??'',property:binding.property,value:next.css,scope:binding.shared?'style':'site',targets},operation:this.app||row.editable.rung==='layout'?null:rowOperation(row,next.author),...(this.picked?.node.label?{label:this.picked.node.label}:{})},this.files);
-      this.draftError='';this.version++;this.applied=false;
-      return this.view();
-    } finally {this.busy=false;}
+      const patch={key,binding,original:binding.mode==='insert'?'[not set]':binding.mode==='replace'?binding.expression??row.editable.text:row.editable.text,value:next.author,preview:{key,site:this.picked?.node.site??0,plan:frame?.plan??'',property:binding.property,value:next.css,scope:binding.shared?'style':'site' as const,targets},operation:this.app||row.editable.rung==='layout'?null:rowOperation(row,next.author),...(this.picked?.node.label?{label:this.picked.node.label}:{})};
+      return ()=>this.drafts.stage(patch,this.files);
+  }
+  /** Flex alignment from the 3×3 grid: `justify|align`, both staged as one change. */
+  async align(version:number,value:string){
+    const [justify,align]=value.split('|'),rows=this.currentRows();
+    const index=(property:string)=>rows.findIndex(r=>r.editable.row===property);
+    const edits:[number,string][]=[];
+    if(justify&&index('justify-content')>=0)edits.push([index('justify-content'),justify]);
+    if(align&&index('align-items')>=0)edits.push([index('align-items'),align]);
+    if(!edits.length)throw new Error('This element has no editable alignment.');
+    return this.editMany(version,edits);
   }
   async apply(){
     if(this.busy||!this.drafts.count)throw new Error('There is no design draft to apply.');
@@ -403,6 +436,7 @@ export async function designRequest(body:any) {
   if(body.op==='override')return s.override(Number(body.version),Number(body.row));
   if(body.op==='field')return s.editField(Number(body.version),String(body.row),String(body.value));
   if(body.op==='edit') return s.edit(Number(body.version),Number(body.row),body.value);
+  if(body.op==='align')return s.align(Number(body.version),String(body.value));
   if(body.op==='apply')return s.apply();
   if(body.op==='discard')return s.discard();
   if(body.op==='revert')return s.revert(String(body.row));
@@ -415,4 +449,22 @@ export async function designRequest(body:any) {
   }
   if(body.op==='select')return s.navigate(String(body.row));
   throw new Error('Unknown design action.');
+}
+
+const colorProperties=new Set(['color','background-color','border-color']);
+/** Colour tokens from a `describe` answer, with their light and dark values. */
+export function themeColors(described:any){
+  const tokens=Array.isArray(described?.ir?.tokens)?described.ir.tokens:[];
+  return tokens.filter((t:any)=>t?.kind==='color'&&typeof t.name==='string'&&/^[A-Za-z][\w.-]*$/.test(t.name)&&Array.isArray(t.fallback)&&typeof t.fallback[0]==='string')
+    .slice(0,200).map((t:any)=>({name:t.name as string,light:cssColor(t.fallback[0]),dark:cssColor(t.fallback[1]??t.fallback[0])}));
+}
+const cssColor=(value:string)=>/^#[0-9a-f]{8}$/i.test(value)&&value.endsWith('ff')?value.slice(0,7):value;
+const literalColor=(value:string)=>/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)||/^(?:rgb|rgba|hsl|hsla|oklch|oklab|lab|lch|color)\(/i.test(value);
+/** How the inspector draws a colour value: its swatch, and whether it is one of the theme's tokens. */
+export function colorFacts(property:string,value:string,colors:{name:string;light:string;dark:string}[]){
+  if(!colorProperties.has(property))return {swatch:'',token:false,offTheme:false};
+  const text=value.trim(),token=colors.find(c=>c.name===text||`var(--${c.name})`===text);
+  if(token)return {swatch:token.light,token:true,offTheme:false};
+  const literal=literalColor(text);
+  return {swatch:literal?text:'',token:false,offTheme:literal&&colors.length>0};
 }

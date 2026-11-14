@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {DesignSession,editableRows,rowOperation} from '../tools/design-session';
+import {DesignSession,editableRows,rowOperation,themeColors,colorFacts} from '../tools/design-session';
 const row={name:'font_size',editable:{rung:'template',file:'app.contract',at:{line:10,col:8},sha256:'abc',row:'font-size',text:'28'}};
 test('only supported source-backed visual rows become editable',()=>{
   expect(editableRows({rows:[row,{name:'width',editable:row.editable},{name:'color',editable:{rung:null}}]})).toEqual([row]);
@@ -14,6 +14,7 @@ test('draft edits and undo never write; Apply checks the source version',async()
     if(url.endsWith('/events')) {const reply={files,events,seq:1,epoch:'run'};events=[];return Response.json(reply);}
     if(body.method==='hello') return Response.json({ok:{protocol:'tamber/1.18',files}});
     if(body.method==='inspect') return Response.json({ok:{builds:['page']}});
+    if(body.method==='describe') return Response.json({ok:{ir:{tokens:[{name:'ember',kind:'color',fallback:['#e8461fff','#ff6a45ff']}]}}});
     writes.push(body);files={file:'after'};return Response.json({ok:{files,inverse:'inverse-1'}});
   }) as typeof fetch;
   const s=new DesignSession('http://localhost:5174','not-a-real-token',request);await s.start();
@@ -71,4 +72,14 @@ test('closing an old editor session leaves reconnected previews and hover active
   calls.length=0;builds[1].inspector='new-client';let cleared=false;
   old.bridge={frames:new Map(),feedback:new Set(),clearLinkedHover:()=>{cleared=true;}}as any;
   await old.close();expect(calls.filter(c=>c.method==='inspect')).toEqual([]);expect(cleared).toBe(false);
+});
+test('theme colours come from the design and mark literal colours that are off the theme',()=>{
+  const colors=themeColors({ir:{tokens:[{name:'ember',kind:'color',fallback:['#e8461fff','#ff6a45ff']},{name:'glass',kind:'color',fallback:['#ffffff9e','#17171fa6']},{name:'space.md',kind:'length',fallback:['16px','16px']},{name:'bad name',kind:'color',fallback:['#000000ff']}]}});
+  expect(colors).toEqual([{name:'ember',light:'#e8461f',dark:'#ff6a45'},{name:'glass',light:'#ffffff9e',dark:'#17171fa6'}]);
+  expect(themeColors({})).toEqual([]);
+  expect(colorFacts('color','ember',colors)).toEqual({swatch:'#e8461f',token:true,offTheme:false});
+  expect(colorFacts('background-color','#123456',colors)).toEqual({swatch:'#123456',token:false,offTheme:true});
+  expect(colorFacts('background-color','#123456',[])).toMatchObject({offTheme:false});
+  expect(colorFacts('color','currentcolor',colors)).toEqual({swatch:'',token:false,offTheme:false});
+  expect(colorFacts('width','ember',colors)).toEqual({swatch:'',token:false,offTheme:false});
 });

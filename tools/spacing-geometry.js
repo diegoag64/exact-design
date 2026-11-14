@@ -78,3 +78,39 @@ export function measureSpacing(el,styleOf,viewport){
   }
   return boxes;
 }
+
+/** Figma-style redlines between the selection and another element, in the guest's viewport coordinates.
+ *  An element that encloses the other measures to its inner edges; separate elements measure the gap
+ *  on each axis where they are apart, and overlapping ones the offset between matching edges. */
+export function measureDistance(a,b){
+  const boxes=[];
+  if(!a.width||!a.height||!b.width||!b.height)return boxes;
+  const line=(property,x1,y1,x2,y2,n)=>{
+    if(n<0.5||boxes.length>=5)return;
+    const horizontal=property==='measure-x',x=Math.min(x1,x2),y=Math.min(y1,y2);
+    boxes.push({key:property+'-'+boxes.length,property,x:horizontal?x:x-0.5,y:horizontal?y-0.5:y,width:horizontal?Math.abs(x2-x1):1,height:horizontal?1:Math.abs(y2-y1),labelX:horizontal?(x1+x2)/2:x,labelY:horizontal?y:(y1+y2)/2,value:value(n),label:true});
+  };
+  const contains=(o,i)=>o.left<=i.left+0.5&&o.top<=i.top+0.5&&o.right>=i.right-0.5&&o.bottom>=i.bottom-0.5;
+  const inner=contains(b,a)?a:contains(a,b)?b:null,outer=inner===a?b:a;
+  const cx=(r)=>(r.left+r.right)/2,cy=(r)=>(r.top+r.bottom)/2;
+  if(inner){
+    line('measure-y',cx(inner),outer.top,cx(inner),inner.top,inner.top-outer.top);
+    line('measure-y',cx(inner),inner.bottom,cx(inner),outer.bottom,outer.bottom-inner.bottom);
+    line('measure-x',outer.left,cy(inner),inner.left,cy(inner),inner.left-outer.left);
+    line('measure-x',inner.right,cy(inner),outer.right,cy(inner),outer.right-inner.right);
+  }else{
+    // Lines run through the middle of the axes' overlap, or from the selection's middle when there is none.
+    const top=Math.max(a.top,b.top),bottom=Math.min(a.bottom,b.bottom),left=Math.max(a.left,b.left),right=Math.min(a.right,b.right);
+    const y=bottom>top?(top+bottom)/2:cy(a),x=right>left?(left+right)/2:cx(a);
+    const apartX=b.left>=a.right?[a.right,b.left]:a.left>=b.right?[b.right,a.left]:null;
+    const apartY=b.top>=a.bottom?[a.bottom,b.top]:a.top>=b.bottom?[b.bottom,a.top]:null;
+    if(apartX)line('measure-x',apartX[0],y,apartX[1],y,apartX[1]-apartX[0]);
+    if(apartY)line('measure-y',x,apartY[0],x,apartY[1],apartY[1]-apartY[0]);
+    if(!apartX&&!apartY){
+      line('measure-x',Math.min(a.left,b.left),y,Math.max(a.left,b.left),y,Math.abs(a.left-b.left));
+      line('measure-y',x,Math.min(a.top,b.top),x,Math.max(a.top,b.top),Math.abs(a.top-b.top));
+    }
+  }
+  if(boxes.length)boxes.push({key:'measure-target-0',property:'measure-target',x:b.left,y:b.top,width:b.width,height:b.height,labelX:b.left,labelY:b.top,value:'0',label:false});
+  return boxes;
+}

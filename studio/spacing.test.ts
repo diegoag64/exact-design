@@ -1,7 +1,7 @@
 import {test,expect} from 'bun:test';
 import {decodeSpacing,spacingRows} from './spacing';
 import {spacingOperation} from '../tools/design-session';
-import {measureSpacing} from '../tools/spacing-geometry.js';
+import {measureSpacing,measureDistance} from '../tools/spacing-geometry.js';
 
 const rect=(x:number,y:number,width:number,height:number)=>({left:x,top:y,right:x+width,bottom:y+height,width,height});
 const css={marginTop:'0px',marginRight:'0px',marginBottom:'0px',marginLeft:'0px',display:'flex',flexDirection:'row',flexWrap:'nowrap',position:'static',paddingTop:'12px',paddingRight:'20px',paddingBottom:'12px',paddingLeft:'20px',columnGap:'16px',rowGap:'24px',borderTopWidth:'0px',borderRightWidth:'0px',borderBottomWidth:'0px',borderLeftWidth:'0px',overflowX:'visible',overflowY:'visible'};
@@ -70,6 +70,25 @@ test('guest messages accept only bounded geometry and known spacing properties',
   expect(decodeSpacing('view-1',message([box])).boxes).toEqual([{...box,linked:1}]);
   const gaps=decodeSpacing('view-1',message([box,{...box,key:'row-gap-1',property:'row-gap'},{...box,key:'row-gap-2',property:'row-gap',extra:1}])).boxes;
   expect(gaps.map(b=>b.linked)).toEqual([1,2,2]);expect('extra' in gaps[2]).toBe(false);
-  for(const boxes of [[{...box,x:Infinity}],[{...box,property:'width'}],[{...box,width:-1}],[box,box],Array(37).fill(box)])expect(decodeSpacing('view-1',message(boxes)).boxes).toEqual([]);
+  for(const boxes of [[{...box,x:Infinity}],[{...box,property:'width'}],[{...box,width:-1}],[box,box],Array(45).fill(box)])expect(decodeSpacing('view-1',message(boxes)).boxes).toEqual([]);
   expect(decodeSpacing('view-1','not JSON').id).toBe('');
+});
+test('guest messages carry Alt-hover distances and the selection size',()=>{
+  const line={key:'measure-x-0',property:'measure-x',x:10,y:20,width:16,height:1,labelX:18,labelY:20,value:'16',label:true};
+  const decoded=decodeSpacing('view-1',JSON.stringify({kind:'exact-design:spacing',id:'node',plan:'plan',width:120.04,height:-3,boxes:[line]}));
+  expect(decoded.boxes).toEqual([{...line,linked:1}]);expect(decoded.width).toBe(120);expect(decoded.height).toBe(0);
+});
+test('Alt-hover distances measure gaps between siblings and insets inside a parent',()=>{
+  const a=rect(10,10,40,20);
+  const right=measureDistance(a,rect(70,15,30,30));
+  expect(right.filter((b:any)=>b.property==='measure-x')).toEqual([expect.objectContaining({x:50,width:20,value:'20',labelY:22.5})]);
+  expect(right.some((b:any)=>b.property==='measure-y')).toBe(false);
+  expect(right.at(-1)).toMatchObject({property:'measure-target',x:70,y:15,width:30,height:30});
+  const below=measureDistance(a,rect(0,50,100,10));
+  expect(below.filter((b:any)=>b.property==='measure-y').map((b:any)=>b.value)).toEqual(['20']);
+  const parent=measureDistance(a,rect(0,0,100,50));
+  expect(parent.filter((b:any)=>b.property!=='measure-target').map((b:any)=>[b.property,b.value])).toEqual([['measure-y','10'],['measure-y','20'],['measure-x','10'],['measure-x','50']]);
+  // A child inside the selection measures from its edges outward to the selection's.
+  expect(measureDistance(rect(0,0,100,50),a).filter((b:any)=>b.property==='measure-x').map((b:any)=>b.value)).toEqual(['10','50']);
+  expect(measureDistance(a,rect(10,10,40,20)).filter((b:any)=>b.property!=='measure-target')).toEqual([]);
 });

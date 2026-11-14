@@ -62,6 +62,11 @@ export class DesignDraft {
     if(patch.value===patch.original)this.patches.delete(patch.key);else this.patches.set(patch.key,patch);
     this.revision++;
   }
+  /** Stage several changes as one undo step, such as alignment on both axes. */
+  group(stage:()=>void){
+    const depth=this.past.length;
+    try{stage();}finally{if(this.past.length>depth+1)this.past.splice(depth+1);}
+  }
   /** Remove one staged change, keeping the rest of the draft and one undo step. */
   revert(key:string){
     if(!this.patches.has(key))throw new Error('This change is no longer in the draft.');

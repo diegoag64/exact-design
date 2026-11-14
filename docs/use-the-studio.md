@@ -97,6 +97,15 @@ A running cloud iPhone uses your plan's simulator time. It stops when you click 
 
 Property edits create a local draft. They do not write source until Apply. Drafts survive reloads and remain after **Done editing**. Use draft undo to undo an edit, or discard to restore the source values.
 
+### Adjust values precisely
+
+- **Number fields:** press ↑ or ↓ to step a value by 1, with Shift for 10 or Option (Alt) for 0.1. The unit is kept, and the change previews when you stop pressing. Drag a field's letter or icon, such as **W** or the radius icon, sideways to scrub the value. Type simple math such as `16*2` or `(24 - 8) / 2` and press Enter.
+- **Spacing on the canvas:** click a padding, margin or gap label to type a value, or drag the label to adjust it and release to preview. In the label's editor, ↑ and ↓ step the value and Enter applies it.
+- **Measure distances:** with an element selected, hold Option (Alt) and point at another element. Red lines show the distance to it, or to each edge of a parent. Release Option to see the spacing overlay again.
+- **Colours:** a colour field's swatch shows the colour of its theme token, such as `ember`. Click the swatch to choose from the app's theme colours first, or enter a custom value. A raw colour that is not one of the theme's tokens shows a warning icon, because it will not follow light and dark mode.
+- **Alignment:** in a flex container, the 3×3 grid sets alignment on both axes in one change, so one undo reverts both. It follows the direction the container renders. **Distribute** still offers the space-between options.
+- **Sizing:** beside Width and Height, choose **Hug** (fit the content, `auto`), **Fill** (`100%` of the parent), or **Fixed** (starts from the element's current rendered size).
+
 Use the chain control to link spacing or corner values. Unlink them to edit each value separately. Shared-style edits affect other elements that use that style. For a responsive expression, choose **Override** only when you want a static replacement.
 
 Apply checks source hashes and validates the complete batch with the Exact compiler before writing. If source has changed externally, discard the stale draft before editing again. Use source control to revert an applied batch. Draft undo cannot reverse it.

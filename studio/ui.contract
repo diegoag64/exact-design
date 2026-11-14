@@ -400,12 +400,12 @@ component InlineField
   view
     row class=FieldShell flex=1
       if icon != "" or prefix != ""
-        row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" aria-hidden=true
+        row width=26 align-self="stretch" flex-shrink=0 align-items="center" justify-content="center" color="ink.muted" cursor="ew-resize" aria-hidden=true data-scrub=true
           if icon != ""
             Icon(name=icon, size=14, angle=0)
           else
             text prefix font="type.caption"
-      input value=value change=change class=Field flex=1 background-color="transparent" padding-left=(prefix == "" and icon == "" ? 8 : 0) aria-label=accessibleLabel data-tip=(hint == "" ? accessibleLabel : hint) testId=testId disabled=disabled
+      input value=value change=change class=Field flex=1 background-color="transparent" padding-left=(prefix == "" and icon == "" ? 8 : 0) aria-label=accessibleLabel data-tip=(hint == "" ? accessibleLabel : hint) testId=testId disabled=disabled data-nudge="commit"
 
 component PropertyField
   props

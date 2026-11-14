@@ -6,6 +6,10 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Added
 
+- Precise number editing. In the inspector, ↑ and ↓ step a value (Shift by 10, Option by 0.1) and keep its unit, dragging a field's letter or icon scrubs it, and math such as `16*2` evaluates on Enter. Canvas spacing labels can be dragged to adjust padding, margins and gaps.
+- Hold Option (Alt) over another element to measure the distance from the selection to it, or to each edge of its parent.
+- Theme colours in the inspector. Colour fields show the swatch of their theme token, such as `ember`. The swatch opens a picker that lists the app's theme colours first, with a custom value below, and raw colours that are not theme tokens are flagged.
+- A 3×3 alignment grid for flex containers that sets both axes as one change, and Hug, Fill and Fixed sizing for width and height.
 - Native iOS previews. The **Native preview** drawer shows the selected screen as the app's native build renders it in the iOS Simulator, with its UIKit tab bar, sheets and Liquid Glass controls, on iPhone SE, iPhone 17, iPhone 17 Pro Max or iPad Pro 11 in light or dark appearance. Open it from the bottom toolbar, the screen's inspector or the canvas context menu. The canvas keeps the editable web frames, so you can edit the app with the drawer open. **Refresh** builds the app when its source changed, opens the route through its deep link and captures it; **Refresh all** captures every connected screen whose screenshot is missing or stale. While it works, the drawer lists the build, simulator and capture steps with a timer, the crate being compiled, capture progress, and the last build's duration. It notes when unapplied draft edits are not yet in the native build, and shows stale screenshots and errors such as missing Xcode or low disk space. Refreshes keep the app running between captures and reuse current screenshots and builds.
 - **Test remotely** on [Expo Simulators](https://docs.expo.dev/eas/simulators/) from the Native preview drawer. Connect an Expo access token once per project. Then one click builds your latest saved code, starts a cloud iPhone, uploads the app and opens the selected screen. **Open in Simulator** then shows the selected screen on the running iPhone in a new tab, in a few seconds, and uploads a new build first when your code changed. Sessions stop with **Stop**, after 15 idle minutes, or when the studio stops.
 - Ember opens any route from a `web+ember://` link, and the first native build records its iOS host in `app.json`.
@@ -18,6 +22,8 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Fixed
 
+- The inspector's **Flow** shows the direction an element renders when its source leaves `flex-direction` unset. A button or row laid out as a row read as Column.
+- Draft previews of a theme colour named like a CSS colour keyword, such as `AccentColor`, show the theme's value. The preview showed the browser's system accent instead.
 - Clicking the selected element again no longer hides its spacing overlay.
 - Every gap in a selected flex container now shows its value on the canvas, not just the largest one. Hovering any gap highlights all the gaps that share that value. While you edit one, the others show the new value as you type, and the tooltip says how many gaps it changes.
 

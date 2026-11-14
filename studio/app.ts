@@ -161,13 +161,13 @@ const sources: Sources = {
     }});
   },
   design: async ([op,session,url,version,row,value,timestamp], _store, storage) => {
-    const empty={operation:op,historyChanged:false,instances:1,draftCount:0,draftState:'',draftError:'',canApply:false,ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,selectionRevision:0,message:'',rows:[],availableProperties:[],canUndo:false,applied:false,draftFiles:[],spacingId:'',spacingPlan:'',spacingFrame:'',spacingInputs:[]};
+    const empty={operation:op,historyChanged:false,instances:1,draftCount:0,draftState:'',draftError:'',canApply:false,ok:false,error:'',session,origin:'',bridgeOrigin:'',tree:[],crumbs:[],selectedLabel:'',restoring:false,selecting:false,source:'',component:'',version:0,selectionRevision:0,message:'',rows:[],availableProperties:[],canUndo:false,applied:false,draftFiles:[],spacingId:'',spacingPlan:'',spacingFrame:'',spacingInputs:[],colors:[]};
     try {
       await drafts.load(storage.fs);
       const origin=url?new URL(url).origin:designOrigins.get(session)??'';
       const previous=drafts.get(origin);
       const draftState=op==='open'?previous:'';
-      if(['edit','field','spacing','override','add-property','undo','revert','discard','apply'].includes(op))await history.load(storage.fs);
+      if(['edit','field','align','spacing','override','add-property','undo','revert','discard','apply'].includes(op))await history.load(storage.fs);
       const response=await fetch(`${DISCOVERY_API}/design`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({op,session,url:origin,version,row:op==='open'?scoped(row):row,value,draftState})});
       let result=await response.json();
       if(typeof result.spacingFrame==='string')result.spacingFrame=unscoped(result.spacingFrame);
@@ -175,7 +175,7 @@ const sources: Sources = {
       if(op==='open'&&result.ok){designOrigins.set(result.session,origin);if(result.bridgeOrigin)previewBridges.set(origin,result.bridgeOrigin);}
       if(result.ok&&typeof result.draftState==='string'&&origin){
         const changes=draftChanges(previous,result.draftState,op==='apply');
-        if(['edit','field','spacing','override','add-property','undo','revert','discard','apply'].includes(op)&&changes.length){
+        if(['edit','field','align','spacing','override','add-property','undo','revert','discard','apply'].includes(op)&&changes.length){
           await history.append(storage.fs,{time:new Date(timestamp).toISOString(),kind:op==='apply'?'apply':op==='undo'?'undo':op==='revert'?'revert':op==='discard'?'discard':'draft',project:origin,label:op==='apply'?'Apply to code':op==='undo'?'Undo draft':op==='revert'?'Revert change':op==='discard'?'Discard draft':'Edit '+[...new Set(changes.map(c=>c.property))].join(', '),target:result.selectedLabel||result.source||'App design',changes,beforeState:previous,afterState:result.draftState});
           result.historyChanged=true;
         }

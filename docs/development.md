@@ -90,6 +90,8 @@ The root launchers set `EXACT_FEEDBACK=0`. Generated SDK instructions describe a
 | `tools/layout-source.ts`, `tools/source-properties.ts` | Source addresses and compiler-validated writes |
 | `tools/inspector-fields.ts`, `tools/property-catalog.ts` | Property controls and writable defaults |
 | `tools/design-preview-client.js`, `tools/preview-channel.ts` | Temporary preview edits and selection feedback |
+| `tools/spacing-client.js`, `tools/spacing-geometry.js` | Spacing overlay geometry and Alt-hover distances |
+| `studio/modules/web/number-fields.js` | Number-field arrow keys, scrubbing and math |
 | `tools/element-bridge.ts`, `tools/element-bridge-client.js` | Preview inspection and element navigation |
 | `tools/event-stream.ts`, `tools/shared-runtime.ts` | Shared connections and the pinned runtime adapter |
 | `studio/design-history.ts`, `studio/draft-review.ts` | Persistent timeline and draft review model |

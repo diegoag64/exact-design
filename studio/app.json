@@ -33,7 +33,10 @@
   },
   "data": [
     "canvas-editing",
+    "nudge",
     "preview-effects",
+    "scrub",
+    "scrub-spacing",
     "tip"
   ]
 }

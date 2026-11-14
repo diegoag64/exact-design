@@ -3,6 +3,7 @@
 import {installCanvasNavigation} from './canvas-navigation.js';
 import {installMenus} from './menus.js';
 import {installTooltips} from './tooltips.js';
+import {installNumberFields} from './number-fields.js';
 const hosts=new WeakMap();
 const FRAME='#canvas-stage > [data-testid^="frame-"]',DETAIL='exact-design:preview-detail';
 // Below this zoom a backdrop blur spans a few screen pixels, but the GPU still
@@ -11,7 +12,7 @@ const LOW_DETAIL_BELOW=0.15,FULL_DETAIL_ABOVE=0.18;
 class PreviewEngines {
   frames=new Map();
   constructor(root){
-    this.root=root;this.stopNavigation=installCanvasNavigation(root);this.stopMenus=installMenus(root);this.stopTooltips=installTooltips(root);
+    this.root=root;this.stopNavigation=installCanvasNavigation(root);this.stopMenus=installMenus(root);this.stopTooltips=installTooltips(root);this.stopNumberFields=installNumberFields(root);
     // Exact owns the transforms. This browser-only hint keeps each live preview
     // composited while its camera scale changes, without flattening the world.
     this.paintStyle=document.createElement('style');
@@ -26,6 +27,9 @@ class PreviewEngines {
     this.zoom=new MutationObserver(()=>this.zoomChanged());
     this.zoom.observe(root,{subtree:true,attributes:true,attributeFilter:['style','data-preview-effects']});
     this.loaded=e=>{if(e.target.matches?.(`${FRAME} iframe`))this.detail(e.target);};
+    // Alt-hover distances: keys reach the studio, not the previews, while the studio has focus.
+    this.alt=e=>{if(e.type==='blur'?e.target===window:e.key==='Alt')for(const frame of this.root.querySelectorAll(`${FRAME} iframe`))frame.contentWindow?.postMessage({kind:'exact-design:alt',down:e.type==='keydown'},'*');};
+    for(const type of ['keydown','keyup','blur'])addEventListener(type,this.alt,true);
     root.addEventListener('load',this.loaded,true);
     this.update();this.zoomChanged();
   }
@@ -54,7 +58,7 @@ class PreviewEngines {
     for(const frame of this.root.querySelectorAll(`${FRAME} iframe`))this.detail(frame);
   }
   detail(frame){frame.contentWindow?.postMessage({kind:DETAIL,...this.sent},'*');}
-  close(){this.stopNavigation();this.stopMenus();this.stopTooltips();this.observer.disconnect();this.zoom.disconnect();this.root.removeEventListener('load',this.loaded,true);this.paintStyle.remove();for(const frame of this.frames.values())frame.remove();this.frames.clear();}
+  close(){for(const type of ['keydown','keyup','blur'])removeEventListener(type,this.alt,true);this.stopNavigation();this.stopMenus();this.stopTooltips();this.stopNumberFields();this.observer.disconnect();this.zoom.disconnect();this.root.removeEventListener('load',this.loaded,true);this.paintStyle.remove();for(const frame of this.frames.values())frame.remove();this.frames.clear();}
 }
 export function element(context){
   if(context.hatch==='preview-engines'&&!hosts.has(context.element))hosts.set(context.element,new PreviewEngines(context.element));

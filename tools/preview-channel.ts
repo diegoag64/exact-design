@@ -8,7 +8,7 @@ export class PreviewChannel {
   measurement=emptySpacing();
   listeners=new Set<ReadableStreamDefaultController<Uint8Array>>();
   snapshot(){return {revision:this.revision,updateRevision:this.updateRevision,measurement:this.measurement};}
-  publish(update=false,measurement?:{frame:string;id:string;plan:string;boxes:SpacingBox[]}){
+  publish(update=false,measurement?:{frame:string;id:string;plan:string;width:number;height:number;direction:string;boxes:SpacingBox[]}){
     if(measurement)this.measurement=measurement;
     if(update)this.updateRevision++;
     this.revision++;

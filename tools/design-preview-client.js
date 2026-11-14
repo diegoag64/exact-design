@@ -3,11 +3,17 @@ export function designPreview(){
   const sheet=document.createElement('style');sheet.dataset.exactDesignDraft='';document.head.append(sheet);
   let patches=[],sequence=0,table=null,tablePlan='',last='';
   async function cssValue(property,value){
-    if(CSS.supports(property,value))return value;
+    // A theme name wins over CSS: `AccentColor` is the app's tint in source, but the browser's system accent in CSS.
+    const literal=/^[#\d.-]|\(/.test(value);
+    if(literal&&CSS.supports(property,value))return value;
     const plan=globalThis.exact?.plan;
     if(tablePlan!==plan){table=await(await fetch('dev-inspect.json',{cache:'no-store'})).json();tablePlan=table.plan;}
     const token=Object.entries(table?.props??{}).find(([,name])=>name===value)?.[0];
     if(token&&/^--[\w-]+$/.test(token))return `var(${token})`;
+    // A role such as AccentColor has no variable; its folded value is the colour the app draws.
+    const folded=table?.tokens?.[value];
+    if(Array.isArray(folded)&&typeof folded[0]==='string'&&CSS.supports(property,folded[0]))return folded[0];
+    if(CSS.supports(property,value))return value;
     throw new Error(`Cannot preview ${property}: ${value}`);
   }
   const texts=new Map();
