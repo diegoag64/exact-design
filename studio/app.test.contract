@@ -624,6 +624,47 @@ test "navigate rendered layers and keep selection through edits and undo"
   expect tree missing "spacing-overlay"
   expect tree has "screens-panel"
 
+test "label every gap and show that they share one value"
+  size 1440x900
+  request POST "http://127.0.0.1:5176/mode" {"mode":"elements-gaps"}
+  tap "view-view-1"
+  clock data
+  type "preview-url" "http://127.0.0.1:5176/"
+  type "preview-url" key "Enter"
+  clock data
+  tap "edit-app"
+  clock data
+  clock +3500 real
+  clock data
+  request POST "http://127.0.0.1:5176/fixture/select" {"site":1}
+  clock +1000 real
+  clock data
+  expect text "selected-element-name" == "Header"
+  clock +1000 real
+  expect tree has "spacing-overlay"
+  expect tree has "spacing-row-gap"
+  expect tree has "spacing-dot-gap"
+  expect tree missing "spacing-linked"
+  tap "spacing-row-gap" hover
+  clock data
+  expect state spacingHover == "row-gap"
+  expect tree has "spacing-linked"
+  tap "spacing-row-gap"
+  clock data
+  expect state spacingHover == ""
+  expect tree has "spacing-value"
+  expect tree has "spacing-linked"
+  type "spacing-value" "20"
+  expect text "spacing-mirror-row-gap" == "20"
+  type "spacing-value" key "Escape"
+  clock data
+  expect tree missing "spacing-value"
+  expect tree missing "spacing-mirror-row-gap"
+  tap "selected-element-name" hover
+  clock data
+  expect state spacingHover == ""
+  expect tree missing "spacing-linked"
+
 test "reveal an offscreen canvas selection and reveal it again after manual scrolling"
   size 1440x900
   request POST "http://127.0.0.1:5176/mode" {"mode":"elements-long"}

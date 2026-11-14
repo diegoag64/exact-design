@@ -21,13 +21,21 @@ export function measureSpacing(el,styleOf,viewport){
     if(n<=0||width<=0||height<=0||boxes.length>=36)return;
     const x1=Math.max(x,clip.left),y1=Math.max(y,clip.top),x2=Math.min(x+width,clip.right),y2=Math.min(y+height,clip.bottom);
     if(x2<=x1||y2<=y1)return;
-    boxes.push({key:property+'-'+boxes.length,property,x:x1,y:y1,width:x2-x1,height:y2-y1,labelX:(x1+x2)/2,labelY:(y1+y2)/2,value:value(n),label:false});
+    // Keys count within a property, so clipping one kind never renumbers another.
+    boxes.push({key:property+'-'+boxes.filter(b=>b.property===property).length,property,x:x1,y:y1,width:x2-x1,height:y2-y1,labelX:(x1+x2)/2,labelY:(y1+y2)/2,value:value(n),label:false});
   }
   const pt=number(css.paddingTop),pr=number(css.paddingRight),pb=number(css.paddingBottom),pl=number(css.paddingLeft);
   add('padding-top',left,top,right-left,pt*sy,pt);
   add('padding-bottom',left,bottom-pb*sy,right-left,pb*sy,pb);
   add('padding-left',left,top+pt*sy,pl*sx,Math.max(0,bottom-top-(pt+pb)*sy),pl);
   add('padding-right',right-pr*sx,top+pt*sy,pr*sx,Math.max(0,bottom-top-(pt+pb)*sy),pr);
+  // Margins sit outside the border box. Negative and auto margins have no
+  // area to draw, so only positive ones are shown.
+  const mt=number(css.marginTop),mr=number(css.marginRight),mb=number(css.marginBottom),ml=number(css.marginLeft);
+  add('margin-top',r.left,r.top-mt*sy,r.width,mt*sy,mt);
+  add('margin-bottom',r.left,r.bottom,r.width,mb*sy,mb);
+  add('margin-left',r.left-ml*sx,r.top,ml*sx,r.height,ml);
+  add('margin-right',r.right,r.top,mr*sx,r.height,mr);
   if(css.display.includes('flex')){
     const horizontal=css.flexDirection.startsWith('row');
     const children=[...el.children].filter(child=>{
@@ -61,11 +69,12 @@ export function measureSpacing(el,styleOf,viewport){
       else add('column-gap',start,top+pt*sy,scaledCrossGap,bottom-top-(pt+pb)*sy,crossGap);
     }
   }
-  // Repeated gaps get one value, placed on the largest visible segment.
-  for(const property of new Set(boxes.map(b=>b.property))){
-    const candidates=boxes.filter(b=>b.property===property).sort((a,b)=>b.width*b.height-a.width*a.height);
-    candidates[0].label=true;
-    if(property==='column-gap')candidates[0].labelY=Math.max(10,candidates[0].y-10);
+  // Every visible segment carries its value; repeated gaps share one property,
+  // so the studio shows them as linked. Column-gap labels sit above the strip,
+  // which is usually narrower than the label.
+  for(const box of boxes){
+    box.label=true;
+    if(box.property==='column-gap')box.labelY=Math.max(10,box.y-10);
   }
   return boxes;
 }

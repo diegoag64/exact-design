@@ -26,9 +26,18 @@ theme
   ink.diff-add = light-dark(#146c34, #86e3a6)
   ink.diff-remove = light-dark(#b42318, #ffa8a8)
   paper = #ffffff scheme=fixed
-  spacing.wash = #d946ef14 scheme=fixed
-  spacing.edge = #c026d34d scheme=fixed
-  spacing.ink = light-dark(#a21caf, #efabf5)
+  spacing.padding = #22c55e1f scheme=fixed
+  spacing.padding-strong = #22c55e40 scheme=fixed
+  spacing.padding-edge = #16a34a73 scheme=fixed
+  spacing.padding-ink = light-dark(#15803d, #86efac)
+  spacing.margin = #f973161f scheme=fixed
+  spacing.margin-strong = #f9731640 scheme=fixed
+  spacing.margin-edge = #ea580c73 scheme=fixed
+  spacing.margin-ink = light-dark(#c2410c, #fdba74)
+  spacing.gap = #d946ef14 scheme=fixed
+  spacing.gap-strong = #d946ef38 scheme=fixed
+  spacing.gap-edge = #c026d373 scheme=fixed
+  spacing.gap-ink = light-dark(#a21caf, #efabf5)
   radius.control: length = 5px
   radius.panel: length = 8px
   radius.menu: length = 12px

@@ -27,7 +27,13 @@ fn swatchable(property: string, value: string): bool = (property == "color" or p
 fn magnitude(n: number): number = max(n, -n)
 fn panEase(t: number): number = 1 - (1 - t) * (1 - t) * (1 - t)
 fn layerKind(kind: string): string = kind == "text" or kind == "span" ? "Text" : kind == "button" ? "Button" : kind == "row" ? "Row" : kind == "column" ? "Column" : kind == "scroll" ? "Scroll" : kind == "grid" ? "Grid" : kind == "image" or kind == "img" ? "Image" : kind == "screen" or kind == "main" ? "Screen" : kind == "input" ? "Input" : kind == "rectangle" ? "Rectangle" : "Container"
-fn spacingName(property: string): string = property == "padding-top" ? "Top padding" : property == "padding-right" ? "Right padding" : property == "padding-bottom" ? "Bottom padding" : property == "padding-left" ? "Left padding" : property == "row-gap" ? "Vertical gap" : "Horizontal gap"
+fn isSpacing(property: string): bool = property.startsWith("padding") or property.startsWith("margin") or property == "gap" or property.endsWith("-gap")
+fn spacingKind(property: string): string = property == "gap" or property.endsWith("-gap") ? "gap" : property.startsWith("margin") ? "margin" : "padding"
+fn spacingFill(property: string, lit: bool): string = spacingKind(property) == "gap" ? (lit ? "spacing.gap-strong" : "spacing.gap") : spacingKind(property) == "margin" ? (lit ? "spacing.margin-strong" : "spacing.margin") : (lit ? "spacing.padding-strong" : "spacing.padding")
+fn spacingEdge(property: string): string = spacingKind(property) == "gap" ? "spacing.gap-edge" : spacingKind(property) == "margin" ? "spacing.margin-edge" : "spacing.padding-edge"
+fn spacingInk(property: string): string = spacingKind(property) == "gap" ? "spacing.gap-ink" : spacingKind(property) == "margin" ? "spacing.margin-ink" : "spacing.padding-ink"
+fn spacingHatch(property: string, lit: bool): string = spacingKind(property) != "gap" ? "none" : lit ? "repeating-linear-gradient(-45deg, #c026d38c 0 1px, transparent 1px 6px)" : "repeating-linear-gradient(-45deg, #c026d359 0 1px, transparent 1px 6px)"
+fn spacingName(property: string): string = property == "padding-top" ? "Top padding" : property == "padding-right" ? "Right padding" : property == "padding-bottom" ? "Bottom padding" : property == "padding-left" ? "Left padding" : property == "row-gap" ? "Vertical gap" : property == "column-gap" ? "Horizontal gap" : property == "margin-top" ? "Top margin" : property == "margin-right" ? "Right margin" : property == "margin-bottom" ? "Bottom margin" : "Left margin"
 
 fn snappedDelta(targets: SnapTarget[], origin: number, delta: number, zoom: number): number = match first(sortBy(targets, t => magnitude(t.value - origin - delta))) { case some(t) => magnitude(t.value - origin - delta) <= 8 / zoom ? t.value - origin : delta, case none => delta }
 
@@ -276,6 +282,7 @@ shape SpacingBox
   labelY: number
   value: string
   label: bool
+  linked: number
 
 shape SpacingMeasurement
   frame: string
@@ -496,6 +503,8 @@ component Studio
     after(1, previewUpdated)
   state spacingProperty = ""
   state spacingValue = ""
+  state spacingBox = ""
+  state spacingHover = ""
   state designSession = ""
   state hoveredElement = ""
   action hoverElement(id: string, on: bool)
@@ -542,6 +551,7 @@ component Studio
   action finishEditing
     reviewOpen = false
     spacingProperty = ""
+    spacingHover = ""
     hoveredElement = ""
     designWriting = true
     send designChanged = design("close", designSession, "", 0, "", "", time.epochAtZero + performanceNow())
@@ -584,10 +594,15 @@ component Studio
     send designChanged = design("edit", designSession, "", designVersion, row, value, time.epochAtZero + performanceNow())
   action editSpacing(value: string)
     spacingValue = value
-  action openSpacing(property: string, value: string)
+  action openSpacing(property: string, value: string, box: string)
     spacingProperty = property
+    spacingBox = box
     spacingValue = value
+    spacingHover = ""
     selectText("spacing-value")
+  action hoverSpacing(property: string, on: bool)
+    if on or spacingHover == property
+      spacingHover = on ? property : ""
   action cancelSpacing
     spacingProperty = ""
   action spacingKey(key: string)
@@ -1145,19 +1160,26 @@ component Studio
                           if measured.id != "" and measured.id == result.spacingId and measured.plan == result.spacingPlan and measured.frame == result.spacingFrame
                             for v in scene.views.filter(v => v.id == measured.frame) key=v.id
                               column position="absolute" inset=0 pointer-events="none" testId="spacing-overlay"
-                                for box in measured.boxes key=box.key
-                                  column position="absolute" left=(cameraX + (v.x + box.x) * zoom) top=(cameraY + (v.y + box.y) * zoom) width=(box.width * zoom) height=(box.height * zoom) background-color="spacing.wash" border="1px solid spacing.edge" box-sizing="border-box" aria-hidden=true
-                                  if box.label and max(box.width, box.height) * zoom >= 32
-                                    for targets in [result.spacingInputs.filter(p => p.property == box.property)] key=box.property
-                                      if targets.length == 0
-                                        text box.value position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" font-size="0.625rem" font-weight=500 color="spacing.ink" background-color="surface.panel" padding=3 border-radius=4 pointer-events="auto" data-tip=`${spacingName(box.property)} · Computed` testId=`spacing-readonly-${box.property}`
-                                      else
-                                        for target in targets key=target.property
-                                          if spacingProperty == target.property
-                                            input id="spacing-value" value=spacingValue input=editSpacing key=spacingKey blur=cancelSpacing position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" width=72 height=26 padding=4 box-sizing="border-box" border="1px solid spacing.ink" border-radius=5 background-color="surface.panel" color="ink.primary" font="type.caption" text-align="center" pointer-events="auto" aria-label=spacingName(box.property) data-tip="Enter to apply · Escape to cancel" testId="spacing-value"
-                                          else
-                                            button press=openSpacing(target.property, target.value) position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" display="flex" align-items="center" justify-content="center" box-sizing="border-box" min-width="1.5rem" min-height="1.25rem" padding="0.1875rem" border="1px solid spacing.edge" border-radius=4 background-color="surface.panel" color="spacing.ink" font-size="0.625rem" font-weight=600 pointer-events="auto" aria-label=`Edit ${spacingName(box.property)}` data-tip=(target.shared ? `${spacingName(box.property)} · Shared style` : spacingName(box.property)) testId=`spacing-${box.property}`
-                                              text box.value
+                                for hosts in [measured.boxes.filter(b => b.property == spacingProperty and b.label and max(b.width, b.height) * zoom >= 32).map(b => b.key)] key=v.id
+                                  for host in [hosts.includes(spacingBox) ? spacingBox : match hosts.at(0) { case some(k) => k, case none => "" }] key=v.id
+                                    for box in measured.boxes key=box.key
+                                      for linked in [box.linked] key=box.key
+                                        for lit in [spacingHover == box.property or spacingProperty == box.property] key=box.key
+                                          column position="absolute" left=(cameraX + (v.x + box.x) * zoom) top=(cameraY + (v.y + box.y) * zoom) width=(box.width * zoom) height=(box.height * zoom) background-color=spacingFill(box.property, lit) background-image=spacingHatch(box.property, lit) border-width=1 border-style=(spacingKind(box.property) == "margin" ? "dashed" : "solid") border-color=spacingEdge(box.property) box-sizing="border-box" aria-hidden=true testId=(lit ? "spacing-linked" : "spacing-box")
+                                          if box.label and max(box.width, box.height) * zoom >= 32
+                                            for tip in [linked > 1 ? `${spacingName(box.property)} · Linked across ${linked} gaps` : spacingName(box.property)] key=box.key
+                                              for targets in [result.spacingInputs.filter(p => p.property == box.property)] key=box.property
+                                                if targets.length == 0
+                                                  text box.value position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" font-size="0.625rem" font-weight=500 color=spacingInk(box.property) background-color="surface.panel" padding=3 border-radius=4 pointer-events="auto" hover=hoverSpacing(box.property) data-tip=`${tip} · Computed` testId=`spacing-readonly-${box.property}`
+                                                else
+                                                  for target in targets key=target.property
+                                                    if spacingProperty == target.property and host == box.key
+                                                      input id="spacing-value" value=spacingValue input=editSpacing key=spacingKey blur=cancelSpacing position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" width=72 height=26 padding=4 box-sizing="border-box" border-width=1 border-style="solid" border-color=spacingInk(box.property) border-radius=5 background-color="surface.panel" color="ink.primary" font="type.caption" text-align="center" pointer-events="auto" aria-label=spacingName(box.property) data-tip=(linked > 1 ? `Updates all ${linked} gaps · Enter to apply · Escape to cancel` : "Enter to apply · Escape to cancel") testId="spacing-value"
+                                                    else if spacingProperty == target.property
+                                                      text (spacingValue == "" ? box.value : spacingValue) position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" display="flex" align-items="center" justify-content="center" box-sizing="border-box" min-width="1.5rem" min-height="1.25rem" padding="0.1875rem" border-width=1 border-style="solid" border-color=spacingInk(box.property) border-radius=4 background-color="surface.panel" color=spacingInk(box.property) font-size="0.625rem" font-weight=600 aria-hidden=true testId=`spacing-mirror-${box.property}`
+                                                    else
+                                                      button press=openSpacing(target.property, target.value, box.key) hover=hoverSpacing(box.property) position="absolute" left=(cameraX + (v.x + box.labelX) * zoom) top=(cameraY + (v.y + box.labelY) * zoom) translate="-50% -50%" display="flex" align-items="center" justify-content="center" box-sizing="border-box" min-width="1.5rem" min-height="1.25rem" padding="0.1875rem" border-width=1 border-style="solid" border-color=(lit ? spacingInk(box.property) : spacingEdge(box.property)) border-radius=4 background-color="surface.panel" color=spacingInk(box.property) font-size="0.625rem" font-weight=600 pointer-events="auto" aria-label=`Edit ${spacingName(box.property)}` data-tip=(target.shared ? `${tip} · Shared style` : tip) testId=`spacing-${box.property}`
+                                                        text box.value
                         case none
                           column display="none"
                     case none
@@ -1396,6 +1418,8 @@ component Studio
                                     column gap=4 min-width=0 width=((group == "Typography" and property.property != "font-family" and property.property != "color") or (group == "Layout" and (property.property.includes("width") or property.property.includes("height"))) or (group == "Position" and property.property != "position") or (group == "Appearance" and property.fields.length == 0) or (group == "Stroke" and property.property != "border-color") ? "calc(50% - 4px)" : "100%")
                                       if not (propertyPrefix(property.property) != "" and not property.readonly and property.fields.length == 0 and property.options.length == 0)
                                         row align-items="center" gap=2 height=20
+                                          if isSpacing(property.property)
+                                            column width=8 height=8 flex-shrink=0 margin-right=4 border-radius=2 background-color=spacingInk(property.property) aria-hidden=true data-tip=`Shown in ${spacingKind(property.property) == "padding" ? "green" : spacingKind(property.property) == "margin" ? "orange" : "magenta"} on the canvas` testId=`spacing-dot-${spacingKind(property.property)}`
                                           text property.name font="type.caption" color="ink.secondary" flex=1 min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" data-tip=`${property.property} · ${property.added ? "Editing adds a local property" : property.binding}`
                                           if property.shared
                                             column color="ink.selected" width=20 height=20 align-items="center" justify-content="center" data-tip=`Shared style · ${property.binding} · updates every use` aria-label="Shared source style"
