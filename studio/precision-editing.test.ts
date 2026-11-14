@@ -156,6 +156,24 @@ test('precision editing: nudges, math, distances, theme colours, alignment and s
     expect(await ratio.inputValue()).toBe('16/9');
     await frame.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="create"]')!).aspectRatio==='16 / 9',undefined,{polling:50});
 
+    // Stretch and Baseline have no grid cell; they stay beside the grid.
+    await page.locator('[data-testid="align-stretch"]').click();await settled();
+    await frame.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="create"]')!).alignItems==='stretch',undefined,{polling:50});
+    expect(await page.locator('[data-testid="align-stretch"]').getAttribute('aria-pressed')).toBe('true');
+
+    // A drag whose release never reaches the studio (it lands over a preview) restores the field and stages nothing.
+    const radius=page.getByRole('textbox',{name:'Border radius all',exact:true});
+    await radius.evaluate((el:Element)=>el.scrollIntoView({block:'center'}));
+    const radiusStart=await radius.inputValue(),draftsBefore=await drafts();
+    const grip=(await radius.locator('xpath=preceding-sibling::*[1]').boundingBox())!;
+    await page.mouse.move(grip.x+grip.width/2,grip.y+grip.height/2);await page.mouse.down();
+    await page.mouse.move(grip.x+grip.width/2+20,grip.y+grip.height/2,{steps:4});
+    expect(await radius.inputValue()).not.toBe(radiusStart);
+    await page.evaluate(()=>dispatchEvent(new PointerEvent('pointermove',{pointerId:1,buttons:0,bubbles:true})));
+    expect(await radius.inputValue()).toBe(radiusStart);
+    await page.mouse.up();await page.waitForTimeout(600);await settled();
+    expect(await radius.inputValue()).toBe(radiusStart);expect(await drafts()).toBe(draftsBefore);
+
     // Dragging a canvas spacing label adjusts it and applies on release.
     // Labels show once a segment is large enough on screen; zoom in to the selection.
     const label=page.locator('[data-testid="spacing-padding-left"]');

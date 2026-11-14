@@ -156,7 +156,8 @@ export class DesignSession {
   async loadColors(){
     const files=JSON.stringify(this.files);if(files===this.colorFiles)return;
     this.colorFiles=files;
-    try{this.colors=themeColors(await this.call({method:'describe'}));}catch{this.colors=[];}
+    // A failed read (the build still starting) is retried on the next poll rather than kept until files change.
+    try{this.colors=themeColors(await this.call({method:'describe'}));}catch{this.colors=[];this.colorFiles='';}
   }
   selectionTarget(event:any){
     // A reload/shared state checkpoint can give several viewports the same

@@ -522,11 +522,13 @@ component Studio
   resource previewSignal = previewSignal(designSession) as shape PreviewSignal else empty()
   derive spacingMeasured = editing ? some(previewSignal.measurement) : none
   // The preview's measurement of the current selection only: one from the previous selection can still be current.
-  derive selectionMeasured = match designChanged { case some(r) => editing and previewSignal.measurement.id != "" and previewSignal.measurement.id == r.spacingId and previewSignal.measurement.frame == r.spacingFrame, case none => false }
+  derive selectionMeasured = match designChanged { case some(r) => editing and previewSignal.measurement.id != "" and previewSignal.measurement.id == r.spacingId and previewSignal.measurement.frame == r.spacingFrame and previewSignal.measurement.plan == r.spacingPlan, case none => false }
   derive selectionWidth = selectionMeasured ? previewSignal.measurement.width : 0
   derive selectionHeight = selectionMeasured ? previewSignal.measurement.height : 0
   // The flex direction the preview renders for the selection; source may leave it unset.
-  derive selectionFlow = match designChanged { case some(r) => (previewSignal.measurement.id == r.spacingId and previewSignal.measurement.direction != "" ? previewSignal.measurement.direction : rowValue(r.rows, "flex-direction")), case none => "" }
+  derive selectionFlow = match designChanged { case some(r) => (selectionMeasured and previewSignal.measurement.direction != "" ? previewSignal.measurement.direction : rowValue(r.rows, "flex-direction")), case none => "" }
+  // The alignment grid maps flex axes, so it shows only once the preview confirms the selection renders as flex.
+  derive selectionFlex = selectionMeasured and previewSignal.measurement.direction != ""
   derive themeColors = match designChanged { case some(r) => r.colors, case none => [] }
   state previewUpdateSeen = -1
   action previewUpdated
@@ -633,7 +635,9 @@ component Studio
   // Hug keeps the content's size, Fill takes the parent's, and Fixed starts from the size the preview measured.
   action sizeDesign(row: string, property: string, mode: string)
     let measured = property == "width" ? selectionWidth : selectionHeight
-    editDesign(row, mode == "hug" ? "auto" : mode == "fill" ? "100%" : `${measured > 0 ? measured : 100}`)
+    // Fixed needs the current selection's measurement; zero is a real size. The option is disabled until it arrives.
+    if mode != "fixed" or selectionMeasured
+      editDesign(row, mode == "hug" ? "auto" : mode == "fill" ? "100%" : `${measured}`)
   state colorRow = ""
   state colorValue = ""
   action openColor(row: string, value: string)
@@ -1523,14 +1527,20 @@ component Studio
                                                 InlineField(minimum=nudgeMin(property.property), prefix=fieldPrefix(field.label), icon="", value=field.value, accessibleLabel=`${property.name} ${field.label}`, hint=field.label, testId=`design-field-${property.id}-${field.id}`, disabled=designWriting, change=editDesignField(property.id, field.id))
                                       else if property.property == "text-content"
                                         textarea value=property.value change=editDesign(property.id) class=Field height=72 padding=8 resize="vertical" aria-label="Text content" disabled=designWriting
-                                      else if property.property == "align-items" and designRows.filter(r => r.property == "justify-content" and not r.readonly).length > 0
-                                        column gap=2 padding=2 align-self="flex-start" border-radius="radius.control" background-color="surface.field" role="group" aria-label="Alignment" testId="align-grid"
-                                          for r in [0, 1, 2] key=`${r}`
-                                            row gap=2
-                                              for c in [0, 1, 2] key=`${c}`
-                                                for on in [alignOn(selectionFlow, designRows, r, c)] key=`${c}`
-                                                  button press=alignDesign(r, c) class=Segment flex="none" width=26 height=20 padding=0 aria-label=`Align ${alignName(r, c).toLowerCase()}` aria-pressed=on data-tip=`${alignName(r, c)} · Sets alignment on both axes` disabled=designWriting testId=`align-${r}-${c}`
-                                                    column width=(on ? 8 : 3) height=(on ? 8 : 3) border-radius=(on ? 2 : 2) background-color=(on ? "accent" : "ink.muted") aria-hidden=true
+                                      else if property.property == "align-items" and selectionFlex and designRows.filter(r => r.property == "justify-content" and not r.readonly).length > 0
+                                        row gap=8 align-items="flex-start"
+                                          column gap=2 padding=2 align-self="flex-start" border-radius="radius.control" background-color="surface.field" role="group" aria-label="Alignment" testId="align-grid"
+                                            for r in [0, 1, 2] key=`${r}`
+                                              row gap=2
+                                                for c in [0, 1, 2] key=`${c}`
+                                                  for on in [alignOn(selectionFlow, designRows, r, c)] key=`${c}`
+                                                    button press=alignDesign(r, c) class=Segment flex="none" width=26 height=20 padding=0 aria-label=`Align ${alignName(r, c).toLowerCase()}` aria-pressed=on data-tip=`${alignName(r, c)} · Sets alignment on both axes` disabled=designWriting testId=`align-${r}-${c}`
+                                                      column width=(on ? 8 : 3) height=(on ? 8 : 3) border-radius=(on ? 2 : 2) background-color=(on ? "accent" : "ink.muted") aria-hidden=true
+                                          // Stretch and baseline have no cell: they stay one press away beside the grid.
+                                          column gap=2 padding=2 border-radius="radius.control" background-color="surface.field" role="group" aria-label="Cross-axis alignment"
+                                            for choice in ["stretch", "baseline"] key=choice
+                                              button press=editDesign(property.id, choice) class=Segment flex="none" height=20 padding="0 8px" aria-label=`Align items: ${choice == "stretch" ? "Stretch" : "Baseline"}` aria-pressed=(property.value == choice) data-tip=(choice == "stretch" ? "Stretch · Children fill the cross axis" : "Baseline · Children line up on their text baseline") disabled=designWriting testId=`align-${choice}`
+                                                text (choice == "stretch" ? "Stretch" : "Baseline") font="type.caption"
                                       else if property.property == "flex-direction" or property.property == "align-items" or property.property == "justify-content"
                                         row class=Segmented
                                           for choice in property.options key=choice.value
@@ -1546,7 +1556,7 @@ component Studio
                                             text propertyPrefix(property.property) font="type.caption"
                                           input value=property.value change=editDesign(property.id) class=Field flex=1 min-width=0 background-color="transparent" padding="0 2px 0 0" aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting data-tip=property.binding data-nudge="commit" data-nudge-min=nudgeMin(property.property)
                                           select value=sizeMode(property.value) change=sizeDesign(property.id, property.property) class=Field width=56 flex-shrink=0 padding="0 4px" background-color="transparent" color="ink.secondary" font="type.caption" aria-label=`${property.name} sizing` data-tip="Sizing · Hug fits the content · Fill takes the parent's size · Fixed sets a size" disabled=designWriting testId=`design-size-${property.property}`
-                                            option "Fixed" value="fixed"
+                                            option "Fixed" value="fixed" disabled=(sizeMode(property.value) != "fixed" and not selectionMeasured)
                                             option "Hug" value="hug"
                                             option "Fill" value="fill"
                                       else if isColor(property.property) and not property.readonly

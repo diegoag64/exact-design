@@ -28,7 +28,8 @@ class PreviewEngines {
     this.zoom.observe(root,{subtree:true,attributes:true,attributeFilter:['style','data-preview-effects']});
     this.loaded=e=>{if(e.target.matches?.(`${FRAME} iframe`))this.detail(e.target);};
     // Alt-hover distances: keys reach the studio, not the previews, while the studio has focus.
-    this.alt=e=>{if(e.type==='blur'?e.target===window:e.key==='Alt')for(const frame of this.root.querySelectorAll(`${FRAME} iframe`))frame.contentWindow?.postMessage({kind:'exact-design:alt',down:e.type==='keydown'},'*');};
+    // Option held for 0.1 steps in a field is not a measuring gesture; a release always clears.
+    this.alt=e=>{if(e.type==='keydown'&&e.target?.closest?.('input,textarea,select'))return;if(e.type==='blur'?e.target===window:e.key==='Alt')for(const frame of this.root.querySelectorAll(`${FRAME} iframe`))frame.contentWindow?.postMessage({kind:'exact-design:alt',down:e.type==='keydown'},'*');};
     for(const type of ['keydown','keyup','blur'])addEventListener(type,this.alt,true);
     root.addEventListener('load',this.loaded,true);
     this.update();this.zoomChanged();

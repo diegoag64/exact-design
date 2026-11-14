@@ -140,9 +140,13 @@ export function installNumberFields(root) {
     // Spacing labels stay buttons: a click without movement still opens the editor.
     if (!spacing) e.preventDefault();
     scrub = {handle, input, spacing, start: parsed, x: e.clientX, y: e.clientY, moved: false, id: e.pointerId};
+    // Keep the drag's events while the pointer crosses a live preview iframe, which would otherwise take them.
+    try { handle.setPointerCapture(e.pointerId); } catch {}
   };
   const pointermove = e => {
     if (!scrub || e.pointerId !== scrub.id) return;
+    // A release the studio never saw (outside the window, or over a preview after capture ended) ends the drag.
+    if (e.buttons === 0) { cancel(); return; }
     const dx = e.clientX - scrub.x, dy = scrub.y - e.clientY;
     if (!scrub.moved) {
       if (Math.hypot(dx, dy) < 3) return;
@@ -184,6 +188,9 @@ export function installNumberFields(root) {
   const cancel = () => {
     if (scrub?.spacing && scrub.moved && scrub.input?.isConnected) {
       scrub.input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', code: 'Escape', bubbles: true, cancelable: true}));
+    } else if (scrub?.moved && scrub.input?.isConnected) {
+      // An abandoned drag stages nothing: put back the value it started from.
+      write(scrub.input, formatNumber(scrub.start.value, scrub.start.unit));
     }
     end();
   };
