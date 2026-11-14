@@ -63,12 +63,15 @@ const sameRect=(a,b)=>near(a.x,b.x)&&near(a.y,b.y)&&near(a.w,b.w)&&near(a.h,b.h)
 const visibleIn=(e,c)=>!c||(e.y>=c.y-1&&e.y+e.h<=c.b+1&&e.x>=c.x-1&&e.x+e.w<=c.r+1);
 
 /** What a region measures: every element whose box lies inside it. Siblings with the same
- *  structure (heights of the element and its descendants) are labeled once: the first carries
+ *  structure and whole-pixel layout measurements are labeled once: the first carries
  *  a ×N badge and the rest become outlines. `media` are icons, images and inline SVGs. */
 export function measureRegion(records,media,R){
   const {byI,kids}=index(records);
   const leafCount=e=>(kids.get(e.i)?.length||0)+media.filter(m=>m.p===e.i).length;
-  const shape=e=>Math.round(e.h)+'('+[...(kids.get(e.i)||[]).map(shape),...media.filter(m=>m.p===e.i).map(m=>'m'+Math.round(m.h))].join(',')+')';
+  // Width is compared for the siblings themselves only: a child's width follows its text or value
+  // (a label, a progress fill), so rows of the same structure would never group.
+  const shape=(e,top=true)=>[...(top?[e.w]:[]),e.h,...e.pad,...e.gap,e.radius].map(Math.round).join(',')+';'+e.display+';'+e.dir+'('+
+    [...(kids.get(e.i)||[]).map(k=>shape(k,false)),...media.filter(m=>m.p===e.i).map(m=>'m'+Math.round(m.w)+','+Math.round(m.h))].join(';')+')';
   const inside=records.filter(e=>!e.decorative&&within(e,R)&&visibleIn(e,e.clip));
   const inM=new Set(inside.map(e=>e.i)),skip=new Set(),badges=[],repeats=[],siblings=new Map();
   for(const e of inside){if(!siblings.has(e.p))siblings.set(e.p,[]);siblings.get(e.p).push(e);}

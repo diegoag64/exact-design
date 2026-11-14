@@ -129,7 +129,7 @@ Password fields use bullets in readable text and measure their bars from those b
 
 The shortcuts work while plan view is on.
 
-To measure part of a screen, hold Shift and drag a rectangle over it. The region shows every padding, gap and margin inside it, the size of each surface and image, and the corner radius. Rows with the same structure are labeled once and marked, for example, ×3. Click **Copy** above the region to copy its spec as an indented outline, such as `Column "Energy" · 342 × 455 · padding 22 · gap 20 · radius 28`. Press Alt+A (Option+A) over a screen to measure the whole screen. Press Escape or click outside the region to clear it. Regions also work without plan view, over the app's real styling.
+To measure part of a screen, hold Shift and drag a rectangle over it. The region shows every padding, gap and margin inside it, the size of each surface and image, and the corner radius. Rows with the same structure and layout measurements are labeled once and marked, for example, ×3. Grouping compares each row's own width and height, and the heights, padding, gaps, radii and layout direction of everything inside it, rounded to whole pixels. Positions can differ, and so can the width of a child that follows its text or value. Click **Copy** above the region to copy its spec as an indented outline, such as `Column "Energy" · 342 × 455 · padding 22 · gap 20 · radius 28`. Press Alt+A (Option+A) over a screen to measure the whole screen. Press Escape or click outside the region to clear it. Regions also work without plan view, over the app's real styling.
 
 Labels keep the same size at every zoom. When labels would overlap, some wait until you zoom in.
 

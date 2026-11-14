@@ -81,6 +81,60 @@ test('the copied spec indents like the Layers panel and names each row by its fi
   ]);
 });
 
+// Two sibling cards at different x and y positions, each with a child and media.
+function cards(){
+  const records=[box(1,0,10,10,180,80,{surface:true,radius:12,pad:[8,8,8,8],display:'flex',gap:[8,8],media:1,hint:'First'}),
+    box(2,1,18,18,32,32),
+    box(3,0,200,110,180,80,{surface:true,radius:12,pad:[8,8,8,8],display:'flex',gap:[8,8],media:1,hint:'Second'}),
+    box(4,3,208,118,32,32)];
+  const media=[{p:1,x:58,y:18,w:24,h:24},{p:3,x:248,y:118,w:24,h:24}];
+  return {records,media,R:{x:0,y:0,w:390,h:200}};
+}
+
+const differences=[['width',{w:100}],['height',{h:60}],
+  ...[0,1,2,3].map(i=>['padding '+i,{pad:[8,8,8,8].map((v,j)=>i===j?24:v)}]),
+  ['row gap',{gap:[24,8]}],['column gap',{gap:[8,24]}],['radius',{radius:20}],
+  ['display',{display:'grid'}],['direction',{dir:'column'}]] as const;
+// A descendant's width follows its content, so only the siblings' own widths split a group.
+for(const [name,change] of differences)for(const descendant of [false,true])if(!(descendant&&name==='width'))test(`regions keep cards with differing ${descendant?'descendant ':''}${name} separate`,()=>{
+  const {records,media,R}=cards();
+  Object.assign(records[descendant?3:2],change);
+  const m=measureRegion(records,media,R),spec=regionSpec(R,m,records);
+  expect(m.badges).toEqual([]);
+  expect(m.repeats).toEqual([]);
+  expect(m.live.map(e=>e.i)).toEqual([1,2,3,4]);
+  expect(m.sizes.filter(e=>e.i===1||e.i===3).map(e=>e.i)).toEqual([1,3]);
+  expect(spec).toContain('Container "First"');
+  expect(spec).toContain('Container "Second"');
+  expect(spec).not.toContain('×2');
+});
+
+for(const dimension of ['w','h'] as const)test(`regions keep cards with differing media ${dimension} separate`,()=>{
+  const {records,media,R}=cards();media[1][dimension]=32;
+  const m=measureRegion(records,media,R);
+  expect(m.badges).toEqual([]);
+  expect(m.repeats).toEqual([]);
+  expect(m.sizes).toContain(media[0]);
+  expect(m.sizes).toContain(media[1]);
+});
+
+test('regions group identical cards at different positions despite subpixel noise',()=>{
+  for(const noise of [0,0.2]){
+    const {records,media,R}=cards();
+    for(const e of records.slice(2)){
+      e.w+=noise;e.h+=noise;e.radius+=noise;
+      e.pad=e.pad.map(v=>v+noise);e.gap=e.gap.map(v=>v+noise);
+    }
+    media[1].w+=noise;media[1].h+=noise;
+    const m=measureRegion(records,media,R),spec=regionSpec(R,m,records);
+    expect(m.badges.map(b=>[b.e.i,b.n])).toEqual([[1,2]]);
+    expect(m.repeats.map(e=>e.i)).toEqual([3]);
+    expect(m.live.map(e=>e.i)).toEqual([1,2]);
+    expect(spec).toContain('Container "First" · 180 × 80 · padding 8 · gap 8 · radius 12 · ×2');
+    expect(spec).not.toContain('"Second"');
+  }
+});
+
 test('a label that collides slides along its line and stays inside the region, or waits for more room',()=>{
   const placed:any[]=[];
   expect(placeLabel(placed,100,50,20,14,'x',null)).toMatchObject({x:90,y:43});
@@ -102,4 +156,13 @@ test('layout boxes outline wrappers that hold elements, but not surfaces, the sc
 test('only a zero alpha makes a colour invisible, so pure black text, borders and fills are kept',()=>{
   for(const c of ['rgb(0, 0, 0)','rgb(20, 19, 23)','rgba(0, 0, 0, 0.5)','rgb(0 0 0 / 50%)','rgba(118, 118, 128, 0.12)','color(srgb 0 0 0)'])expect(visibleColor(c)).toBe(true);
   for(const c of ['','transparent','rgba(0, 0, 0, 0)','rgba(255, 255, 255, 0.0)','rgb(0 0 0 / 0)','rgb(0 0 0 / 0%)'])expect(visibleColor(c)).toBe(false);
+});
+
+test('rows with the same layout still group when their children differ in width, as labels and progress fills do',()=>{
+  const row=(i:number,y:number,labelW:number,fillW:number)=>[
+    box(i,0,37,y,316,36,{display:'flex',dir:'column',gap:[8,8],label:'Column'}),
+    box(i+1,i,37,y,labelW,18,{label:'Text'}),box(i+2,i,37,y+26,316,10,{surface:true,radius:5,radii:[5,5,5,5]}),box(i+3,i+2,37,y+26,fillW,10,{surface:true,radius:5,radii:[5,5,5,5]})];
+  const records=[box(0,-1,16,578,358,225,{surface:true,display:'flex',dir:'column'}),...row(1,599,70,136),...row(5,640,52,200),...row(9,680,34,90)];
+  const m=measureRegion(records,[],{x:0,y:560,w:390,h:200});
+  expect(m.badges.map(b=>b.n)).toEqual([3]);
 });
