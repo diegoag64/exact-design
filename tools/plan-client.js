@@ -138,7 +138,7 @@ function readScene(){
     for(const node of parent.children){
       if(node===host)continue;
       const s=getComputedStyle(node);
-      if(s.display==='none'||s.visibility==='hidden')continue;
+      if(s.display==='none'||s.visibility==='hidden'||s.opacity==='0')continue;
       if(s.display==='contents'){visit(node,p,clip,key);continue;}
       const r=node.getBoundingClientRect(),tag=node.localName,i=n++;
       const positioned=s.position!=='static',top=node.matches(':modal,:popover-open');

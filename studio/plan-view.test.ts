@@ -66,6 +66,24 @@ test('plan view draws previews as line plans, regions measure from the canvas an
       return [range.getClientRects()[0],copy.getBoundingClientRect()].map(r=>({x:r.x,y:r.y+r.height/2,width:r.width}));
     });
     expect(Math.abs(drawn.width-line.width)).toBeLessThan(2);expect(Math.abs(drawn.x-line.x)).toBeLessThan(2);expect(Math.abs(drawn.y-line.y)).toBeLessThan(3);
+    // An opacity-zero parent hides its whole subtree; the plan's hidden root does not.
+    await frame.evaluate(()=>{
+      const hidden=document.createElement('div');hidden.id='plan-opacity';hidden.style.cssText='position:fixed;left:20px;top:20px;width:240px;opacity:0;color:black';hidden.textContent='Hidden plan text';
+      const child=document.createElement('div');child.style.cssText='border:1px solid black;opacity:1';child.textContent='Hidden child text';hidden.append(child);
+      const visible=document.createElement('div');visible.id='plan-visible';visible.style.cssText='position:fixed;left:20px;top:100px;width:240px;color:black';visible.textContent='Visible plan text';
+      document.getElementById('exact-root')!.append(hidden,visible);
+    });
+    const hiddenText=frame.locator('#ed-plan text[data-app]',{hasText:/Hidden (plan|child) text/});
+    await frame.locator('#ed-plan text[data-app]',{hasText:'Visible plan text'}).waitFor();
+    expect(await hiddenText.count()).toBe(0);
+    await frame.evaluate(()=>document.getElementById('plan-opacity')!.style.opacity='1');
+    await frame.waitForFunction(()=>[...document.querySelectorAll('#ed-plan text[data-app]')].filter(n=>/Hidden (plan|child) text/.test(n.textContent!)).length===2,undefined,{polling:50,timeout:5000});
+    await frame.evaluate(()=>document.getElementById('plan-opacity')!.style.opacity='0.5');
+    await frame.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    expect(await hiddenText.count()).toBe(2);
+    await frame.evaluate(()=>document.getElementById('plan-opacity')!.style.opacity='0');
+    await frame.waitForFunction(()=>![...document.querySelectorAll('#ed-plan text[data-app]')].some(n=>/Hidden (plan|child) text/.test(n.textContent!)),undefined,{polling:50,timeout:5000});
+    await frame.evaluate(()=>{document.getElementById('plan-opacity')!.remove();document.getElementById('plan-visible')!.remove();});
     // The shortcuts switch them off again while the plan shows.
     await page.keyboard.press('Escape');await page.getByTestId('canvas-stage').focus();
     await page.keyboard.press('Shift+KeyB');await page.keyboard.press('Shift+KeyT');
