@@ -15,6 +15,8 @@ try {
   const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>resolve(code??1));});
   process.exitCode=code;
 } finally {
+  // Stop cloud sessions first, so none keeps running on the Expo plan after the studio closes.
+  if(helper) await (await import('./expo-sessions.ts')).stopExpoSessions().catch(()=>{});
   if(helper) await (await import('./native-previews.ts')).stopNativePreviews();
   helper?.stop(true);
   if(helper){const {stopElementBridges}=await import('./element-bridge.ts');stopElementBridges();}

@@ -65,6 +65,28 @@ The first refresh boots the simulators and can take a few minutes. Later refresh
 
 The first native build adds `ios` to the app's `app.json` hosts, as `bun exact.mjs ios` does. The simulators stay running while the studio is open and shut down when you stop `bun run dev`.
 
+## Test remotely on Expo Simulators
+
+[Expo Simulators](https://docs.expo.dev/eas/simulators/) runs your app on a cloud iPhone that you use in a browser tab. The studio builds your latest saved code, uploads it, and opens the selected screen. Use it to try the app by hand, share a screen, or test on a device you don't have locally. You need an Expo account whose plan includes Simulators, and the same Mac and Xcode setup as native previews (steps 1 and 2 of [Preview on the iOS Simulator](#preview-on-the-ios-simulator)). The app is still built on your Mac.
+
+**Connect once per project.**
+
+1. Open the **Native preview** drawer and click **Set up** under **Expo Simulators**.
+2. Click **Open Access tokens**, sign in to expo.dev, create a token, and copy it.
+3. Paste it into **Access token** and click **Connect**.
+
+The studio checks the token with Expo and creates an Expo project for the app (`exact-design-<app name>`), or links the existing one. The token is saved on this computer for this project only, in the helper's cache (`.exact/native-previews/<app>/expo/token`, readable only by you). It is not saved in the workspace or the repository. To use another account, or to forget the token, click the pencil in the drawer's Expo section.
+
+**Test a screen.**
+
+1. Select a screen and click **Test remotely**. The drawer shows four steps: **Build your latest code**, **Start a cloud iPhone**, **Upload the app**, and **Open this screen**. The first test takes about a minute after any build: starting the simulator takes about 30 seconds and uploading about 30.
+2. Click **Open in Simulator**. A new tab shows the same steps, then becomes the cloud iPhone, at the selected screen. Sign in to expo.dev if it asks.
+3. To check another screen, select it and click **Open in Simulator** again. It reuses the running iPhone, so it takes a few seconds. If your saved code changed, it rebuilds and uploads the app first; the drawer says "Your code changed" until then. Each click opens a new tab, and every tab shows the same iPhone, so you can close the older ones.
+
+The cloud iPhone uses the drawer's device. Choosing another device and testing again replaces the session. Unapplied drafts aren't in the build; **Apply** them first. The drawer's **Light** and **Dark** apply only to local captures.
+
+A running cloud iPhone uses your plan's simulator time. It stops when you click **Stop**, after 15 idle minutes, after an hour in all, or when you stop `bun run dev`. The studio checks the session with Expo every 20 seconds, so one you end on expo.dev, or one that times out, leaves the drawer within about 20 seconds.
+
 ## Review and apply edits
 
 1. Select a connected viewport and click **Edit app**.

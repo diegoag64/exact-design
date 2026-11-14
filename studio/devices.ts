@@ -1,7 +1,8 @@
 /** Viewport sizes in CSS pixels (iOS points). Phone, Tablet and Desktop keep their original sizes for saved workspaces. */
 export type DeviceKind = 'phone' | 'tablet' | 'desktop';
-/** `simulator` names a native device's CoreSimulator device type. */
-export type Device = { name: string; width: number; height: number; kind: DeviceKind; simulator?: string };
+/** `simulator` names a native device's CoreSimulator device type; `remote` its Simulator name, which Expo Simulators takes as
+ *  `deviceIdentifier`. */
+export type Device = { name: string; width: number; height: number; kind: DeviceKind; simulator?: string; remote?: string };
 export const devices: Device[] = [
   { name: 'iPhone SE', width: 375, height: 667, kind: 'phone' },
   { name: 'Phone', width: 390, height: 844, kind: 'phone' },
@@ -20,10 +21,10 @@ export const devices: Device[] = [
 /** Native devices for the native preview drawer: the size is the simulator's screen in points, and `simulator` is its
  *  CoreSimulator device type. They are not viewport presets: the canvas always shows the editable web build. */
 export const nativeDevices: Device[] = [
-  { name: 'Native iPhone SE', width: 375, height: 667, kind: 'phone', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation' },
-  { name: 'Native iPhone 17', width: 402, height: 874, kind: 'phone', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17' },
-  { name: 'Native iPhone 17 Pro Max', width: 440, height: 956, kind: 'phone', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max' },
-  { name: 'Native iPad Pro 11', width: 834, height: 1210, kind: 'tablet', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB' },
+  { name: 'Native iPhone SE', width: 375, height: 667, kind: 'phone', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation', remote: 'iPhone SE (3rd generation)' },
+  { name: 'Native iPhone 17', width: 402, height: 874, kind: 'phone', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17', remote: 'iPhone 17' },
+  { name: 'Native iPhone 17 Pro Max', width: 440, height: 956, kind: 'phone', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max', remote: 'iPhone 17 Pro Max' },
+  { name: 'Native iPad Pro 11', width: 834, height: 1210, kind: 'tablet', simulator: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M5-12GB', remote: 'iPad Pro 11-inch (M5)' },
 ];
 export const DEFAULT_NATIVE_DEVICE = 'native-iphone-17';
 /** Named groups of devices, added together and laid out narrowest first. */
@@ -46,8 +47,8 @@ export function nativeDevice(deviceSlug: string): Device | undefined {
 /** Options for the studio's pickers: sets first, then each device with its size. */
 export function deviceOptions() {
   return {
-    devices: devices.map(d => ({ name: d.name, slug: slug(d.name), kind: d.kind, width: d.width, height: d.height, label: `${d.name} · ${d.width} × ${d.height}` })),
-    native: nativeDevices.map(d => ({ name: d.name.replace(/^Native /, ''), slug: slug(d.name), kind: d.kind, width: d.width, height: d.height, label: `${d.name.replace(/^Native /, '')} · ${d.width} × ${d.height}` })),
+    devices: devices.map(d => ({ name: d.name, slug: slug(d.name), kind: d.kind, width: d.width, height: d.height, label: `${d.name} · ${d.width} × ${d.height}`, remote: '' })),
+    native: nativeDevices.map(d => ({ name: d.name.replace(/^Native /, ''), slug: slug(d.name), kind: d.kind, width: d.width, height: d.height, label: `${d.name.replace(/^Native /, '')} · ${d.width} × ${d.height}`, remote: d.remote ?? '' })),
     sets: Object.entries(deviceSets).map(([name, names]) => ({ name, slug: slug(name), label: `${name} · ${names.length} sizes`, count: names.length })),
   };
 }

@@ -1131,3 +1131,75 @@ test "the native drawer says unapplied draft changes are not in the native build
   tap "discard-design"
   clock data
   expect tree missing "native-drafts"
+
+test "expo simulators connects once and tests the latest saved code on a cloud iphone"
+  size 1440x900
+  at "/?connect=http://127.0.0.1:5176&name=Native%20app&viewports=Phone"
+  request POST "http://127.0.0.1:5176/mode" {"mode":"normal"}
+  request POST "http://127.0.0.1:5175/expo/setup" {"mode":"reset"}
+  clock data
+  clock settle
+  tap "toggle-native"
+  clock data
+  expect tree has "expo-setup"
+  expect tree missing "expo-test"
+  tap "expo-setup"
+  clock settle
+  expect tree has "expo-dialog"
+  expect tree has "expo-token-page"
+  expect tree missing "expo-remove"
+  expect disabled "expo-save"
+  type "expo-token" "not-a-token"
+  tap "expo-save"
+  clock data
+  expect text "expo-setup-error" == "Expo didn’t accept that token. Copy a new one from expo.dev → Account settings → Access tokens."
+  expect tree has "expo-dialog"
+  type "expo-token" "expo_fixture_token"
+  tap "expo-save"
+  clock data
+  clock settle
+  expect tree missing "expo-dialog"
+  expect text "expo-account" == "fixture-team"
+  tap "expo-test"
+  clock data
+  expect tree has "expo-steps"
+  expect text "expo-step-build-detail" == "Compiling Swift…"
+  clock until state expo.state == "idle" within 5000
+  expect tree missing "expo-steps"
+  expect text "expo-running" == "Running on a cloud iPhone 17"
+  expect text "expo-idle" == "Ends after 15 minutes of inactivity"
+  expect tree missing "expo-message"
+  expect tree has "expo-open"
+  expect tree missing "expo-test"
+  request GET "http://127.0.0.1:5175/expo/open?project=http://127.0.0.1:5176&key=fixture-key&device=native-iphone-17&route=/"
+  clock data
+  clock until state expo.steps.1 .state == "skipped" within 3000
+  expect text "expo-step-session-detail" == "Already running"
+  clock until state expo.state == "idle" within 5000
+  request GET "http://127.0.0.1:5175/expo/open?project=http://127.0.0.1:5176&key=fixture-key&device=native-iphone-17&route=/fail"
+  clock data
+  clock until state expo.state == "error" within 5000
+  expect text "expo-error" == "The screen did not open in the fixture."
+  clock +100
+  tap "expo-stop"
+  clock data
+  expect text "expo-message" == "Cloud iPhone stopped."
+  expect tree has "expo-test"
+  clock +100
+  tap "expo-test"
+  clock data
+  clock until state expo.state == "idle" within 5000
+  expect tree has "expo-open"
+  request POST "http://127.0.0.1:5175/expo/setup" {"mode":"end","project":"http://127.0.0.1:5176"}
+  clock data
+  expect text "expo-message" == "The cloud iPhone ended on expo.dev."
+  expect tree missing "expo-open"
+  expect tree has "expo-test"
+  tap "expo-edit"
+  clock settle
+  expect tree has "expo-connected"
+  tap "expo-remove"
+  clock data
+  clock settle
+  expect tree missing "expo-dialog"
+  expect tree has "expo-setup"

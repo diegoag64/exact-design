@@ -113,6 +113,26 @@ const sources: Sources = {
       return latest={state:value.state,phase:value.phase,message:value.message,error:value.error,done:value.done,total:value.total,progress:typeof value.progress==='number'?value.progress:-1,elapsed:Number(value.elapsed)||0,estimate:Number(value.estimate)||0,steps,frames:value.frames.map((f:any)=>({id:f.id,state:f.state,shot:f.shot,width:f.width,height:f.height,capturedAt:f.capturedAt,error:f.error}))};
     }}).catch(unavailable);
   },
+  // Expo Simulators for the connected project: the helper builds the latest saved source, uploads it to the project's
+  // cloud session and opens `route` on `device`. A new `run` token starts `action` (test or stop); the token stays in the helper.
+  expo: ([project,device,route,run,action]) => {
+    const idle={open:'',idleMinutes:15,maxMinutes:60,configured:false,account:'',state:'idle',message:'',error:'',steps:[] as {id:string;label:string;state:string;detail:string}[],elapsed:0,estimate:0,running:false,device:'',url:'',stale:false};
+    if(!project)return idle;
+    let latest=idle;
+    const unavailable=()=>({...latest,state:'unavailable',error:'Expo Simulators need the studio helper. Run bun run dev.'});
+    return fetch(`${DISCOVERY_API}/expo`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({project,device:nativeDevice(device)?device:DEFAULT_NATIVE_DEVICE,route,run,action}),exactStream:event=>{
+      if(event.type==='error')return unavailable();
+      if(event.type!=='message'||typeof event.data!=='string')return latest;
+      const v=JSON.parse(event.data);
+      return latest={idleMinutes:Number(v.idleMinutes)||15,maxMinutes:Number(v.maxMinutes)||60,open:typeof v.open==='string'&&v.open.startsWith('http://127.0.0.1:')?v.open:'',configured:!!v.configured,account:String(v.account??''),state:String(v.state??'idle'),message:String(v.message??''),error:String(v.error??''),
+        steps:Array.isArray(v.steps)?v.steps.map((s:any)=>({id:String(s.id),label:String(s.label),state:String(s.state),detail:String(s.detail??'')})):[],
+        elapsed:Number(v.elapsed)||0,estimate:Number(v.estimate)||0,running:!!v.running,device:String(v.device??''),url:typeof v.url==='string'&&v.url.startsWith('https://')?v.url:'',stale:!!v.stale};
+    }}).catch(unavailable);
+  },
+  expoSetup: async ([project,token]) => {
+    try{const r=await (await fetch(`${DISCOVERY_API}/expo/setup`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({project,token}),exactTimeout:120000})).json();return {ok:!!r.ok,error:String(r.error??''),account:String(r.account??'')};}
+    catch(e){if((e as {code?:string}).code==='bake')throw e;return {ok:false,error:'Could not reach the studio helper. Run bun run dev.',account:''};}
+  },
   previews: ([requests]) => {
     if(!requests||requests==='[]')return {ready:true,signature:'[]',requests,loaded:0,total:0};
     const total=JSON.parse(requests).length;

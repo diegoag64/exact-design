@@ -19,6 +19,8 @@ type DiskState={signature?:string;app?:string;buildMs?:number;coldMs?:number;sho
 /** A job's progress as the drawer lists it: build the app, prepare the simulator, capture the screens. */
 export type StepState='pending'|'active'|'done'|'skipped'|'failed';
 export type Step={id:'build'|'device'|'capture';label:string;state:StepState;detail:string};
+/** How a build reports to the job that asked for it. */
+export type BuildHooks={message(text:string):void;step(state:StepState,detail:string):void;estimate(seconds:number):void};
 /** Names the stage of a native build from its output as it arrives: each Rust crate as cargo compiles it, then Swift.
  *  The output gives no fraction: cargo prints no total, and the SDK replays swift-build's `[n / m]` counts only after
  *  Swift finishes, so a build's progress stays indeterminate. */
@@ -51,6 +53,8 @@ export async function manifest(origin:string,request:typeof fetch=fetch){
   try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>256*1024)throw new Error('Project manifest exceeds 256 KB.');chunks.push(value);}}finally{await reader.cancel().catch(()=>{});}
   return JSON.parse(Buffer.concat(chunks).toString());
 }
+/** The custom scheme an app's deep links use: its first non-web protocol handler that takes a link (`%s`), or ''. */
+export function linkScheme(app:any):string{const handler=Array.isArray(app?.protocol_handlers)?app.protocol_handlers.find((h:any)=>typeof h?.protocol==='string'&&!['http','https'].includes(h.protocol.toLowerCase())&&!h.distribution_only&&typeof h.url==='string'&&h.url.includes('%s')):undefined;return handler?handler.protocol:'';}
 const normalized=(v:any):string=>JSON.stringify(Array.isArray(v)?v.map(x=>JSON.parse(JSON.stringify(x,Object.keys(x).sort()))).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))):[]);
 export type NativeOptions={target?:NativeTarget;run?:Runner;cache?:string;apps?:string[];fetch?:typeof fetch;free?:(dir:string)=>Promise<number>;
   /** How screens are judged ready; the default reads the accessibility tree and falls back to screenshots. */
@@ -180,33 +184,37 @@ export class AppPreviews {
   private endSteps(){clearInterval(this.ticker);this.ticker=undefined;this.steps=[];this.estimate=0;}
   /** Seconds the active step has run, for the drawer's timer. */
   get elapsed(){return this.state==='working'&&this.steps.some(s=>s.state==='active')?Math.max(0,Math.floor((this.service.now()-this.stepAt)/1000)):0;}
+  /** Builds the app for the iOS Simulator unless the bundle on disk was built from `inputSignature`, and returns the bundle.
+   *  Native captures and Expo Simulators sessions share it; run it inside `service.enqueue` so builds never overlap. */
+  async build(app:{name:string},inputSignature:string,hooks:BuildHooks):Promise<string>{
+    if(this.disk.signature===inputSignature&&this.disk.app&&existsSync(this.disk.app)){hooks.step('skipped','Up to date');return this.disk.app;}
+    // Cold: neither this helper nor the SDK's CLI (`bun exact.mjs ios`, or an interrupted refresh) has built the app for
+    // the iOS Simulator in this checkout, so every crate and Swift target compiles.
+    const built=!!this.disk.app&&existsSync(this.disk.app),cold=!built&&!existsSync(join(this.appDir,'target','aarch64-apple-ios-sim'));
+    const fs=await statfs(this.appDir);const free=this.service.options.free?await this.service.options.free(this.appDir):fs.bavail*fs.bsize;const min=cold?20:10;
+    if(free<min*1024**3)throw new Error(`Only ${(free/1024**3).toFixed(1)} GB free. Native builds need ${min} GB free.`);
+    this.service.checkRunning();
+    hooks.message(cold?`Building ${app.name} for iOS. The first build in this checkout takes several minutes.`:built?`Rebuilding ${app.name} with your changes…`:`Building ${app.name} for iOS…`);
+    hooks.estimate(Math.round(((cold?this.disk.coldMs:this.disk.buildMs)??0)/1000));
+    const reader=new BuildProgress();hooks.step('active',reader.detail);let output='';const started=this.service.now();
+    try{output=await this.service.run([process.execPath,join(root,'tools/native-build.mjs'),this.appDir,...this.service.target.buildArgs],{PATH:`${homedir()}/.cargo/bin:${process.env.PATH}`,EXACT_FEEDBACK:'0'},text=>{if(reader.feed(text))hooks.step('active',reader.detail);});await writeFile(join(this.dir,'build.log'),output);const bundle=/host\/apple:\s+(.+?\.app)(?:\s|$)/.exec(output)?.[1];if(!bundle||!existsSync(bundle))throw new Error('Build did not produce an app bundle.');this.disk.app=bundle;this.disk.signature=inputSignature;const took=this.service.now()-started;this.disk.buildMs=took;if(cold)this.disk.coldMs=took;await this.save();await this.refresh();hooks.estimate(0);hooks.step('done',`Built in ${Math.max(1,Math.round(took/1000))} s`);return bundle;}
+    catch(e){await writeFile(join(this.dir,'build.log'),output+'\n'+message(e));hooks.step('failed','Build failed');throw new Error(`${brief(e)} Full log: ${join(this.dir,'build.log')}`);}
+  }
   private async job(frames:NativeFrame[],capture:string[]){
     this.service.nextJob();this.state='working';this.phase='';this.message='Preparing native previews…';this.error='';this.done=0;this.total=0;this.startSteps();this.publish();let jobs:Job[]=[],appId='';const used:string[]=[];
     try{
       this.service.checkRunning();
       try{await this.service.target.available();}catch(e){this.state='unavailable';throw e;}
-      const app=JSON.parse(await readFile(join(this.appDir,'app.json'),'utf8'));const handler=app.protocol_handlers?.find((h:any)=>typeof h.protocol==='string'&&!['http','https'].includes(h.protocol.toLowerCase())&&!h.distribution_only&&typeof h.url==='string'&&h.url.includes('%s'));
-      if(!handler)throw new Error('Add protocol_handlers and an /open route to open native screens. See the Ember example.');if(!app.app?.id)throw new Error('Set app.id in app.json.');appId=app.app.id;
+      const app=JSON.parse(await readFile(join(this.appDir,'app.json'),'utf8'));const scheme=linkScheme(app);
+      if(!scheme)throw new Error('Add protocol_handlers and an /open route to open native screens. See the Ember example.');if(!app.app?.id)throw new Error('Set app.id in app.json.');appId=app.app.id;
       const inputSignature=await this.refresh();this.service.checkRunning();
       // Refresh all skips frames already current for this build; a list of ids captures exactly those frames.
       const chosen=new Map<string,Job>();for(const frame of frames){const key=frameKey(frame);if(chosen.has(key))continue;if(capture.length?capture.includes(frame.id):this.frameState(key)!=='ready')chosen.set(key,{key,frame});}
       jobs=[...chosen.values()];
       if(!jobs.length){this.state='idle';this.message='Native previews are up to date.';return;}
       this.total=jobs.length;for(const j of jobs)this.statuses.set(j.key,{state:'queued',error:''});this.publish();
-      if(this.disk.signature!==inputSignature||!this.disk.app||!existsSync(this.disk.app)){
-        // Cold: neither this helper nor the SDK's CLI (`bun exact.mjs ios`, or an interrupted refresh) has built the app for
-        // the iOS Simulator in this checkout, so every crate and Swift target compiles.
-        const built=!!this.disk.app&&existsSync(this.disk.app),cold=!built&&!existsSync(join(this.appDir,'target','aarch64-apple-ios-sim'));
-        const fs=await statfs(this.appDir);const free=this.service.options.free?await this.service.options.free(this.appDir):fs.bavail*fs.bsize;const min=cold?20:10;
-        if(free<min*1024**3)throw new Error(`Only ${(free/1024**3).toFixed(1)} GB free. Native builds need ${min} GB free.`);
-        this.service.checkRunning();
-        this.message=cold?`Building ${app.name} for iOS. The first build in this checkout takes several minutes.`:built?`Rebuilding ${app.name} with your changes…`:`Building ${app.name} for iOS…`;this.phase='build';
-        this.estimate=Math.round(((cold?this.disk.coldMs:this.disk.buildMs)??0)/1000);
-        const reader=new BuildProgress();this.step('build','active',reader.detail);let output='';const started=this.service.now();
-        try{output=await this.service.run([process.execPath,join(root,'tools/native-build.mjs'),this.appDir,...this.service.target.buildArgs],{PATH:`${homedir()}/.cargo/bin:${process.env.PATH}`,EXACT_FEEDBACK:'0'},text=>{if(reader.feed(text))this.step('build','active',reader.detail);});await writeFile(join(this.dir,'build.log'),output);const built=/host\/apple:\s+(.+?\.app)(?:\s|$)/.exec(output)?.[1];if(!built||!existsSync(built))throw new Error('Build did not produce an app bundle.');this.disk.app=built;this.disk.signature=inputSignature;const took=this.service.now()-started;this.disk.buildMs=took;if(cold)this.disk.coldMs=took;await this.save();await this.refresh();this.estimate=0;this.step('build','done',`Built in ${Math.max(1,Math.round(took/1000))} s`);}
-        catch(e){await writeFile(join(this.dir,'build.log'),output+'\n'+message(e));this.step('build','failed','Build failed');throw new Error(`${brief(e)} Full log: ${join(this.dir,'build.log')}`);}
-      }else this.step('build','skipped','Up to date');
-      this.service.checkRunning();const context={name:app.name as string,appId:app.app.id as string,scheme:handler.protocol as string,signature:this.disk.signature!};
+      await this.build(app,inputSignature,{message:text=>{this.message=text;this.phase='build';},step:(state,detail)=>this.step('build',state,detail),estimate:seconds=>{this.estimate=seconds;}});
+      this.service.checkRunning();const context={name:app.name as string,appId:app.app.id as string,scheme,signature:this.disk.signature!};
       const fail=(group:Job[],e:unknown)=>{for(const j of group)if(this.statuses.get(j.key)?.state!=='ready'&&this.statuses.get(j.key)?.state!=='error'){this.statuses.set(j.key,{state:'error',error:brief(e)});this.done++;}this.publish();};
       // One device listing per job: which simulators exist and which are booted.
       const target=this.service.target;await target.scan();const devices:{slug:string;id:string;booted:boolean;group:Job[]}[]=[];
@@ -301,6 +309,8 @@ export class AppPreviews {
   }
 }
 const service=new NativePreviews();
+/** The helper's one native preview service; Expo Simulators sessions build through it. */
+export const nativePreviews=service;
 export function nativeShot(path:string):Response{if(!/^[a-f0-9]{16}\/[a-z0-9-]+\.png$/.test(path))return new Response(null,{status:404});const [key,file]=path.split('/');try{return new Response(readFileSync(join(service.cache,key,'shots',file)),{headers:{'content-type':'image/png','cache-control':'no-store'}});}catch{return new Response(null,{status:404});}}
 /** Validates a `/native` request body: its frames (appearance defaults to light) and the `capture` ids. */
 export function nativeRequest(body:unknown):{project:string;run:string;capture:string[];frames:NativeFrame[]}{
