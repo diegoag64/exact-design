@@ -1,5 +1,5 @@
 use Icon from "./icons.contract"
-use Tool, SmallTool, Field, FieldShell, TreeRow, PanelSection, SectionHead, FloatingBar, Segmented, Segment, RowButton, PrimaryButton, SecondaryButton, Dialog, Menu, IconButton, SmallButton, ToolbarButton, SectionHeading, FieldLabel, InlineField, MenuItem, MenuDivider, Divider, Kbd, PropertyField, VisibilityButton, ExpoMark, screensWidth, inspectorWidth from "./ui.contract"
+use Tool, SmallTool, Field, FieldShell, TreeRow, PanelSection, SectionHead, FloatingBar, Segmented, Segment, RowButton, PrimaryButton, SecondaryButton, Dialog, Menu, IconButton, SmallButton, ToolbarButton, SectionHeading, FieldLabel, InlineField, MenuItem, MenuDivider, Divider, Kbd, PropertyField, VisibilityButton, ExpoMark, screensWidth, inspectorWidth, MenuCheck from "./ui.contract"
 
 routes nav
   editor "/"
@@ -28,6 +28,7 @@ fn magnitude(n: number): number = max(n, -n)
 fn panEase(t: number): number = 1 - (1 - t) * (1 - t) * (1 - t)
 fn layerKind(kind: string): string = kind == "text" or kind == "span" ? "Text" : kind == "button" ? "Button" : kind == "row" ? "Row" : kind == "column" ? "Column" : kind == "scroll" ? "Scroll" : kind == "grid" ? "Grid" : kind == "image" or kind == "img" ? "Image" : kind == "screen" or kind == "main" ? "Screen" : kind == "input" ? "Input" : kind == "rectangle" ? "Rectangle" : "Container"
 fn isSpacing(property: string): bool = property.startsWith("padding") or property.startsWith("margin") or property == "gap" or property.endsWith("-gap")
+fn themeName(choice: string): string = choice == "light" ? "Light" : choice == "dark" ? "Dark" : "Match system"
 fn spacingKind(property: string): string = property == "gap" or property.endsWith("-gap") ? "gap" : property.startsWith("margin") ? "margin" : "padding"
 fn spacingFill(property: string, lit: bool): string = spacingKind(property) == "gap" ? (lit ? "spacing.gap-strong" : "spacing.gap") : spacingKind(property) == "margin" ? (lit ? "spacing.margin-strong" : "spacing.margin") : (lit ? "spacing.padding-strong" : "spacing.padding")
 fn spacingEdge(property: string): string = spacingKind(property) == "gap" ? "spacing.gap-edge" : spacingKind(property) == "margin" ? "spacing.margin-edge" : "spacing.padding-edge"
@@ -688,6 +689,10 @@ component Studio
     send designChanged = design("parent", designSession, "", 0, "", "", time.epochAtZero + performanceNow())
   action selectElement(id: string)
     send designChanged = design("select", designSession, "", designVersion, id, "", time.epochAtZero + performanceNow())
+  action clearSelection
+    spacingProperty = ""
+    spacingHover = ""
+    send designChanged = design("deselect", designSession, "", designVersion, "", "", time.epochAtZero + performanceNow())
   action afterDesign
     match designChanged
       case some(r)
@@ -905,6 +910,13 @@ component Studio
   state zoom = 0.85 persist
   // Canvas previews skip backdrop blurs and CSS animations, trading fidelity for less GPU work.
   state reducedEffects = false persist
+  // Canvas previews draw as line plans: surfaces, text lines and icon outlines, without the app's styling.
+  state planView = false persist
+  state planBoxes = false persist
+  state planText = false persist
+  // Light or dark for the studio itself and for the app in canvas previews: "system", "light" or "dark".
+  state studioTheme = "system" persist
+  state screenTheme = "system" persist
   state px = 64 persist
   state py = 80 persist
   state panning = false
@@ -1007,6 +1019,17 @@ component Studio
       py = cameraY - e.deltaY
   action toggleReducedEffects
     reducedEffects = not reducedEffects
+  action togglePlanView
+    planView = not planView
+  action togglePlanBoxes
+    planBoxes = not planBoxes
+  action togglePlanText
+    planText = not planText
+  action chooseTheme(group: string, value: string)
+    if group == "Studio"
+      studioTheme = value
+    else
+      screenTheme = value
   action zoomIn
     cancelPan()
     zoom = min(3, zoom + 0.1)
@@ -1100,7 +1123,7 @@ component Studio
   action previewClick
     clicks = clicks + 1
   view
-    main hatch="preview-engines" data-canvas-editing=editing data-preview-effects=(reducedEffects ? "reduced" : "full") navigationKey=`${top(nav).id}` navigationBack="closeLibrary" navigate=follow testId="editor" width="100%" height="100%" display="flex" flex-direction="column" background-color="surface.canvas" color="ink.primary" font="type.body"
+    main hatch="preview-engines" data-canvas-editing=editing data-preview-effects=(reducedEffects ? "reduced" : "full") data-plan-view=(planView ? "on" : "off") data-plan-boxes=(planBoxes ? "on" : "off") data-plan-text=(planText ? "on" : "off") data-studio-theme=studioTheme data-screen-theme=screenTheme navigationKey=`${top(nav).id}` navigationBack="closeLibrary" navigate=follow testId="editor" width="100%" height="100%" display="flex" flex-direction="column" background-color="surface.canvas" color="ink.primary" font="type.body"
       // Theme colours come first, so a pick follows the app's light and dark values; a custom value stays available.
       column id="color-picker" popover="auto" role="dialog" aria-label="Choose a color" class=Menu width=248 padding=10 gap=10 testId="color-picker"
         row align-items="center" gap=8
@@ -1117,6 +1140,20 @@ component Studio
           row class=FieldShell
             column width=14 height=14 flex-shrink=0 margin="0 6px 0 7px" box-sizing="border-box" border-radius=3 border="1px solid line.strong" background-color=(colorValue.startsWith("#") or colorValue.startsWith("rgb") or colorValue.startsWith("hsl") ? colorValue : "transparent") aria-hidden=true
             input value=colorValue change=pickColor class=Field flex=1 background-color="transparent" padding-left=0 placeholder="#000000" aria-label="Custom color" testId="color-custom"
+      column id="appearance-menu" popover="auto" role="dialog" aria-label="Appearance" class=Menu width=248 padding=12 gap=14 testId="appearance-menu"
+        for group in ["Studio", "Screens"] key=group
+          column gap=6
+            text group font="type.caption" font-weight=600 color="ink.secondary"
+            row class=Segmented role="group" aria-label=`${group} theme`
+              for choice in ["system", "light", "dark"] key=choice
+                for current in [group == "Studio" ? studioTheme : screenTheme] key=choice
+                  button press=chooseTheme(group, choice) class=Segment aria-pressed=(current == choice) aria-label=`${group}: ${choice == "system" ? "Match system" : choice == "light" ? "Light" : "Dark"}` testId=`theme-${group.toLowerCase()}-${choice}`
+                    Icon(name=(choice == "system" ? "monitor" : choice == "light" ? "sun" : "moon"), size=14, angle=0)
+                    text (choice == "system" ? "System" : choice == "light" ? "Light" : "Dark")
+            text (group == "Studio" ? "Panels and canvas." : "Your app in canvas previews and plan view. Full-screen Preview follows your system.") font="type.caption" color="ink.muted"
+      column id="plan-menu" popover="auto" role="menu" aria-label="Plan view options" class=Menu testId="plan-menu"
+        MenuCheck(label="Layout boxes", shortcut="⇧B", checked=planBoxes, testId="plan-boxes", press=togglePlanBoxes)
+        MenuCheck(label="Readable text", shortcut="⇧T", checked=planText, testId="plan-text", press=togglePlanText)
       column id="studio-menu" popover="auto" role="menu" aria-label="Canvas actions" class=Menu
         MenuItem(label="Undo", icon="undo-2", shortcut="⌘Z", disabled=(editing ? not appCanUndo : not doc.canUndo), destructive=false, menu="studio-menu", testId="menu-undo", press=command("undo", ""))
         if not editing
@@ -1139,6 +1176,7 @@ component Studio
             MenuItem(label="Delete", icon="trash-2", shortcut="⌫", disabled=doc.frameSelected and doc.views.length == 1, destructive=true, menu="studio-menu", testId="menu-delete", press=command("delete", ""))
         if doc.route != ""
           MenuItem(label=(nativeOpen ? "Hide native preview" : "Show native preview"), icon="smartphone", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-native", press=toggleNative)
+        MenuItem(label=(planView ? "Hide plan view" : "Show plan view"), icon="drafting-compass", shortcut="⇧P", disabled=false, destructive=false, menu="studio-menu", testId="menu-plan", press=togglePlanView)
         MenuDivider()
         if not editing
           MenuItem(label="Tidy up", icon="layout-grid", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-tidy", press=tidyUp)
@@ -1388,9 +1426,14 @@ component Studio
                     ToolbarButton(icon="type", label="Text", hint="Text · Add a text layer to this screen", shortcut="", selected=false, disabled=(doc.source != ""), testId="add-text", press=command("add", "text"))
                     ToolbarButton(icon="rectangle-horizontal", label="Button", hint="Button · Add a button to this screen", shortcut="", selected=false, disabled=(doc.source != ""), testId="add-button", press=command("add", "button"))
                   Divider()
+                  ToolbarButton(icon="drafting-compass", label="Plan view", hint=(planView ? "Hide plan view (⇧P) · Show the screens with their styling again" : "Show plan view (⇧P) · Draw the screens as line plans to check layout and spacing · Shift-drag on a screen to measure a region · Alt+A measures the whole screen"), shortcut="Shift+p", selected=planView, disabled=false, testId="toggle-plan", press=togglePlanView)
+                  button popovertarget="plan-menu" class=Tool width=16 padding=0 margin-left=-2 aria-label="Plan view options" data-tip=`Plan view options · Layout boxes: ${planBoxes ? "on" : "off"} · Readable text: ${planText ? "on" : "off"}` testId="plan-options" color="ink.secondary" background-color="transparent"
+                    Icon(name="chevron-down", size=12, angle=0)
                   ToolbarButton(icon="history", label="Timeline", hint="Design timeline · Browse the history of design edits", shortcut="", selected=timelineOpen, disabled=false, testId="toggle-timeline", press=toggleTimeline)
                   ToolbarButton(icon="smartphone", label="Native preview", hint=(doc.projectUrl == "" ? "Native preview · Connect a project to see its screens in the iOS Simulator" : nativeOpen ? "Hide native preview" : "Native preview · See the selected screen in the app's native iOS build"), shortcut="", selected=nativeOpen, disabled=(doc.projectUrl == ""), testId="toggle-native", press=toggleNative)
                 row class=FloatingBar display=(panelOverlay ? "none" : "flex") position="absolute" right=16 bottom=(viewport.width >= 1000 ? 16 : 72) z-index=2
+                  button popovertarget="appearance-menu" class=SmallTool aria-label="Appearance" data-tip=`Appearance · Studio: ${themeName(studioTheme)} · Screens: ${themeName(screenTheme)}` testId="appearance" color="ink.secondary" background-color="transparent"
+                    Icon(name="sun-moon", size=14, angle=0)
                   SmallButton(icon="zap", label="Reduce preview effects", hint=(reducedEffects ? "Restore preview effects · Show blur and animations in canvas previews again" : "Reduce preview effects · Hide blur and animations in canvas previews to save GPU and battery · Full-screen Preview is unchanged"), selected=reducedEffects, disabled=false, testId="reduce-effects", press=toggleReducedEffects)
                   Divider()
                   SmallButton(icon="minus", label="Zoom out", hint="", selected=false, disabled=false, testId="zoom-out", press=zoomOut)
@@ -1454,6 +1497,7 @@ component Studio
                                   column flex=1 min-width=0 gap=0
                                     text selected.label font="type.heading" font-weight=600 min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" data-tip=selected.label testId="selected-element-name"
                                     text layerKind(selected.kind) font="type.caption" color="ink.secondary" testId=(selected.label != layerKind(selected.kind) ? "selected-element-kind" : "selected-element-type")
+                                  SmallButton(icon="x", label="Clear selection", hint="Clear selection (Esc)", selected=false, disabled=false, testId="clear-selection", press=clearSelection)
                                 if result.source != ""
                                   row gap=6 align-items="center" color="ink.muted" min-width=0 data-tip=result.source
                                     Icon(name="file-code", size=12, angle=0)

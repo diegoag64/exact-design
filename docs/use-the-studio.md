@@ -90,7 +90,7 @@ A running cloud iPhone uses your plan's simulator time. It stops when you click 
 ## Review and apply edits
 
 1. Select a connected viewport and click **Edit app**.
-2. Select an element on the canvas or in the Layers tree.
+2. Select an element on the canvas or in the Layers tree. Press Escape, or click **×** beside its name in the inspector, to clear the selection. With nothing selected, Escape finishes editing.
 3. Change its properties in the inspector. Press Enter or leave the field to preview a value.
 4. Click **Review** to inspect changes grouped by source file.
 5. Revert individual changes if needed, then click **Apply changes**.
@@ -112,6 +112,27 @@ Apply checks source hashes and validates the complete batch with the Exact compi
 
 Editing requires a local Exact development server with the `tamber/1` editing API. Remote previews, package sources, data-bound text, and ambiguous source locations remain read-only.
 
+## Choose light or dark
+
+Click the sun-and-moon button beside the zoom controls. **Studio** sets the panels and canvas, and **Screens** sets your app in the canvas previews and the paper of plan view. Each one can match your system or stay light or dark, so you can check your app's dark theme without changing your Mac. Full-screen Preview always follows your system, and the **Native preview** drawer has its own Light and Dark. Both choices are remembered.
+
+## Check layout in plan view
+
+Click the compass button in the bottom toolbar, or press ⇧P, to show every screen as a line plan. Surfaces become outlines, text becomes bars that follow each line, and icons keep only their outlines. Plan view hides colour, imagery and effects, so alignment and spacing are easier to see. Selection, spacing labels and editing work as usual. Click the button again to see the real styling. Full-screen Preview always shows the app as it is.
+
+The arrow beside the compass button opens two options, and both are remembered:
+
+- **Layout boxes** (⇧B) outlines the containers your app never paints, such as rows and columns, with faint dashed lines. Use it to see how the layout is nested and where each group starts and ends.
+- **Readable text** (⇧T) replaces the bars with the app's own words, in their font and on the same lines. Use it to check copy, truncation and baseline alignment.
+
+Password fields use bullets in readable text and measure their bars from those bullets. Non-text inputs, such as checkboxes and sliders, contribute no text.
+
+The shortcuts work while plan view is on.
+
+To measure part of a screen, hold Shift and drag a rectangle over it. The region shows every padding, gap and margin inside it, the size of each surface and image, and the corner radii. Radius labels and copied specs show one value when all corners match, or four values in top-left, top-right, bottom-right, bottom-left order, such as `radius 12 12 0 0`. Each radius is clamped to half the smaller side. Rows with the same structure and layout measurements are labeled once and marked, for example, ×3. Grouping compares each row's own width and four margins, and the height, padding, gaps, four corner radii and layout direction of the row and everything inside it, rounded to whole pixels. Positions can differ, and so can a child's width and used auto margins that follow its text or value. Click **Copy** above the region to copy its spec as an indented outline, such as `Column "Energy" · 342 × 455 · padding 22 · gap 20 · radius 28`. Press Alt+A (Option+A) over a screen to measure the whole screen. Press Escape or click outside the region to clear it. Regions also work without plan view, over the app's real styling.
+
+Labels keep the same size at every zoom. When labels would overlap, some wait until you zoom in.
+
 ## Inspect the timeline
 
 Click the clock button in the bottom toolbar to inspect saved design changes. Select an entry to see its target and before-and-after values. Timeline selection does not restore an earlier design or undo applied code.
@@ -132,6 +153,8 @@ Use these shortcuts when a text field is not focused:
 
 - **V** selects the Select tool.
 - **H** selects the Pan tool.
+- **Shift+P** shows or hides plan view. While it is on, **Shift+B** shows or hides layout boxes and **Shift+T** switches between bars and readable text.
+- **Shift** with drag measures a region of a screen, and **Alt+A** (Option+A) measures the whole screen.
 - **Space** with drag temporarily pans, including during app editing.
 - **Command or Control+S** saves.
 - **Command or Control+Z** undoes.

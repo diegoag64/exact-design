@@ -442,6 +442,24 @@ component MenuDivider
   view
     hr margin="5px 4px" border-width=0 height=1 background-color="line.subtle"
 
+// A setting in a menu. The menu stays open, so several can be switched in one visit.
+component MenuCheck
+  props
+    label: string
+    shortcut: string
+    checked: bool
+    testId: string
+    press: action
+  view
+    button press=press class=MenuRow role="menuitemcheckbox" aria-checked=checked testId=testId color="ink.primary"
+      if checked
+        Icon(name="check", size=16, angle=0)
+      else
+        column width=16 flex-shrink=0
+      text label flex=1 font="type.body"
+      if shortcut != ""
+        text shortcut color="ink.muted" font="type.caption" aria-hidden=true
+
 component Divider
   view
     column width=1 height=16 flex-shrink=0 margin="0 4px" background-color="line.subtle" aria-hidden=true

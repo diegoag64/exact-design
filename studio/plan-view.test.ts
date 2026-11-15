@@ -1,0 +1,363 @@
+import {test,expect} from 'bun:test';
+import {mkdtemp,mkdir,readdir,cp,readFile,writeFile,rm} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {homedir} from 'node:os';
+import {startDiscoveryServer} from '../tools/discovery-server';
+import {stopElementBridges} from '../tools/element-bridge';
+import {suiteBrowser} from '../.exact-sdk/scripts/agent-launch.mjs';
+
+// A real Exact app and a private helper keep this regression independent
+// of the running editor, its project connection, and the user's saved data.
+test('plan view draws previews as line plans, regions measure from the canvas and while editing, and appearance pins both themes',async()=>{
+  const root=resolve(import.meta.dir,'..');await mkdir(resolve(root,'.exact'),{recursive:true});
+  const temp=await mkdtemp(resolve(root,'.exact/plan-view-')),editor=resolve(temp,'studio'),app=resolve(temp,'app');
+  await mkdir(editor);await mkdir(app);await cp(resolve(root,'tools'),resolve(temp,'tools'),{recursive:true});
+  for(const entry of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(entry.isFile()&&!entry.name.includes('.test.')&&!entry.name.endsWith('.d.ts')&&/\.(ts|contract|json|tamber)$/.test(entry.name))await cp(resolve(root,'studio',entry.name),resolve(editor,entry.name));
+  for(const name of ['assets','modules'])await cp(resolve(root,'studio',name),resolve(editor,name),{recursive:true});
+  for(const name of ['app.contract','app.ts','app.tamber','app.json','assets'])await cp(resolve(root,'fixtures/ember',name),resolve(app,name),{recursive:true});
+  const helper=startDiscoveryServer(0),helperOrigin=helper.url.origin;
+  await writeFile(resolve(editor,'app.ts'),(await readFile(resolve(editor,'app.ts'),'utf8')).replace("'http://127.0.0.1:5175'",JSON.stringify(helperOrigin)));
+  const manifest=JSON.parse(await readFile(resolve(editor,'app.json'),'utf8'));delete manifest.commands;delete manifest.server;await writeFile(resolve(editor,'app.json'),JSON.stringify(manifest));
+  const freePort=()=>{const s=Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response()});const p=s.port;s.stop(true);return p;};
+  const editorPort=freePort(),appPort=freePort(),children:any[]=[];
+  const start=async(dir:string,name:string,port:number)=>{
+    const launcher=resolve(temp,name+'.mjs');await writeFile(launcher,`import {run} from ${JSON.stringify(resolve(root,'.exact-sdk/scripts/app-cli.mjs'))};process.exit(await run({dir:${JSON.stringify(dir)},name:${JSON.stringify(name)},exact2:${JSON.stringify(resolve(root,'.exact-sdk'))},args:['web','--port','${port}']}));`);
+    children.push(Bun.spawn([process.execPath,launcher],{cwd:root,env:{...process.env,PATH:resolve(homedir(),'.cargo/bin')+':'+process.env.PATH,EXACT_FEEDBACK:'0',EXACT_TOOL_PORT:String(editorPort)},stdout:Bun.file(resolve(temp,name+'.log')),stderr:Bun.file(resolve(temp,name+'-errors.log'))}));
+    const end=Date.now()+25000;for(;;){try{if((await fetch('http://127.0.0.1:'+port)).ok)return;}catch{}if(Date.now()>end)throw new Error(name+' did not start: '+await Bun.file(resolve(temp,name+'-errors.log')).text());await new Promise(r=>setTimeout(r,100));}
+  };
+  let suite:any,page:any;const errors:string[]=[];
+  try{
+    await Promise.all([start(editor,'plan-editor',editorPort),start(app,'plan-app',appPort)]);
+    suite=await suiteBrowser();page=await suite.newPage({viewport:{width:1440,height:1000},colorScheme:'light'});page.on('pageerror',(e:Error)=>errors.push(e.stack || e.message));
+    await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:'http://127.0.0.1:'+editorPort});
+    await page.goto('http://127.0.0.1:'+editorPort,{waitUntil:'load'});
+    await page.getByRole('button',{name:'Project connection',exact:true}).click();
+    await page.getByRole('textbox',{name:'Project name',exact:true}).fill('Ember');await page.getByRole('textbox',{name:'Project URL',exact:true}).fill('http://127.0.0.1:'+appPort);await page.getByRole('button',{name:'Connect',exact:true}).click();
+    await page.getByRole('button',{name:'Add screen',exact:true}).click();await page.getByRole('textbox',{name:'Screen name',exact:true}).fill('Library');await page.getByRole('textbox',{name:'Route',exact:true}).fill('/');await page.getByRole('button',{name:'Add screen',exact:true}).last().click();
+    const iframe=page.locator('iframe[title="Live app preview"]').last();await iframe.waitFor();
+    const frame=await(await iframe.elementHandle()).contentFrame();
+    await frame.locator('#exact-root').getByText('Room for your thoughts.',{exact:true}).waitFor();
+    const planView=()=>page.evaluate(()=>exact.state[0].find((s:any)=>s.n.devName==='planView')());
+    const copyButton=frame.locator('#ed-plan text',{hasText:/^Copy$/});
+
+    // The toolbar toggle draws the plan: the app paints nothing and keeps its layout underneath.
+    const toggle=page.getByTestId('toggle-plan');
+    expect(await toggle.getAttribute('aria-pressed')).toBe('false');
+    await toggle.click();
+    expect(await planView()).toBe(true);expect(await toggle.getAttribute('aria-pressed')).toBe('true');
+    await frame.waitForFunction(()=>getComputedStyle(document.getElementById('exact-root')!).opacity==='0'&&document.querySelectorAll('#ed-plan svg path, #ed-plan svg rect').length>3,undefined,{polling:50,timeout:10000});
+    const text=await frame.locator('#exact-root').getByText('Room for your thoughts.',{exact:true}).boundingBox();
+    expect(text!.width).toBeGreaterThan(20);
+
+    // Inline SVGs only outline visible shapes, including visibility inherited through groups.
+    await frame.evaluate(()=>{
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.id='plan-inline-visibility';
+      svg.setAttribute('viewBox','0 0 100 100');svg.style.cssText='position:fixed;left:20px;top:20px;width:100px;height:100px';
+      svg.innerHTML='<circle data-plan-visible-shape="" cx="20" cy="20" r="10"/><path data-plan-hidden-shape="" opacity="0" d="M0 0L40 40" stroke="black" stroke-width="6"/><g opacity="0"><g><path data-plan-hidden-shape="" d="M0 40L40 0"/></g></g><g display="none"><path data-plan-hidden-shape="" d="M0 10L40 10"/></g><path data-plan-hidden-shape="" visibility="hidden" d="M0 20L40 20"/><path data-plan-hidden-shape="" style="display:none" d="M0 30L40 30"/>';
+      svg.innerHTML+='<text data-plan-hidden-text="" x="0" y="60" fill-opacity="0" stroke="none">Hidden label</text><text data-plan-visible-text="" x="0" y="80" fill="black" stroke="none">Visible label</text>';
+      svg.innerHTML+='<text x="0" y="95" fill="none" stroke="none"><tspan data-plan-painted-span="" fill="black">Child label</tspan><tspan data-plan-hidden-span="" fill="black" opacity="0">Hidden child</tspan></text>';
+      document.getElementById('exact-root')!.append(svg);
+    });
+    await frame.locator('#ed-plan [data-plan-visible-shape]').waitFor();
+    expect(await frame.locator('#ed-plan [data-plan-visible-shape]').count()).toBe(1);
+    expect(await frame.locator('#ed-plan [data-plan-hidden-shape]').count()).toBe(0);
+    expect(await frame.locator('#ed-plan [data-plan-hidden-text]').count()).toBe(0);
+    expect(await frame.locator('#ed-plan [data-plan-visible-text]').textContent()).toBe('Visible label');
+    const span=frame.locator('#ed-plan [data-plan-painted-span]');
+    expect(await span.textContent()).toBe('Child label');
+    expect(await span.evaluate((n:SVGElement)=>[n.style.fill,n.style.fillOpacity,n.style.stroke])).toEqual(['var(--ink)','0.5','none']);
+    expect(await frame.locator('#ed-plan [data-plan-hidden-span]').count()).toBe(0);
+    await frame.evaluate(()=>document.getElementById('plan-inline-visibility')!.remove());
+    await frame.waitForFunction(()=>!document.querySelector('#ed-plan [data-plan-visible-shape]'));
+
+    const maskPlan=async(id:string)=>frame.locator(await frame.evaluate((id:string)=>{
+      const b=document.getElementById(id)!.getBoundingClientRect();
+      return `#ed-plan svg svg[x="${b.x}"][y="${b.y}"][width="${b.width}"][height="${b.height}"]`;
+    },id));
+    // Chrome escapes raw SVG attribute quotes when serializing a computed mask URL.
+    await frame.evaluate(()=>{
+      const node=document.createElement('div');node.id='plan-raw-quotes';
+      node.style.cssText=`position:fixed;left:160px;top:40px;width:24px;height:24px;background:black;mask-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>')`;
+      document.getElementById('exact-root')!.append(node);
+    });
+    try{
+      const circle=(await maskPlan('plan-raw-quotes')).locator('circle');
+      await circle.waitFor({timeout:5000});
+      expect(await circle.getAttribute('fill')).toBe('none');
+      expect(await circle.getAttribute('stroke')).toBe('var(--ink)');
+      expect(await circle.getAttribute('r')).toBe('9');
+    }finally{await frame.evaluate(()=>document.getElementById('plan-raw-quotes')!.remove());}
+    // Source SVGs retain group transforms, including their order and each shape's own transform.
+    await frame.evaluate(()=>{
+      const root=document.getElementById('exact-root')!;
+      const add=(id:string,url:string,x:number)=>{
+        const node=document.createElement('div');node.id=id;
+        node.style.cssText=`position:fixed;left:${x}px;top:40px;width:24px;height:24px;background:black;mask-image:url("${url}")`;
+        root.append(node);
+      };
+      const source=(id:string)=>`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><defs><rect data-plan-excluded="" width="24" height="24"/></defs><g transform="translate(12 12)" stroke="red"><g transform="scale(2)"><rect data-plan-shape="${id}" transform="translate(1 1)" width="3" height="4" style="fill:red;stroke:none"/></g></g></svg>`;
+      add('plan-group-base64','data:image/svg+xml;base64,'+btoa(source('base64')),40);
+      add('plan-group-encoded','data:image/svg+xml,'+encodeURIComponent(source('encoded')),80);
+      const hidden='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path opacity="0" d="M0 0L24 24"/><path opacity="0.0" d="M0 1L24 1"/><path opacity="0%" d="M0 2L24 2"/><path display="none" d="M0 3L24 3"/><g opacity="0"><path d="M0 4L24 4"/></g><g display="none"><path d="M0 5L24 5"/></g><g visibility="hidden"><path d="M0 6L24 6"/></g><path visibility="collapse" d="M0 7L24 7"/><path style="opacity:0" d="M0 8L24 8"/><g style="display:none"><path d="M0 9L24 9"/></g><path style="visibility:hidden" d="M0 10L24 10"/></svg>';
+      add('plan-hidden-shapes','data:image/svg+xml;base64,'+btoa(hidden),120);
+    });
+    await (await maskPlan('plan-group-encoded')).locator('rect').waitFor();
+    for(const id of ['base64','encoded']){
+      const drawn=await maskPlan('plan-group-'+id);
+      await drawn.locator('rect').waitFor();
+      expect(await drawn.locator('rect').count()).toBe(1); // The defs rect is excluded.
+      const geometry=await drawn.locator('rect').evaluate((shape:Element,id:string)=>{
+        const mask=document.getElementById('plan-group-'+id)!.getBoundingClientRect();
+        const box=shape.getBoundingClientRect();
+        return {x:box.x-mask.x,y:box.y-mask.y,w:box.width,h:box.height,fill:shape.getAttribute('fill'),stroke:shape.getAttribute('stroke'),style:shape.getAttribute('style')};
+      },id);
+      expect(geometry.x).toBeCloseTo(14,1);expect(geometry.y).toBeCloseTo(14,1);
+      expect(geometry.w).toBeCloseTo(6,1);expect(geometry.h).toBeCloseTo(8,1);
+      expect(geometry.fill).toBe('none');expect(geometry.stroke).toBe('var(--ink)');expect(geometry.style).toBeNull();
+    }
+    const visibleMask=await maskPlan('plan-hidden-shapes');
+    await visibleMask.locator('circle').waitFor();
+    expect(await visibleMask.locator('circle').count()).toBe(1);
+    expect(await visibleMask.locator('path').count()).toBe(0);
+    // Invalid SVG or a failed decode draws a placeholder and still reaches later media on every redraw.
+    await frame.evaluate(()=>{
+      const root=document.getElementById('exact-root')!;
+      for(const [id,url] of [['bad-percent','data:image/svg+xml,%'],['bad-base64','data:image/svg+xml;base64,%%%'],['after-bad','data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle data-plan-after="" cx="12" cy="12" r="5"/></svg>')]]){
+        const node=document.createElement('div');node.id='plan-'+id;
+        node.style.cssText=`position:fixed;left:120px;top:80px;width:24px;height:24px;background:black;mask-image:url("${url}")`;
+        root.append(node);
+      }
+    });
+    await (await maskPlan('plan-after-bad')).locator('circle').waitFor({timeout:5000});
+    await frame.evaluate(()=>document.getElementById('plan-after-bad')!.style.left='160px');
+    await (await maskPlan('plan-after-bad')).locator('circle').waitFor({timeout:5000});
+    expect(errors).toEqual([]);
+    await frame.evaluate(()=>{for(const id of ['group-base64','group-encoded','bad-percent','bad-base64','after-bad'])document.getElementById('plan-'+id)!.remove();});
+
+    // File SVGs are inert in the app; their plan outlines must not acquire handlers or focus.
+    const active=await frame.evaluateHandle(()=>document.activeElement);
+    await frame.evaluate(()=>{
+      const node=document.createElement('div');node.id='plan-hostile-mask';
+      const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path onfocus="window.planMaskFocused=true" tabindex="0" autofocus="" d="M2 2L22 22"/></svg>';
+      node.style.cssText=`position:fixed;left:200px;top:80px;width:24px;height:24px;background:black;mask-image:url("data:image/svg+xml;base64,${btoa(svg)}")`;
+      document.getElementById('exact-root')!.append(node);
+    });
+    const hostile=(await maskPlan('plan-hostile-mask')).locator('path');await hostile.waitFor();
+    for(const name of ['onfocus','tabindex','autofocus'])expect(await hostile.getAttribute(name)).toBeNull();
+    await frame.evaluate(()=>document.getElementById('plan-hostile-mask')!.style.left='240px');
+    await (await maskPlan('plan-hostile-mask')).locator('path').waitFor();
+    await frame.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    expect(await frame.evaluate((before:Element)=>document.activeElement===before,active)).toBe(true);
+    expect(await frame.evaluate(()=>(window as any).planMaskFocused)).toBeUndefined();
+    await frame.evaluate(()=>{document.getElementById('plan-hostile-mask')!.remove();delete (window as any).planMaskFocused;});
+    await active.dispose();
+
+    // Plan view's options: layout boxes outline the wrappers, readable text draws the app's words on their lines.
+    const count=(selector:string)=>frame.locator(selector).count();
+    expect(await count('#ed-plan [data-layout-box]')).toBe(0);expect(await count('#ed-plan text[data-app]')).toBe(0);
+    await page.getByTestId('plan-options').click();
+    const boxes=page.getByTestId('plan-boxes'),words=page.getByTestId('plan-text');
+    await page.waitForFunction(()=>document.activeElement?.getAttribute('data-testid')==='plan-boxes');
+    const focused=()=>page.evaluate(()=>document.activeElement?.getAttribute('data-testid'));
+    expect(await focused()).toBe('plan-boxes');
+    await page.keyboard.press('ArrowDown');expect(await focused()).toBe('plan-text');
+    await page.keyboard.press('ArrowDown');expect(await focused()).toBe('plan-boxes');
+    await page.keyboard.press('End');expect(await focused()).toBe('plan-text');
+    await page.keyboard.press('Home');expect(await focused()).toBe('plan-boxes');
+    const checked=await boxes.getAttribute('aria-checked');
+    await page.keyboard.press('Space');
+    expect(await boxes.getAttribute('aria-checked')).toBe(checked==='true'?'false':'true');
+    expect(await page.locator('#plan-menu').evaluate((el:Element)=>el.matches(':popover-open'))).toBe(true);
+    await page.keyboard.press('Escape');
+    expect(await page.locator('#plan-menu').evaluate((el:Element)=>el.matches(':popover-open'))).toBe(false);
+    expect(await focused()).toBe('plan-options');
+    await page.getByTestId('plan-options').click();await words.click();
+    expect(await boxes.getAttribute('aria-checked')).toBe('true');expect(await words.getAttribute('aria-checked')).toBe('true');
+    await frame.waitForFunction(()=>document.querySelectorAll('#ed-plan [data-layout-box]').length>0&&[...document.querySelectorAll('#ed-plan text[data-app]')].map(n=>n.textContent).join(' ').includes('Room for your thoughts.'),undefined,{polling:50,timeout:5000});
+    // A drawn line keeps the width the app laid it out at.
+    const [line,drawn]=await frame.evaluate(()=>{
+      const walk=document.createTreeWalker(document.getElementById('exact-root')!,NodeFilter.SHOW_TEXT);let node=walk.nextNode();
+      while(node&&node.textContent!.trim()!=='Room for your thoughts.')node=walk.nextNode();
+      const range=document.createRange();range.selectNodeContents(node!);
+      const copy=[...document.querySelectorAll('#ed-plan text[data-app]')].find(n=>n.textContent==='Room for your thoughts.')!;
+      return [range.getClientRects()[0],copy.getBoundingClientRect()].map(r=>({x:r.x,y:r.y+r.height/2,width:r.width}));
+    });
+    expect(Math.abs(drawn.width-line.width)).toBeLessThan(2);expect(Math.abs(drawn.x-line.x)).toBeLessThan(2);expect(Math.abs(drawn.y-line.y)).toBeLessThan(3);
+    // A long token wraps into readable slices, rather than being squeezed onto its first line.
+    const token='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    await frame.evaluate((text:string)=>{
+      const node=document.createElement('div');node.id='plan-wrapped-token';node.textContent=text;
+      node.style.cssText='position:fixed;left:20px;top:20px;width:80px;font:14px/20px monospace;overflow-wrap:anywhere;color:black';
+      document.getElementById('exact-root')!.append(node);
+    },token);
+    try{
+      await frame.locator('#ed-plan text[data-app]',{hasText:/^ABCD/}).first().waitFor({timeout:5000});
+      const wrapped=await frame.evaluate((token:string)=>{
+        const node=document.getElementById('plan-wrapped-token')!,box=node.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(node);
+        const lines=new Set([...range.getClientRects()].filter(r=>r.width>0.5).map(r=>r.top));
+        const drawn=[...document.querySelectorAll<SVGTextElement>('#ed-plan text[data-app]')].filter(n=>{
+          const x=Number(n.getAttribute('x')),y=Number(n.getAttribute('y'));
+          return token.includes(n.textContent!)&&Math.abs(x-box.left)<1&&y>=box.top&&y<=box.bottom;
+        }).sort((a,b)=>Number(a.getAttribute('y'))-Number(b.getAttribute('y'))).map(n=>n.textContent!);
+        return {lines:lines.size,drawn};
+      },token);
+      expect(wrapped.lines).toBeGreaterThanOrEqual(3);expect(wrapped.drawn.length).toBe(wrapped.lines);
+      expect(wrapped.drawn.every(Boolean)).toBe(true);expect(wrapped.drawn.join('')).toBe(token);
+    }finally{await frame.evaluate(()=>document.getElementById('plan-wrapped-token')!.remove());}
+    // An opacity-zero parent hides its whole subtree; the plan's hidden root does not.
+    await frame.evaluate(()=>{
+      const hidden=document.createElement('div');hidden.id='plan-opacity';hidden.style.cssText='position:fixed;left:20px;top:20px;width:240px;opacity:0;color:black';hidden.textContent='Hidden plan text';
+      const child=document.createElement('div');child.style.cssText='border:1px solid black;opacity:1';child.textContent='Hidden child text';hidden.append(child);
+      const visible=document.createElement('div');visible.id='plan-visible';visible.style.cssText='position:fixed;left:20px;top:100px;width:240px;color:black';visible.textContent='Visible plan text';
+      document.getElementById('exact-root')!.append(hidden,visible);
+    });
+    const hiddenText=frame.locator('#ed-plan text[data-app]',{hasText:/Hidden (plan|child) text/});
+    await frame.locator('#ed-plan text[data-app]',{hasText:'Visible plan text'}).waitFor();
+    expect(await hiddenText.count()).toBe(0);
+    await frame.evaluate(()=>document.getElementById('plan-opacity')!.style.opacity='1');
+    await frame.waitForFunction(()=>[...document.querySelectorAll('#ed-plan text[data-app]')].filter(n=>/Hidden (plan|child) text/.test(n.textContent!)).length===2,undefined,{polling:50,timeout:5000});
+    await frame.evaluate(()=>document.getElementById('plan-opacity')!.style.opacity='0.5');
+    await frame.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    expect(await hiddenText.count()).toBe(2);
+    await frame.evaluate(()=>document.getElementById('plan-opacity')!.style.opacity='0');
+    await frame.waitForFunction(()=>![...document.querySelectorAll('#ed-plan text[data-app]')].some(n=>/Hidden (plan|child) text/.test(n.textContent!)),undefined,{polling:50,timeout:5000});
+    await frame.evaluate(()=>{document.getElementById('plan-opacity')!.remove();document.getElementById('plan-visible')!.remove();});
+    // Modal opacity comes from the plan itself; descendants still honor their own opacity.
+    await page.keyboard.press('Escape');
+    await frame.evaluate(()=>{
+      const dialog=document.createElement('dialog');dialog.id='plan-modal';
+      dialog.style.cssText='position:fixed;inset:40px auto auto 40px;margin:0;width:260px;padding:12px;border:2px solid black;background:white;color:black';
+      dialog.innerHTML='<div id="plan-modal-child" style="border:1px solid black;width:210px;height:40px">Modal plan text</div><div id="plan-modal-hidden" style="opacity:0;border:1px solid black;width:190px;height:30px">Hidden modal text</div>';
+      document.getElementById('exact-root')!.append(dialog);dialog.showModal();
+    });
+    await frame.locator('#ed-plan text[data-app]',{hasText:'Modal plan text'}).waitFor({timeout:5000});
+    const modalSurfaces=()=>frame.evaluate(()=>{
+      const paths=[...document.querySelectorAll<SVGGraphicsElement>('#ed-plan path[stroke="var(--ink)"]')];
+      return ['plan-modal','plan-modal-child','plan-modal-hidden'].map(id=>{
+        const box=document.getElementById(id)!.getBoundingClientRect();
+        return paths.some(path=>{const r=path.getBBox();return Math.abs(r.x-box.x)<1&&Math.abs(r.y-box.y)<1&&Math.abs(r.width-box.width)<1&&Math.abs(r.height-box.height)<1;});
+      });
+    });
+    expect(await modalSurfaces()).toEqual([true,true,false]);
+    expect(await frame.locator('#ed-plan text[data-app]',{hasText:'Hidden modal text'}).count()).toBe(0);
+    expect(await frame.locator('#plan-modal').evaluate((n:Element)=>getComputedStyle(n).opacity)).toBe('0');
+    await toggle.click();
+    await frame.waitForFunction(()=>getComputedStyle(document.getElementById('plan-modal')!).opacity==='1'&&getComputedStyle(document.getElementById('exact-root')!).opacity==='1'&&!document.getElementById('ed-plan')?.isConnected,undefined,{polling:50,timeout:5000});
+    expect(await frame.locator('#plan-modal').isVisible()).toBe(true);
+    await frame.evaluate(()=>{const dialog=document.getElementById('plan-modal') as HTMLDialogElement;dialog.close();dialog.remove();});
+    await toggle.click();
+    await frame.locator('#ed-plan text[data-app]').first().waitFor();
+    // Top-layer dialogs escape ancestor overflow clips, including for readable text.
+    await frame.evaluate(()=>{
+      const card=document.createElement('div');card.id='plan-modal-card';
+      card.style.cssText='position:fixed;left:0;top:0;width:80px;height:80px;overflow:hidden';
+      const dialog=document.createElement('dialog');dialog.id='plan-clipped-modal';
+      dialog.style.cssText='position:fixed;inset:0;margin:auto;width:200px;height:200px;padding:12px;border:1px solid black;background:white;color:black;font:14px/20px sans-serif';
+      dialog.textContent='Unclipped modal text';card.append(dialog);
+      document.getElementById('exact-root')!.append(card);dialog.showModal();
+    });
+    try{
+      await frame.locator('#ed-plan text[data-app]',{hasText:'Unclipped modal text'}).waitFor({timeout:5000});
+    }finally{await frame.evaluate(()=>{(document.getElementById('plan-clipped-modal') as HTMLDialogElement).close();document.getElementById('plan-modal-card')!.remove();});}
+    // The shortcuts switch them off again while the plan shows.
+    await page.keyboard.press('Escape');await page.getByTestId('canvas-stage').focus();
+    await page.keyboard.press('Shift+KeyB');await page.keyboard.press('Shift+KeyT');
+    await frame.waitForFunction(()=>!document.querySelector('#ed-plan [data-layout-box], #ed-plan text[data-app]'),undefined,{polling:50,timeout:5000});
+    expect(await boxes.getAttribute('aria-checked')).toBe('false');expect(await words.getAttribute('aria-checked')).toBe('false');
+
+    // Shift-drag over a frame that does not take the pointer: the studio relays it, and the frame stays put.
+    // A new screen settles its size as the preview reports it; measure once it holds still.
+    const settled=async()=>{let last='';for(let i=0;i<60;i++){const now=JSON.stringify(await iframe.boundingBox());if(now===last)return JSON.parse(now);last=now;await page.waitForTimeout(250);}throw new Error('The frame kept moving');};
+    const before=await settled();
+    await page.keyboard.down('Shift');await page.mouse.move(before.x+8,before.y+8);await page.mouse.down();
+    await page.mouse.move(before.x+before.width/2,before.y+before.height/3,{steps:5});await page.mouse.move(before.x+before.width-8,before.y+before.height/2,{steps:5});
+    await page.mouse.up();await page.keyboard.up('Shift');
+    await copyButton.waitFor({timeout:5000});
+    await page.mouse.move(before.x-40,before.y+40,{steps:4});
+    expect(await iframe.boundingBox()).toEqual(before);
+    // Copy belongs to the region: the studio writes the spec and the frame is not selected or moved.
+    const copy=await copyButton.boundingBox();await page.mouse.click(copy.x+copy.width/2,copy.y+copy.height/2);
+    await frame.locator('#ed-plan text',{hasText:/^Copied$/}).waitFor({timeout:3000});
+    const spec=await page.evaluate(()=>navigator.clipboard.readText());
+    expect(spec).toMatch(/^Region \d+ × \d+ at \d+, \d+\n  /);
+    expect(await iframe.boundingBox()).toEqual(before);
+    // Escape clears it; Alt+A measures the whole screen under the pointer and toggles off again.
+    await page.keyboard.press('Escape');await copyButton.waitFor({state:'detached',timeout:3000});
+    await page.mouse.move(before.x+before.width/2,before.y+before.height/2);
+    await page.keyboard.press('Alt+KeyA');await copyButton.waitFor({timeout:5000});
+    const screen=await frame.evaluate(()=>`${document.documentElement.clientWidth} × ${document.documentElement.clientHeight}`);
+    await frame.locator('#ed-plan text',{hasText:screen}).first().waitFor();
+    await page.keyboard.press('Alt+KeyA');await copyButton.waitFor({state:'detached',timeout:3000});
+
+    // Unequal corners keep their CSS order in the region's radius label.
+    await frame.evaluate(()=>{
+      const node=document.createElement('div');node.id='plan-top-corners';
+      node.style.cssText='position:fixed;left:60px;top:100px;width:180px;height:100px;background:white;border-radius:14px 14px 0 0';
+      document.getElementById('exact-root')!.append(node);
+    });
+    try{
+      const bounds=await frame.locator('#plan-top-corners').boundingBox();
+      await page.keyboard.down('Shift');await page.mouse.move(bounds.x-8,bounds.y-8);await page.mouse.down();
+      await page.mouse.move(bounds.x+bounds.width+8,bounds.y+bounds.height+8,{steps:6});
+      await page.mouse.up();await page.keyboard.up('Shift');
+      await frame.locator('#ed-plan text',{hasText:/^r 14 14 0 0$/}).waitFor({timeout:5000});
+    }finally{
+      await page.keyboard.press('Escape');
+      await frame.evaluate(()=>document.getElementById('plan-top-corners')!.remove());
+    }
+
+    // While editing, the preview takes the pointer itself; a region does not select the element under it.
+    await page.getByRole('button',{name:'Edit app design',exact:true}).click();await page.getByRole('button',{name:'Finish editing app',exact:true}).waitFor();
+    await frame.waitForFunction(()=>document.getElementById('exact-inspect'),undefined,{polling:50});
+    const empty=page.getByText('Select an element in a screen.',{exact:true});await empty.waitFor();
+    const box=await iframe.boundingBox();
+    await page.keyboard.down('Shift');await page.mouse.move(box.x+12,box.y+12);await page.mouse.down();
+    await page.mouse.move(box.x+box.width-12,box.y+box.height/2,{steps:6});await page.mouse.up();await page.keyboard.up('Shift');
+    await copyButton.waitFor({timeout:5000});
+    await page.waitForTimeout(500);expect(await empty.isVisible()).toBe(true);
+    await page.keyboard.press('Escape');await copyButton.waitFor({state:'detached',timeout:3000});
+
+    // Appearance pins the studio and the screens separately; plan view follows the screens.
+    const scheme=(target:any)=>target.evaluate(()=>[getComputedStyle(document.documentElement).colorScheme,(globalThis as any).exact?.systemScheme??null]);
+    await page.getByRole('button',{name:'Finish editing app',exact:true}).click();await page.getByRole('button',{name:'Edit app design',exact:true}).waitFor();
+    await page.getByTestId('appearance').click();await page.getByTestId('theme-studio-dark').click();await page.getByTestId('theme-screens-light').click();
+    await page.waitForFunction(()=>getComputedStyle(document.documentElement).colorScheme==='dark');
+    expect(await scheme(page)).toEqual(['dark','dark']);
+    await frame.waitForFunction(()=>getComputedStyle(document.documentElement).colorScheme==='light'&&document.getElementById('ed-plan')?.dataset.scheme==='light',undefined,{polling:50,timeout:5000});
+    expect(await scheme(frame)).toEqual(['light','light']);
+    await page.getByTestId('theme-screens-dark').click();
+    await frame.waitForFunction(()=>getComputedStyle(document.documentElement).colorScheme==='dark'&&document.getElementById('ed-plan')?.dataset.scheme==='dark',undefined,{polling:50,timeout:5000});
+    await page.getByTestId('theme-studio-system').click();await page.getByTestId('theme-screens-system').click();await page.keyboard.press('Escape');
+    await frame.waitForFunction(()=>!document.getElementById('ed-scheme-pin')&&document.getElementById('ed-plan')?.dataset.scheme==='light',undefined,{polling:50,timeout:5000});
+    expect((await scheme(page))[1]).toBeNull();expect((await scheme(frame))[1]).toBeNull();
+    // Turning plan view off restores the app's own painting.
+    await toggle.click();expect(await planView()).toBe(false);
+    await frame.waitForFunction(()=>getComputedStyle(document.getElementById('exact-root')!).opacity==='1'&&!document.getElementById('ed-plan')?.isConnected,undefined,{polling:50,timeout:5000});
+    // With plan view off, clearing must reach the studio even when no redraw is pending.
+    // With no element selected, the next Escape should finish editing, not clear a stale region.
+    for(const clear of ['escape','all','tiny']){
+      await page.getByRole('button',{name:'Edit app design',exact:true}).click();
+      await page.getByRole('button',{name:'Finish editing app',exact:true}).waitFor();await empty.waitFor();
+      const bounds=await iframe.boundingBox();
+      await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2);
+      await page.getByTestId('canvas-stage').focus();await page.keyboard.press('Alt+KeyA');
+      await copyButton.waitFor({timeout:5000});
+      await frame.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+      if(clear==='tiny'){
+        await page.keyboard.down('Shift');await page.mouse.down();
+        await frame.locator('#ed-plan text',{hasText:'0 × 0'}).waitFor();
+        await frame.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+        await page.mouse.up();await page.keyboard.up('Shift');
+      }else await page.keyboard.press(clear==='all'?'Alt+KeyA':'Escape');
+      await frame.locator('#ed-plan').waitFor({state:'detached',timeout:3000});
+      // The preview's report reaches the studio as a message from another process, so let it land first.
+      await page.waitForTimeout(300);
+      await page.getByTestId('canvas-stage').focus();await page.keyboard.press('Escape');
+      await page.getByRole('button',{name:'Edit app design',exact:true}).waitFor({timeout:3000});
+    }
+    expect(errors).toEqual([]);
+  }finally{
+    await page?.context().close();await suite?.browser.close();helper.stop(true);stopElementBridges();
+    for(const child of children)child.kill('SIGTERM');await Promise.all(children.map(c=>c.exited));await rm(temp,{recursive:true,force:true});
+  }
+},120000);

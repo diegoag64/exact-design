@@ -1,10 +1,265 @@
 import {scopePreviewIdentity} from '../tools/preview-identity';
 import {test,expect} from 'bun:test';
 import {selectionPan} from './modules/web/canvas-navigation.js';
+import {installPlanRegions} from './modules/web/plan-regions.js';
 import {ElementBridge,bridgeFor,stopElementBridges} from '../tools/element-bridge';
 import {DesignSession} from '../tools/design-session';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
+import {visibleSvgShape,visibleColor} from '../tools/plan-geometry.js';
+
+for(const type of ['keydown','pointerdown'])test(`plan regions ignore disconnected frames on ${type}`,()=>{
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'window'),handlers=new Map<string,Function>(),sent:any[]=[];
+  const target={closest:(selector:string)=>selector==='#canvas-stage'?target:null};
+  const frame={isConnected:true,src:'http://localhost/?__ed_events=project-v2&__ed_canvas=1',
+    contentWindow:{postMessage:(packet:any)=>sent.push(packet)},closest:target.closest,
+    clientWidth:100,clientHeight:100,getBoundingClientRect:()=>({left:0,top:0,right:100,bottom:100,width:100,height:100})};
+  const root={dataset:{},contains:(node:any)=>node===target,addEventListener:()=>{},removeEventListener:()=>{},
+    querySelectorAll:()=>frame.isConnected?[frame]:[],
+    querySelector:(selector:string)=>selector==='[aria-label="Design canvas"]'?{closest:()=>null}:null};
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{
+    addEventListener:(name:string,handler:Function)=>handlers.set(name,handler),removeEventListener:(name:string)=>handlers.delete(name),
+  }});
+  let dispose:undefined|(()=>void);
+  try{
+    dispose=installPlanRegions(root);
+    handlers.get('message')!({source:frame.contentWindow,origin:'http://localhost',data:{kind:'exact-design:canvas',op:'region',region:{x:10,y:10,width:20,height:20}}});
+    const dispatch=()=>{
+      let prevented=false,stopped=false;
+      handlers.get(type)!({type,key:'Escape',button:0,target,clientX:200,clientY:200,
+        preventDefault:()=>{prevented=true;},stopImmediatePropagation:()=>{stopped=true;}});
+      return {prevented,stopped};
+    };
+    expect(dispatch()).toEqual({prevented:type==='keydown',stopped:type==='keydown'});
+    expect(sent).toEqual([{kind:'exact-design:region',op:'clear'}]);
+    sent.length=0;frame.isConnected=false;
+    expect(dispatch()).toEqual({prevented:false,stopped:false});
+    expect(sent).toEqual([]);
+  }finally{
+    dispose?.();
+    if(previous)Object.defineProperty(globalThis,'window',previous);else Reflect.deleteProperty(globalThis,'window');
+  }
+});
+
+for(const type of ['keydown','pointerdown'])test(`plan regions forget reloaded frames on ${type}`,()=>{
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'window'),navigatorBefore=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  const handlers=new Map<string,Function>(),loads=new Set<Function>(),sent:any[]=[],copied:string[]=[];
+  const target={localName:'img',closest:(selector:string)=>selector==='#canvas-stage'?target:null};
+  const frame={localName:'iframe',isConnected:true,src:'http://localhost/?__ed_events=project-v2&__ed_canvas=1',
+    contentWindow:{postMessage:(packet:any)=>sent.push(packet)},closest:target.closest,
+    clientWidth:100,clientHeight:100,getBoundingClientRect:()=>({left:0,top:0,right:100,bottom:100,width:100,height:100})};
+  const root={dataset:{},contains:(node:any)=>node===target,querySelectorAll:()=>[frame],
+    querySelector:(selector:string)=>selector==='[aria-label="Design canvas"]'?{closest:()=>null}:null,
+    addEventListener:(name:string,handler:Function,capture:boolean)=>{expect(name).toBe('load');expect(capture).toBe(true);loads.add(handler);},
+    removeEventListener:(name:string,handler:Function,capture:boolean)=>{expect(name).toBe('load');expect(capture).toBe(true);expect(loads.delete(handler)).toBe(true);}};
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{
+    addEventListener:(name:string,handler:Function)=>handlers.set(name,handler),removeEventListener:(name:string)=>handlers.delete(name),
+  }});
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{clipboard:{writeText:(text:string)=>{copied.push(text);return Promise.resolve();}}}});
+  let dispose:undefined|(()=>void);
+  try{
+    dispose=installPlanRegions(root);
+    handlers.get('message')!({source:frame.contentWindow,origin:'http://localhost',data:{kind:'exact-design:canvas',op:'region',
+      region:{x:10,y:10,width:80,height:80},copy:{x:20,y:20,width:30,height:20},text:'stale spec'}});
+    const dispatch=(kind:string,extra={})=>{
+      let prevented=false,stopped=false;
+      handlers.get(kind)!({type:kind,key:'Escape',button:0,target,clientX:25,clientY:25,...extra,
+        preventDefault:()=>{prevented=true;},stopImmediatePropagation:()=>{stopped=true;},stopPropagation:()=>{stopped=true;}});
+      return {prevented,stopped};
+    };
+    expect(dispatch('keydown')).toEqual({prevented:true,stopped:true});
+    for(const load of loads)load({target});
+    expect(dispatch('keydown')).toEqual({prevented:true,stopped:true});
+    sent.length=0;
+    for(const load of loads)load({target:frame});
+    expect(dispatch(type)).toEqual({prevented:false,stopped:false});
+    if(type==='keydown')expect(dispatch('keydown',{key:'a',code:'KeyA',altKey:true})).toEqual({prevented:false,stopped:false});
+    expect(sent).toEqual([]);expect(copied).toEqual([]);
+    expect(loads.size).toBe(1);
+    dispose();dispose=undefined;expect(loads.size).toBe(0);
+  }finally{
+    dispose?.();
+    if(previous)Object.defineProperty(globalThis,'window',previous);else Reflect.deleteProperty(globalThis,'window');
+    if(navigatorBefore)Object.defineProperty(globalThis,'navigator',navigatorBefore);else Reflect.deleteProperty(globalThis,'navigator');
+  }
+});
+
+test('plan scenes retain zero-opacity modals and their stacking key but skip hidden descendants',()=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const style={display:'block',visibility:'visible',opacity:'1',position:'static',zIndex:'auto',backgroundImage:'none',backgroundColor:'transparent',boxShadow:'none',outlineStyle:'none',filter:'none',overflowX:'visible',overflowY:'visible'};
+  const element=(tag:string,opacity:string,children:any[]=[],modal=false):any=>({localName:tag,children,childNodes:[],textContent:'',
+    style:{...style,opacity},matches:(selector:string)=>modal&&selector.includes(':modal'),querySelector:()=>null,getAttribute:()=>null,
+    getBoundingClientRect:()=>({left:20,top:20,right:220,bottom:120,width:200,height:100})});
+  const visible=element('div','1'),hidden=element('div','0',[element('div','1')]);
+  const modal=element('dialog','0',[visible,hidden],true);
+  const popover=element('div','0');popover.matches=(selector:string)=>selector.includes(':popover-open');
+  const root={children:[modal,popover]};
+  const read=runInNewContext(script.slice(script.indexOf('function readScene()'),script.indexOf('/* Drawing the plan'))+'\nreadScene;',{
+    document:{getElementById:()=>root,documentElement:{clientWidth:400,clientHeight:800}},host:null,
+    getComputedStyle:(node:any)=>node.style,px:(v:string)=>parseFloat(v)||0,maskUrl:()=>'',visibleColor:()=>false,layerName:()=> 'Dialog',
+  });
+  visible.style={...visible.style,marginTop:'1.5px',marginRight:'2px',marginBottom:'0px',marginLeft:'-4px'};
+  const scene=read();
+  expect(scene.records.map((r:any)=>r.margin)).toEqual([[0,0,0,0],[1.5,2,0,-4]]);
+  expect(scene.records.map((r:any)=>r.node)).toEqual([modal,visible]);
+  expect(scene.records.map((r:any)=>r.key[0])).toEqual([1,1]);
+  const sibling=element('div','1'),card=element('div','1',[modal,sibling]);
+  card.style={...card.style,overflowX:'hidden',overflowY:'hidden'};
+  card.getBoundingClientRect=()=>({left:300,top:600,right:380,bottom:680,width:80,height:80});
+  root.children=[card];
+  for(const selector of [':modal',':popover-open']){
+    modal.matches=(s:string)=>s.includes(selector);modal.style.opacity=selector===':modal'?'0':'1';
+    const records=read().records,record=(node:any)=>records.find((r:any)=>r.node===node);
+    expect(record(modal).clip).toEqual({x:0,y:0,r:400,b:800});expect(record(modal).visible).toBe(true);
+    expect(record(visible).clip).toEqual({x:0,y:0,r:400,b:800});expect(record(visible).visible).toBe(true);
+    expect(record(sibling).clip).toEqual({x:300,y:600,r:380,b:680});expect(record(sibling).visible).toBe(false);
+    expect(record(modal).key[0]).toBe(1);expect(record(sibling).key[0]).toBe(0);
+    modal.style.overflowX='auto';modal.style.overflowY='auto';
+    expect(read().records.find((r:any)=>r.node===visible).clip).toEqual({x:20,y:20,r:220,b:120});
+    modal.style.overflowX='visible';modal.style.overflowY='visible';
+  }
+});
+
+test('file SVG parsing excludes hidden shapes through the SVG root before outlining',()=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const node=(attrs:Record<string,string>={},parentElement:any=null):any=>({parentElement,getAttribute:(name:string)=>attrs[name]??null,closest:()=>null});
+  const root=node({visibility:'hidden'});root.localName='svg';
+  const visible=node({visibility:'visible'},root),hidden=node({},root),transparent=node({opacity:'0',visibility:'visible'},root);
+  const group=node({style:'display:none'},root),nested=node({visibility:'visible'},group);
+  root.querySelectorAll=()=>[visible,hidden,transparent,nested];
+  const parse=runInNewContext(script.slice(script.indexOf('function parseSvg('),script.indexOf('// Readable text:'))+'\nparseSvg;',{
+    DOMParser:class{parseFromString(){return {documentElement:root};}},SHAPES:'path',visibleSvgShape,
+  });
+  expect(parse('<svg/>').shapes).toEqual([visible]);
+  root.getAttribute=(name:string)=>name==='style'?'opacity:0':null;
+  expect(parse('<svg/>').shapes).toEqual([]);
+});
+
+test('file SVG plans copy only geometry and text attributes',()=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const node=(localName:string,attrs:Record<string,string>={}):any=>({localName,attrs:{...attrs},children:[],
+    getAttribute(name:string){return this.attrs[name]??null;},hasAttribute(name:string){return name in this.attrs;},
+    setAttribute(name:string,value:any){this.attrs[name]=String(value);},removeAttribute(name:string){delete this.attrs[name];},
+    append(child:any){this.children.push(child);}});
+  const unsafe={onfocus:'window.stolen=true',onload:'window.stolen=true',tabindex:'0',autofocus:'',href:'javascript:alert(1)','xlink:href':'#app',id:'app',class:'app',style:'fill:red','data-plan-shape':'app'};
+  const path=node('path',{...unsafe,d:'M0 0L4 4',transform:'translate(1 1)'}),text=node('text',{...unsafe,x:'2',y:'3','font-size':'12','text-anchor':'middle'});
+  path.parentElement=node('g',{transform:'scale(2)'});text.textContent='Label';
+  const draw=runInNewContext(script.slice(script.indexOf('function outlineShape('),script.indexOf('function drawInlineSvg('))+'\ndrawIcon;',{
+    svgSource:()=>({viewBox:'0 0 24 24',shapes:[path,text]}),k:()=>1,
+    el:(tag:string,attrs:any,parent:any)=>{const n=node(tag,attrs);parent?.append(n);return n;},
+    document:{importNode:(n:any)=>node(n.localName,n.attrs)},
+  });
+  const g=node('g');draw(g,{src:'mask',x:20,y:40,w:24,h:24});
+  const [p,t]=g.children[0].children,outline={fill:'none',stroke:'var(--ink)','stroke-width':'1','vector-effect':'non-scaling-stroke','stroke-linejoin':'round','stroke-linecap':'round'};
+  expect(p.attrs).toEqual({d:'M0 0L4 4',transform:'scale(2) translate(1 1)',...outline});
+  expect(t.attrs).toEqual({x:'2',y:'3','font-size':'12','text-anchor':'middle',...outline});expect(t.textContent).toBe('Label');
+});
+
+test('inline SVG plans strip handlers and focus attributes from the root and descendants',()=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const node=()=>({attrs:new Map([['onfocus','window.stolen=true'],['onClick','window.stolen=true'],['tabindex','0'],['autofocus',''],['id','app'],['data-visible','yes'],['href','#app']]),
+    get attributes(){return [...this.attrs.keys()].map(name=>({name}));},removeAttribute(name:string){this.attrs.delete(name);},setAttribute:()=>{}});
+  const child=node(),copy={...node(),querySelectorAll:(s:string)=>s==='*'||s==='[id]'?[child]:[]};
+  const source={cloneNode:()=>copy,getScreenCTM:()=>null,querySelectorAll:()=>[]};
+  const draw=runInNewContext(script.slice(script.indexOf('function drawInlineSvg('),script.indexOf('function drawPlan('))+'\ndrawInlineSvg;',{SHAPES:'path'});
+  draw({append:()=>{}},{node:source,x:0,y:0,w:24,h:24});
+  for(const n of [copy,child])expect([...n.attrs]).toEqual([['data-visible','yes'],['href','#app']]);
+});
+
+test('inline SVG plans omit hidden shapes before outlining or cloning wide strokes',()=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const style={display:'inline',visibility:'visible',opacity:'1',stroke:'black',strokeWidth:'6',strokeOpacity:'1',fill:'none',fillOpacity:'1',strokeDasharray:'none',getPropertyValue:()=>''};
+  const draw=runInNewContext(script.slice(script.indexOf('function drawInlineSvg('),script.indexOf('function drawPlan('))+'\ndrawInlineSvg;',{
+    getComputedStyle:(n:any)=>n.computed,SHAPES:'path',GEOMETRY:[],k:()=>1,
+  });
+  const cases=[
+    {own:{},group:{},root:{},drawn:true},
+    {own:{opacity:'0'},group:{},root:{},drawn:false},
+    {own:{},group:{opacity:'0'},root:{},drawn:false},
+    {own:{display:'none'},group:{},root:{},drawn:false},
+    {own:{},group:{display:'none'},root:{},drawn:false},
+    {own:{visibility:'hidden'},group:{},root:{},drawn:false},
+    {own:{opacity:'0.5'},group:{opacity:'0.5'},root:{},drawn:true},
+    {own:{},group:{},root:{opacity:'0'},drawn:false},
+    {own:{},group:{},root:{display:'none'},drawn:false},
+    {own:{visibility:'visible'},group:{visibility:'hidden'},root:{},drawn:true},
+  ];
+  for(const {own,group,root,drawn} of cases){
+    let removed=false,clones=0;
+    const shape:any={style:{setProperty:()=>{}},remove:()=>{removed=true;},cloneNode:()=>{clones++;return shape;},after:()=>{},setAttribute:()=>{}};
+    const copy={attributes:[],querySelectorAll:(s:string)=>s==='path'?[shape]:[],removeAttribute:()=>{},setAttribute:()=>{}};
+    const source:any={computed:{...style,...root},parentElement:{computed:{...style,opacity:'0'}},cloneNode:()=>copy,getScreenCTM:()=>null};
+    const parent={computed:{...style,...group},parentElement:source};
+    source.querySelectorAll=()=>[{localName:'path',computed:{...style,...own},parentElement:parent}];
+    draw({append:()=>{}},{node:source,x:0,y:0,w:24,h:24});
+    expect(removed).toBe(!drawn);expect(clones).toBe(drawn?1:0);
+  }
+});
+
+test.each([
+  {name:'zero fill opacity',own:{fillOpacity:'0'},drawn:false},
+  {name:'no fill',own:{fill:'none'},drawn:false},
+  {name:'transparent fill',own:{fill:'transparent'},drawn:false},
+  {name:'zero alpha fill',own:{fill:'rgba(0, 0, 0, 0)'},drawn:false},
+  {name:'zero alpha modern fill',own:{fill:'color(srgb 0 0 0 / 0)'},drawn:false},
+  {name:'visible stroke without fill',own:{fill:'none',stroke:'black'},drawn:true},
+  {name:'zero stroke opacity',own:{fill:'none',stroke:'black',strokeOpacity:'0'},drawn:false},
+  {name:'zero stroke width',own:{fill:'none',stroke:'black',strokeWidth:'0px'},drawn:false},
+  {name:'transparent stroke',own:{fill:'none',stroke:'rgba(0, 0, 0, 0)'},drawn:false},
+  {name:'normal text',own:{},drawn:true},
+])('inline SVG text respects paint visibility: $name',({own,drawn})=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const computed={display:'inline',visibility:'visible',opacity:'1',fill:'rgb(0, 0, 0)',fillOpacity:'1',stroke:'none',strokeOpacity:'1',strokeWidth:'1px',getPropertyValue:()=>'',...own};
+  const draw=runInNewContext(script.slice(script.indexOf('function drawInlineSvg('),script.indexOf('function drawPlan('))+'\ndrawInlineSvg;',{
+    getComputedStyle:(n:any)=>n.computed,SHAPES:'text',GEOMETRY:[],visibleColor,
+  });
+  let removed=false;const painted:Record<string,string>={};
+  const shape={style:{setProperty:(p:string,v:string)=>{painted[p]=v;}},remove:()=>{removed=true;}};
+  const copy={attributes:[],querySelectorAll:(s:string)=>s==='text'?[shape]:[],removeAttribute:()=>{},setAttribute:()=>{}};
+  const source:any={computed:{opacity:'1',display:'inline'},cloneNode:()=>copy,getScreenCTM:()=>null};
+  source.querySelectorAll=()=>[{localName:'text',computed,parentElement:source}];
+  draw({append:()=>{}},{node:source,x:0,y:0,w:100,h:100});
+  expect(removed).toBe(!drawn);
+  if(drawn){expect(painted.fill).toBe('var(--ink)');expect(painted['fill-opacity']).toBe('.5');expect(painted.stroke).toBe('none');}
+});
+
+test.each([
+  {name:'painted tspan',own:{fill:'none'},children:[{tag:'tspan',own:{}}],kept:[true]},
+  {name:'painted textPath',own:{fill:'none'},children:[{tag:'textPath',own:{fill:'none',stroke:'black'}}],kept:[true]},
+  {name:'all children transparent',own:{fill:'none'},children:[{own:{fill:'transparent'}},{own:{fillOpacity:'0'}},{own:{fill:'none',stroke:'rgba(0, 0, 0, 0)'}}],kept:[false,false,false]},
+  {name:'visible text with hidden span',own:{},children:[{own:{display:'none'}},{own:{fill:'transparent'}}],kept:[false,false]},
+  ...['display','visibility','opacity'].map(prop=>({name:'nested span hidden by '+prop,own:{fill:'none'},children:[{own:{[prop]:prop==='display'?'none':prop==='visibility'?'hidden':'0'},children:[{own:{}}]}],kept:[false]})),
+  {name:'unpainted span with painted child',own:{fill:'none'},children:[{own:{fill:'none'},children:[{own:{}}]}],kept:[true]},
+])('inline SVG text descendants: $name',({own,children,kept})=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const style={display:'inline',visibility:'visible',opacity:'1',fill:'black',fillOpacity:'1',stroke:'none',strokeOpacity:'1',strokeWidth:'1px',getPropertyValue:()=>''};
+  const draw=runInNewContext(script.slice(script.indexOf('function drawInlineSvg('),script.indexOf('function drawPlan('))+'\ndrawInlineSvg;',{
+    getComputedStyle:(n:any)=>n.computed,SHAPES:'text',GEOMETRY:[],visibleColor,
+  });
+  const node=(spec:any,parent:any=null):any=>{
+    const original:any={localName:spec.tag||'tspan',computed:{...style,...spec.own},parentElement:parent};
+    const copy:any={painted:{},removed:false,remove(){this.removed=true;},style:{setProperty:(p:string,v:string)=>{copy.painted[p]=v;}}};
+    const pairs=(spec.children||[]).map((child:any)=>node(child,original));
+    original.children=pairs.map((p:any)=>p.original);copy.children=pairs.map((p:any)=>p.copy);
+    return {original,copy};
+  };
+  const pair=node({tag:'text',own,children}),shape=pair.copy;
+  const copy={attributes:[],querySelectorAll:(s:string)=>s==='text'?[shape]:[],removeAttribute:()=>{},setAttribute:()=>{}};
+  const source:any={computed:style,cloneNode:()=>copy,getScreenCTM:()=>null,querySelectorAll:()=>[pair.original]};
+  pair.original.parentElement=source;
+  draw({append:()=>{}},{node:source,x:0,y:0,w:100,h:100});
+  expect(shape.removed).toBe(own.fill==='none'&&!kept.some(Boolean));
+  expect(shape.children.map((c:any)=>!c.removed)).toEqual(kept);
+  const ink=(c:any)=>{expect(c.painted.fill).toBe('var(--ink)');expect(c.painted['fill-opacity']).toBe('.5');expect(c.painted.stroke).toBe('none');};
+  if(!shape.removed)ink(shape);
+  const check=(o:any,c:any)=>{
+    if(c.removed)return;
+    if(o.computed.fill==='black'||o.computed.stroke==='black')ink(c);
+    else expect(c.painted.fill).toBe('none');
+    o.children.forEach((n:any,i:number)=>check(n,c.children[i]));
+  };
+  pair.original.children.forEach((n:any,i:number)=>check(n,shape.children[i]));
+});
 
 test('layer names describe layout spans without repeating their descendants text',()=>{
   const script=readFileSync(new URL('../tools/element-bridge-client.js',import.meta.url),'utf8');
@@ -227,8 +482,8 @@ test('canvas picks are pushed to the tree without waiting for the inspection pol
 
 test('canvas frames relay gestures independently of inspection while Preview input stays local',()=>{
   const script=readFileSync(new URL('../tools/canvas-input-client.js',import.meta.url),'utf8');
-  const handlers:Record<string,Function>={},packets:any[]=[],frameWindow={};let inspecting=true;
-  runInNewContext(script,{URL,location:{href:'http://localhost/?__ed_canvas=1'},window:frameWindow,parent:{postMessage:(packet:any)=>packets.push(packet)},document:{getElementById:()=>inspecting?{}:null},addEventListener:(name:string,fn:Function)=>{handlers[name]=fn;}});
+  const handlers:Record<string,Function>={},packets:any[]=[],frameWindow={},parentWindow={postMessage:(packet:any)=>packets.push(packet)};let inspecting=true;
+  runInNewContext(script,{URL,location:{href:'http://localhost/?__ed_canvas=1'},window:frameWindow,parent:parentWindow,document:{getElementById:()=>inspecting?{}:null},addEventListener:(name:string,fn:Function)=>{handlers[name]=fn;},dispatchEvent:()=>true,Event:class{}},{importModuleDynamically:(async()=>import('data:text/javascript,export const detail=()=>{};export const region=()=>false;export const hasRegion=()=>false;')) as any});
   const event=(extra:any={})=>({code:'Space',target:{closest:()=>null},preventDefault(){this.prevented=true;},stopImmediatePropagation(){this.stopped=true;},...extra});
   let wheel=event({clientX:12,clientY:34,deltaX:5,deltaY:20,deltaMode:0,ctrlKey:true});handlers.wheel(wheel);
   expect(wheel.prevented).toBe(true);expect(packets.at(-1)).toMatchObject({kind:'exact-design:canvas',op:'wheel',x:12,y:34,dx:5,dy:20,mode:0,ctrl:true});
@@ -236,6 +491,13 @@ test('canvas frames relay gestures independently of inspection while Preview inp
   expect(packets.filter(p=>p.op==='space').map(p=>p.down)).toEqual([true,true,false]);
   handlers.keydown(event({code:'KeyH'}));handlers.keydown(event({code:'KeyV'}));
   expect(packets.slice(-2).map(p=>p.tool)).toEqual(['Pan','Select']);
+  // Shift+P toggles plan view in the studio, matched by physical key.
+  handlers.keydown(event({code:'KeyP',key:'P',shiftKey:true}));expect(packets.at(-1)).toMatchObject({kind:'exact-design:canvas',op:'plan'});
+  // Shift+B and Shift+T are plan view's options, so they stay the app's keys until the plan shows.
+  const quiet=packets.length;handlers.keydown(event({code:'KeyB',key:'B',shiftKey:true}));expect(packets.length).toBe(quiet);
+  inspecting=false;handlers.message({source:parentWindow,data:{kind:'exact-design:preview-detail',plan:true,zoom:1}});inspecting=true;
+  handlers.keydown(event({code:'KeyB',key:'B',shiftKey:true}));handlers.keydown(event({code:'KeyT',key:'T',shiftKey:true}));
+  expect(packets.slice(-2).map(p=>p.op)).toEqual(['plan-boxes','plan-text']);
   const before=packets.length,typing=event({target:{closest:()=>({})}});handlers.keydown(typing);expect(typing.prevented).toBeUndefined();
   expect(packets.length).toBe(before);
   // Native inspection may stop or not be ready yet. Canvas navigation still owns input.
@@ -247,6 +509,21 @@ test('canvas frames relay gestures independently of inspection while Preview inp
   runInNewContext(script,{URL,location:{href:'http://localhost/?__ed_canvas=0'},window:frameWindow,parent:{postMessage:(p:any)=>packets.push(p)},document:{getElementById:()=>({})},addEventListener:(name:string,fn:Function)=>{preview[name]=fn;}});
   wheel=event({deltaY:20});preview.wheel(wheel);preview.keydown(event());preview.keyup(event());preview.contextmenu(event());
   expect(wheel.prevented).toBeUndefined();expect(packets.length).toBe(count);
+});
+
+test('canvas plan loading applies the latest detail and stays lazy for off-only frames',async()=>{
+  const script=readFileSync(new URL('../tools/canvas-input-client.js',import.meta.url),'utf8');
+  const handlers:Record<string,Function>={},parentWindow={},calls:any[]=[],module={detail:(packet:any)=>calls.push(packet)};
+  let resolveImport!:()=>void,imports=0;
+  const pending=new Promise<void>(resolve=>{resolveImport=resolve;});
+  runInNewContext(script,{URL,location:{href:'http://localhost/?__ed_canvas=1'},window:{},parent:parentWindow,document:{getElementById:()=>null},addEventListener:(name:string,fn:Function)=>{handlers[name]=fn;}},{importModuleDynamically:(async()=>{imports++;await pending;return module;}) as any});
+  const off={kind:'exact-design:preview-detail',plan:false,zoom:0.5},on={...off,plan:true,zoom:1};
+  handlers.message({source:parentWindow,data:off});
+  await new Promise(resolve=>setImmediate(resolve));expect(imports).toBe(0);expect(calls).toEqual([]);
+  handlers.message({source:parentWindow,data:on});handlers.message({source:parentWindow,data:off});
+  expect(imports).toBe(1);expect(calls).toEqual([]);
+  resolveImport();await new Promise(resolve=>setImmediate(resolve));
+  expect(calls.at(-1)).toBe(off);
 });
 
 test('revealing a selected layer scrolls only ancestors inside its preview document',()=>{

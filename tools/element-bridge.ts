@@ -61,6 +61,7 @@ export class ElementBridge {
   select(frame:string,id:string){
     this.send(frame,'select',id);
   }
+  deselect(frame:string){this.send(frame,'deselect','');}
   hover(frame:string,id:string){this.send(frame,'hover',id);}
   private route(frame:ElementFrame){
     const route=frame.routeUrl??frame.url;if(!route)return '';
@@ -154,7 +155,7 @@ export class ElementBridge {
       }catch{return this.engineRetry();}
     }
     if(url.pathname==='/__exact_design/client.js')return new Response(script,{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
-    for(const name of ['spacing-client.js','spacing-geometry.js','design-preview-client.js','full-page-client.js','event-stream-client.js','project-hub.js','project-state-hub.js','shared-state-client.js','canvas-input-client.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
+    for(const name of ['spacing-client.js','spacing-geometry.js','design-preview-client.js','full-page-client.js','event-stream-client.js','project-hub.js','project-state-hub.js','shared-state-client.js','canvas-input-client.js','plan-client.js','plan-geometry.js'])if(url.pathname==='/__exact_design/'+name)return new Response(readFileSync(new URL('./'+name,import.meta.url),'utf8'),{headers:{'content-type':'text/javascript','cache-control':'no-store'}});
     if(url.pathname==='/__exact_design/feedback'&&req.method==='POST'){
       const packet=await req.json(),frame=this.frames.get(packet.frame);
       if(!frame||packet.page!==frame.page||packet.plan!==frame.plan)return new Response(null,{status:409});
@@ -223,10 +224,11 @@ export class ElementBridge {
         // read-only warmup in the proxy so hover resolves each-row keys too.
         // Draft CSS can change border bounds or positions without resizing content.
         // Expose placement too, without reselecting or reporting inspector state.
+        // Clearing the selection keeps inspection on; Exact itself only clears it when inspection ends.
         // The SDK checkout and the application's source stay unchanged.
         if(source.includes('async function inspectTable()')){
           out.delete('etag');out.set('cache-control','no-store');
-          return new Response(source+'\nexport async function prepareStudioInstances(){await inspectTable();}\nexport function refreshStudioOutlines(){place();}\n',{status:response.status,headers:out});
+          return new Response(source+'\nexport async function prepareStudioInstances(){await inspectTable();}\nexport function refreshStudioOutlines(){place();}\nexport function clearStudioSelection(){inspecting.selected=null;try{sessionStorage.removeItem(key+".selected");}catch{}if(inspecting.outline)inspecting.outline.style.display="none";}\n',{status:response.status,headers:out});
         }
         return new Response(source,{status:response.status,headers:out});
       }

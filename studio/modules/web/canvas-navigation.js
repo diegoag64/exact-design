@@ -7,6 +7,19 @@ export function selectionPan(view,box){
   // already revealed selection again because of that rounding.
   return {x:Math.abs(x)<0.5?0:x,y:Math.abs(y)<0.5?0:y};
 }
+// The canvas takes input unless a dialog, menu or overlay covers it.
+export function canvasAvailable(root){
+  const surface=root.querySelector('[aria-label="Design canvas"]');
+  return !!surface&&!surface.closest('[inert]')&&!root.querySelector('#closeLibrary,button[aria-label="Close preview"],button[aria-label="Close export"],[role="dialog"]:not([popover]),:popover-open');
+}
+// The canvas preview that sent a message, accepted only from a registered frame inside the
+// canvas with the expected origin and canvas flag.
+export function canvasFrame(root,e){
+  const frame=[...root.querySelectorAll('iframe')].find(frame=>frame.contentWindow===e.source);
+  if(!frame?.closest('#canvas-stage'))return null;
+  let url;try{url=new URL(frame.src);}catch{return null;}
+  return url.origin===e.origin&&url.searchParams.get('__ed_events')==='project-v2'&&url.searchParams.get('__ed_canvas')==='1'?frame:null;
+}
 // Iframe input cannot bubble to the editor. Canvas frames relay navigation
 // independently of inspection; full-screen Preview keeps the app's own input.
 export function installCanvasNavigation(root){
@@ -14,10 +27,7 @@ export function installCanvasNavigation(root){
   const button=name=>root.querySelector(`button[aria-label="${name}"]`);
   const editing=()=>root.dataset.canvasEditing==='true';
   const canvas=()=>root.querySelector('[aria-label="Design canvas"]');
-  const available=()=>{
-    const surface=canvas();
-    return surface&&!surface.closest('[inert]')&&!root.querySelector('#closeLibrary,button[aria-label="Close preview"],button[aria-label="Close export"],[role="dialog"]:not([popover]),:popover-open');
-  };
+  const available=()=>canvasAvailable(root);
   const typing=target=>target?.closest?.('input,textarea,select,[contenteditable]:not([contenteditable="false"])');
   function start(){
     if(held||!available())return;
@@ -37,10 +47,18 @@ export function installCanvasNavigation(root){
       e.preventDefault();e.stopPropagation();
       (e.code==='Digit1'?button('Fit all screens'):root.querySelector('#menu-fit-selection'))?.click();return;
     }
+    if(e.key==='Escape'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!e.shiftKey&&escape()){e.preventDefault();e.stopPropagation();return;}
     if(e.code!=='Space'||e.ctrlKey||e.metaKey||e.altKey)return;
     e.preventDefault();e.stopPropagation();start();
   };
   const up=e=>{if(e.code==='Space'&&held){e.preventDefault();end();}};
+  // While editing, Escape clears the selected element; with nothing selected it finishes editing.
+  const escape=()=>{
+    if(!editing())return false;
+    const target=root.querySelector('[data-testid="clear-selection"]')??root.querySelector('[data-testid="edit-app"]');
+    if(!target||target.disabled)return false;
+    target.click();return true;
+  };
   const wheel=(dx,dy,x,y)=>canvas()?.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:x,clientY:y,deltaX:dx,deltaY:dy}));
   const press=e=>{
     if(e.button===1&&e.target.closest?.('#canvas-stage')&&!e.target.closest?.('button,input,select,textarea')){
@@ -67,10 +85,7 @@ export function installCanvasNavigation(root){
   const blur=()=>{stopMiddle();end(true);};
   const message=e=>{
     const packet=e.data;if(packet?.kind!=='exact-design:canvas')return;
-    const frame=[...root.querySelectorAll('iframe')].find(frame=>frame.contentWindow===e.source);
-    if(!frame?.closest('#canvas-stage'))return;
-    let url;try{url=new URL(frame.src);}catch{return;}
-    if(url.origin!==e.origin||url.searchParams.get('__ed_events')!=='project-v2'||url.searchParams.get('__ed_canvas')!=='1')return;
+    const frame=canvasFrame(root,e);if(!frame)return;
     // Releases must still clear a held tool if an overlay opened mid-gesture.
     if(packet.op==='space'&&packet.down===false){end();return;}
     if(!available())return;
@@ -92,6 +107,7 @@ export function installCanvasNavigation(root){
       return;
     }
     if(packet.op==='tool'&&['Pan','Select'].includes(packet.tool)){end(true);button(packet.tool)?.click();return;}
+    if(packet.op==='escape'){escape();return;}
     if(packet.op==='space'&&typeof packet.down==='boolean'){packet.down?start():end();return;}
     if(packet.op!=='wheel'||!['x','y','dx','dy','mode'].every(key=>Number.isFinite(packet[key])))return;
     const target=canvas();if(!target||!frame.clientWidth||!frame.clientHeight)return;
