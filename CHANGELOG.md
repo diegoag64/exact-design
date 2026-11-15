@@ -32,6 +32,8 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Fixed
 
+- Setup links fetch current screens when another app takes over the same local server URL, instead of reusing the previous app’s cached screens.
+
 - Grouped draft edits roll back on failure and undo both alignment axes even at the history limit. Number scrubbing preserves valid negative values, alignment follows reversed flows, and Fixed sizing accounts for padding and borders.
 
 - The inspector's **Flow** shows the direction an element renders when its source leaves `flex-direction` unset. A button or row laid out as a row read as Column.

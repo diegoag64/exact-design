@@ -30,3 +30,21 @@ test('helper admits local editor requests and refuses unrelated browser origins'
     expect((await call('null')).status).toBe(403);
   } finally {server.stop(true);fixture.stop(true);}
 });
+
+test('setup re-discovers an app after another app used the same port',async()=>{
+ const {answer}=await import('./app');
+ const original=globalThis.fetch;
+ let routes=[{name:'Onboarding Goal',route:'/onboarding/goal'}];
+ const files=new Map<string,Uint8Array>();
+ const storage:any={fs:{readFile:async(p:string)=>{if(!files.has(p))throw {code:'ENOENT'};return files.get(p);},atomicWriteFile:async(p:string,b:Uint8Array)=>{files.set(p,b);}}};
+ const call=(source:string,args:unknown[]):Promise<any>=>Promise.resolve((answer as any)(source,args,{},storage,{}));
+ globalThis.fetch=(async()=>Response.json({routes,error:''})) as typeof fetch;
+ try {
+  await call('discover',['http://127.0.0.1:5174',[],0]);
+  routes=[{name:'Discover',route:'/'},{name:'Library',route:'/library'}];
+  const result=await call('library',['setup','Beat Connect','http://127.0.0.1:5174','Phone','',1]);
+  expect(result.ok).toBe(true);
+  const doc=await call('document',[1]);
+  expect(doc.groups.map((g:any)=>g.name)).toEqual(['Discover','Library']);
+ }finally{globalThis.fetch=original;}
+});
