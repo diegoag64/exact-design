@@ -209,7 +209,9 @@ const sources: Sources = {
       else if(op==='disconnect') editor.disconnectProject();
       else if(op==='add' || op==='blank') editor.addScreen(name,value,preset,op==='add');
       else if(op==='setup') {
-        const url=projectUrl(value),found=await discoverProject(url,discoveryCache?.owner===url?discoveryCache.revision:0);
+        // A different app may now own the same dev-server URL.
+        discoveryCache=undefined;
+        const url=projectUrl(value),found=await discoverProject(url,0);
         if(found.error&&!found.routes.length) return reply(false,found.error);
         if(!editor.setupProject(name,url,found.routes.map(r=>({name:r.name,route:r.route})),preset||'Core',show.split(','))) return reply(false,'That project lists no screens to add.');
       }
