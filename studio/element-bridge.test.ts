@@ -223,6 +223,44 @@ test.each([
   if(drawn){expect(painted.fill).toBe('var(--ink)');expect(painted['fill-opacity']).toBe('.5');expect(painted.stroke).toBe('none');}
 });
 
+test.each([
+  {name:'painted tspan',own:{fill:'none'},children:[{tag:'tspan',own:{}}],kept:[true]},
+  {name:'painted textPath',own:{fill:'none'},children:[{tag:'textPath',own:{fill:'none',stroke:'black'}}],kept:[true]},
+  {name:'all children transparent',own:{fill:'none'},children:[{own:{fill:'transparent'}},{own:{fillOpacity:'0'}},{own:{fill:'none',stroke:'rgba(0, 0, 0, 0)'}}],kept:[false,false,false]},
+  {name:'visible text with hidden span',own:{},children:[{own:{display:'none'}},{own:{fill:'transparent'}}],kept:[false,false]},
+  ...['display','visibility','opacity'].map(prop=>({name:'nested span hidden by '+prop,own:{fill:'none'},children:[{own:{[prop]:prop==='display'?'none':prop==='visibility'?'hidden':'0'},children:[{own:{}}]}],kept:[false]})),
+  {name:'unpainted span with painted child',own:{fill:'none'},children:[{own:{fill:'none'},children:[{own:{}}]}],kept:[true]},
+])('inline SVG text descendants: $name',({own,children,kept})=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const style={display:'inline',visibility:'visible',opacity:'1',fill:'black',fillOpacity:'1',stroke:'none',strokeOpacity:'1',strokeWidth:'1px',getPropertyValue:()=>''};
+  const draw=runInNewContext(script.slice(script.indexOf('function drawInlineSvg('),script.indexOf('function drawPlan('))+'\ndrawInlineSvg;',{
+    getComputedStyle:(n:any)=>n.computed,SHAPES:'text',GEOMETRY:[],visibleColor,
+  });
+  const node=(spec:any,parent:any=null):any=>{
+    const original:any={localName:spec.tag||'tspan',computed:{...style,...spec.own},parentElement:parent};
+    const copy:any={painted:{},removed:false,remove(){this.removed=true;},style:{setProperty:(p:string,v:string)=>{copy.painted[p]=v;}}};
+    const pairs=(spec.children||[]).map((child:any)=>node(child,original));
+    original.children=pairs.map((p:any)=>p.original);copy.children=pairs.map((p:any)=>p.copy);
+    return {original,copy};
+  };
+  const pair=node({tag:'text',own,children}),shape=pair.copy;
+  const copy={attributes:[],querySelectorAll:(s:string)=>s==='text'?[shape]:[],removeAttribute:()=>{},setAttribute:()=>{}};
+  const source:any={computed:style,cloneNode:()=>copy,getScreenCTM:()=>null,querySelectorAll:()=>[pair.original]};
+  pair.original.parentElement=source;
+  draw({append:()=>{}},{node:source,x:0,y:0,w:100,h:100});
+  expect(shape.removed).toBe(own.fill==='none'&&!kept.some(Boolean));
+  expect(shape.children.map((c:any)=>!c.removed)).toEqual(kept);
+  const ink=(c:any)=>{expect(c.painted.fill).toBe('var(--ink)');expect(c.painted['fill-opacity']).toBe('.5');expect(c.painted.stroke).toBe('none');};
+  if(!shape.removed)ink(shape);
+  const check=(o:any,c:any)=>{
+    if(c.removed)return;
+    if(o.computed.fill==='black'||o.computed.stroke==='black')ink(c);
+    else expect(c.painted.fill).toBe('none');
+    o.children.forEach((n:any,i:number)=>check(n,c.children[i]));
+  };
+  pair.original.children.forEach((n:any,i:number)=>check(n,shape.children[i]));
+});
+
 test('layer names describe layout spans without repeating their descendants text',()=>{
   const script=readFileSync(new URL('../tools/element-bridge-client.js',import.meta.url),'utf8');
   const present=runInNewContext(script.slice(script.indexOf('function presentElement('),script.indexOf('function snapshot('))+'\npresentElement;');

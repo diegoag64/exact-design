@@ -270,8 +270,19 @@ function drawInlineSvg(g,m){
     for(const prop of GEOMETRY){const v=s.getPropertyValue(prop);if(v)set(c,prop,v);}
     set(c,'animation','none');set(c,'transition','none');set(c,'opacity','1');
     if(o.localName==='text'){
-      if(!(filled&&visibleColor(s.fill))&&!(stroked&&visibleColor(s.stroke))){c.remove();return;}
-      set(c,'fill','var(--ink)');set(c,'fill-opacity','.5');set(c,'stroke','none');return;
+      const textPaint=(n,d,style)=>{
+        if(n!==o&&(style.display==='none'||style.visibility==='hidden'||style.visibility==='collapse'||style.opacity==='0')){d.remove();return false;}
+        const painted=(n===o||n.localName==='tspan'||n.localName==='textPath')&&(
+          style.fill!=='none'&&style.fillOpacity!=='0'&&visibleColor(style.fill)||
+          style.stroke!=='none'&&parseFloat(style.strokeWidth)>0&&style.strokeOpacity!=='0'&&visibleColor(style.stroke));
+        let visible=painted;
+        const children=[...(n.children||[])].filter(child=>!['style','script','foreignObject'].includes(child.localName)),clones=[...(d.children||[])];
+        children.forEach((child,i)=>{if(clones[i]&&textPaint(child,clones[i],getComputedStyle(child)))visible=true;});
+        if(!visible){d.remove();return false;}
+        set(d,'fill',painted||n===o?'var(--ink)':'none');set(d,'fill-opacity','.5');set(d,'stroke','none');
+        set(d,'opacity','1');set(d,'animation','none');set(d,'transition','none');return true;
+      };
+      textPaint(o,c,s);return;
     }
     if(!stroked&&!filled){set(c,'stroke','none');set(c,'fill','none');return;}
     if(stroked&&sw*unit>=3){
