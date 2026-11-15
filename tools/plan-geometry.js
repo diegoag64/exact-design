@@ -6,8 +6,11 @@
 //   container whose label is only its kind, so a copied spec says which row is which. `i` and `p` index the document order.
 
 export function maskImageUrl(value){
-  const match=value.match(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^'"].*))\s*\)/);
-  return match?.[1]??match?.[2]??match?.[3]?.trim()??'';
+  const match=value.match(/url\(\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^'"].*?))\s*\)(?=\s*(?:,|$))/);
+  return (match?.[1]??match?.[2]??match?.[3]?.trim()??'').replace(/\\(?:([\da-f]{1,6})(?:\r\n|[ \t\r\n\f])?|(.))/gi,(_,hex,char)=>{
+    if(!hex)return char;
+    const code=parseInt(hex,16);return String.fromCodePoint(!code||code>0x10ffff||code>=0xd800&&code<=0xdfff?0xfffd:code);
+  });
 }
 export function decodeSvgDataUrl(url){
   const comma=url.indexOf(',');if(comma<0)return null;

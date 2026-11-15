@@ -69,6 +69,19 @@ test('plan view draws previews as line plans, regions measure from the canvas an
       const b=document.getElementById(id)!.getBoundingClientRect();
       return `#ed-plan svg svg[x="${b.x}"][y="${b.y}"][width="${b.width}"][height="${b.height}"]`;
     },id));
+    // Chrome escapes raw SVG attribute quotes when serializing a computed mask URL.
+    await frame.evaluate(()=>{
+      const node=document.createElement('div');node.id='plan-raw-quotes';
+      node.style.cssText=`position:fixed;left:160px;top:40px;width:24px;height:24px;background:black;mask-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>')`;
+      document.getElementById('exact-root')!.append(node);
+    });
+    try{
+      const circle=(await maskPlan('plan-raw-quotes')).locator('circle');
+      await circle.waitFor({timeout:5000});
+      expect(await circle.getAttribute('fill')).toBe('none');
+      expect(await circle.getAttribute('stroke')).toBe('var(--ink)');
+      expect(await circle.getAttribute('r')).toBe('9');
+    }finally{await frame.evaluate(()=>document.getElementById('plan-raw-quotes')!.remove());}
     // Source SVGs retain group transforms, including their order and each shape's own transform.
     await frame.evaluate(()=>{
       const root=document.getElementById('exact-root')!;

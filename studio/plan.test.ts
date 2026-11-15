@@ -12,6 +12,22 @@ test('plan mask URLs preserve parentheses in quoted and unquoted SVG data',()=>{
   expect(decodeSvgDataUrl('data:image/svg+xml;base64,'+btoa(svg))).toBe(svg);
 });
 
+test('plan mask URLs decode CSS string escapes and keep the first layer',()=>{
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>';
+  const css=String.raw`url("data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"9\"/></svg>")`;
+  expect(maskImageUrl(css)).toBe('data:image/svg+xml;utf8,'+svg);
+  expect(decodeSvgDataUrl(maskImageUrl(css))).toBe(svg);
+  expect(maskImageUrl(css+', url("/later.svg")')).toBe(maskImageUrl(css));
+  expect(maskImageUrl(String.raw`url('it\'s\\an\"icon.svg')`)).toBe('it\'s\\an"icon.svg');
+  expect(maskImageUrl(String.raw`url("it\'s\\an\"icon.svg")`)).toBe('it\'s\\an"icon.svg');
+  expect(maskImageUrl(String.raw`url("quote\22 space\000022.svg")`)).toBe('quote"space".svg');
+  expect(maskImageUrl('url(/first.svg), url(/later.svg)')).toBe('/first.svg');
+  for(const header of [';utf8',';charset=utf-8']){
+    expect(decodeSvgDataUrl('data:image/svg+xml'+header+','+svg)).toBe(svg);
+    expect(decodeSvgDataUrl('data:image/svg+xml'+header+',<svg width="100%"/>')).toBe('<svg width="100%"/>');
+  }
+});
+
 test('plan SVG data URLs decode percent escapes leniently as UTF-8',()=>{
   for(const [input,text] of [
     ['<svg width="100%"/>','<svg width="100%"/>'],
