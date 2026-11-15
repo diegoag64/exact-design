@@ -2,7 +2,7 @@
 // drawing of it sits on top, so hit testing, selection and draft editing still reach the
 // app's own elements. Regions measure everything inside a dragged rectangle.
 // Loaded by canvas-input-client.js on the first plan or region message; never in Preview.
-import {maskImageUrl,decodeSvgDataUrl,visibleSvgShape,fieldText,lineWords,isSurface,cornerRadius,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
+import {maskImageUrl,decodeSvgDataUrl,visibleSvgShape,fieldText,lineWords,isSurface,cornerRadii,radiusText,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
 import {measureSpacing} from './spacing-geometry.js';
 
 const NS='http://www.w3.org/2000/svg';
@@ -355,9 +355,16 @@ function drawRegion(scene){
   }
   for(const e of m.sizes)label(regionLayer,placed,e.x+e.w/2,e.y+e.h-9*s,`${Math.round(e.w)} × ${Math.round(e.h)}`,{ink:'var(--accent)',solid:true,axis:'x',bounds});
   for(const e of m.radii){
-    const r=cornerRadius(e),ox=e.x+e.w-r,oy=e.y+e.h-r,a=r+4*s;
-    el('path',{d:`M${ox+a} ${oy}A${a} ${a} 0 0 1 ${ox} ${oy+a}`,fill:'none',stroke:'var(--accent)','stroke-width':1.5*s},regionLayer);
-    label(regionLayer,placed,Math.min(ox+a*.72+16*s,vw-20*s),Math.min(oy+a*.72+10*s,vh-10*s),`r ${Math.round(r)}`,{ink:'var(--accent)',solid:true,axis:'y'});
+    const radii=cornerRadii(e);let labeled=false;
+    for(const i of [2,1,0,3]){
+      const r=radii[i];if(r<1)continue;
+      const sx=i===1||i===2?1:-1,sy=i>=2?1:-1,ox=e.x+(sx>0?e.w-r:r),oy=e.y+(sy>0?e.h-r:r),a=r+4*s;
+      el('path',{d:`M${ox+sx*a} ${oy}A${a} ${a} 0 0 ${sx===sy?1:0} ${ox} ${oy+sy*a}`,fill:'none',stroke:'var(--accent)','stroke-width':1.5*s},regionLayer);
+      if(!labeled){
+        label(regionLayer,placed,Math.max(20*s,Math.min(ox+sx*(a*.72+16*s),vw-20*s)),Math.max(10*s,Math.min(oy+sy*(a*.72+10*s),vh-10*s)),`r ${radiusText(e)}`,{ink:'var(--accent)',solid:true,axis:'y'});
+        labeled=true;
+      }
+    }
   }
   for(const b of m.badges)label(regionLayer,placed,b.e.x+b.e.w-14*s,b.e.y,`×${b.n}`,{ink:'var(--accent)',solid:true,axis:'x'});
   el('rect',{x:R.x,y:R.y,width:R.w,height:R.h,fill:'none',stroke:'var(--accent)','stroke-width':1.5*s},regionLayer);

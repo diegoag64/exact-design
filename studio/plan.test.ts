@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {maskImageUrl,decodeSvgDataUrl,visibleSvgShape,fieldText,lineWords,valueFill,surfaceShape,layoutBox,visibleColor,index,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
+import {maskImageUrl,decodeSvgDataUrl,visibleSvgShape,fieldText,lineWords,valueFill,surfaceShape,layoutBox,visibleColor,index,cornerRadii,radiusText,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
 
 test('plan mask URLs preserve parentheses in quoted and unquoted SVG data',()=>{
   const svg='<svg xmlns="http://www.w3.org/2000/svg"><g transform="translate(12 12)"><rect width="10" height="10"/></g></svg>';
@@ -94,6 +94,40 @@ test('plan buttons show only their value and non-text inputs show no text',()=>{
 // A record as plan-client.js reads it: document order, parent index and computed layout.
 const box=(i:number,p:number,x:number,y:number,w:number,h:number,extra:any={})=>({i,p,x,y,w,h,radius:0,radii:[0,0,0,0],surface:false,borders:[false,false,false,false],
   display:'block',dir:'row',gap:[0,0],pad:[0,0,0,0],margin:[0,0,0,0],flow:true,decorative:false,label:'Container',hint:'',media:0,clip:{x:0,y:0,r:390,b:844},...extra});
+
+test('region corner radii clamp each corner and format in CSS order',()=>{
+  for(const [radii,w,h,expected,text] of [
+    [[12,12,12,12],80,40,[12,12,12,12],'12'],
+    [[12,12,0,0],80,40,[12,12,0,0],'12 12 0 0'],
+    [[40,12,0,30],80,20,[10,10,0,10],'10 10 0 10'],
+    [[40,12,0,30],20,80,[10,10,0,10],'10 10 0 10'],
+    [[0,0,0,0],80,40,[0,0,0,0],'0'],
+  ] as const){
+    const e=box(0,-1,0,0,w,h,{radius:Math.max(...radii),radii});
+    expect(cornerRadii(e)).toEqual([...expected]);expect(radiusText(e)).toBe(text);
+  }
+});
+
+test('region specs preserve uniform radii and report unequal corners',()=>{
+  const R={x:0,y:0,w:200,h:100};
+  for(const [radii,text] of [[[12,12,12,12],'12'],[[12,12,0,0],'12 12 0 0']] as const){
+    const records=[box(0,-1,10,10,180,80,{surface:true,radius:12,radii})];
+    expect(regionSpec(R,measureRegion(records,[],R),records)).toBe(
+      'Region 200 × 100 at 0, 0\n  Container · 180 × 80 · radius '+text);
+  }
+});
+
+test('regions annotate any rounded corner but not square shapes',()=>{
+  const R={x:0,y:0,w:200,h:100};
+  for(let corner=0;corner<4;corner++){
+    const radii=[0,0,0,0];radii[corner]=6;
+    const e=box(0,-1,10,10,180,80,{surface:true,radius:6,radii});
+    expect(measureRegion([e],[],R).radii).toEqual([e]);
+  }
+  // Square shapes and hairline radii (under 4px) stay unannotated, as before.
+  expect(measureRegion([box(0,-1,10,10,180,80,{surface:true})],[],R).radii).toEqual([]);
+  expect(measureRegion([box(0,-1,10,10,180,80,{surface:true,radius:3,radii:[3,3,3,3]})],[],R).radii).toEqual([]);
+});
 
 test('a fill that starts at its track and shares its height reads as a value; full-width bars drop edges on the screen edge',()=>{
   const track=box(1,0,37,664,316,10,{surface:true,radius:5}),fill=box(2,1,37,664,136,10,{surface:true,radius:5}),dot=box(3,1,37,640,8,8,{surface:true});

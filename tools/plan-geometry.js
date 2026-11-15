@@ -47,6 +47,8 @@ export const visibleColor=c=>!!c&&c!=='transparent'&&!/^rgba\([^,]+,[^,]+,[^,]+,
 export const near=(a,b,t=0.75)=>Math.abs(a-b)<=t;
 export const isSurface=e=>e.surface||e.borders.some(Boolean);
 export const cornerRadius=e=>Math.min(e.radius,e.w/2,e.h/2);
+export const cornerRadii=e=>e.radii.map(r=>Math.min(r,e.w/2,e.h/2));
+export const radiusText=e=>values(cornerRadii(e).map(Math.round));
 const round=n=>Math.round(n*10)/10;
 
 export function fieldText(type,value='',placeholder=''){
@@ -157,7 +159,7 @@ export function measureRegion(records,media,R){
     }),
     ...media.filter(m=>within(m,R)&&!skipped({i:-2,p:m.p})&&m.w>=24&&m.h>=24),
   ];
-  const radii=live.filter(e=>{const a=surfaceAncestor(e,byI);return isSurface(e)&&cornerRadius(e)>=4&&e.w>=24&&e.h>=24&&!(a&&inM.has(a.i));});
+  const radii=live.filter(e=>{const a=surfaceAncestor(e,byI);return isSurface(e)&&Math.max(...cornerRadii(e))>=4&&e.w>=24&&e.h>=24&&!(a&&inM.has(a.i));});
   return {live,repeats,badges,sizes,radii,inM};
 }
 
@@ -175,7 +177,7 @@ export function regionSpec(R,m,records){
     const parts=[`${Math.round(e.w)} × ${Math.round(e.h)}`];
     if(padded)parts.push('padding '+values(e.pad.map(round)));
     if(gap!==''&&gap!=='0')parts.push('gap '+gap);
-    if(isSurface(e)&&cornerRadius(e)>=1)parts.push('radius '+Math.round(cornerRadius(e)));
+    if(isSurface(e)&&Math.max(...cornerRadii(e))>=1)parts.push('radius '+radiusText(e));
     if(badge.has(e.i))parts.push('×'+badge.get(e.i));
     rows.push({e,text:(e.hint?`${e.label} "${e.hint}"`:e.label)+' · '+parts.join(' · ')});
   }

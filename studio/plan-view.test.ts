@@ -284,6 +284,23 @@ test('plan view draws previews as line plans, regions measure from the canvas an
     await frame.locator('#ed-plan text',{hasText:screen}).first().waitFor();
     await page.keyboard.press('Alt+KeyA');await copyButton.waitFor({state:'detached',timeout:3000});
 
+    // Unequal corners keep their CSS order in the region's radius label.
+    await frame.evaluate(()=>{
+      const node=document.createElement('div');node.id='plan-top-corners';
+      node.style.cssText='position:fixed;left:60px;top:100px;width:180px;height:100px;background:white;border-radius:14px 14px 0 0';
+      document.getElementById('exact-root')!.append(node);
+    });
+    try{
+      const bounds=await frame.locator('#plan-top-corners').boundingBox();
+      await page.keyboard.down('Shift');await page.mouse.move(bounds.x-8,bounds.y-8);await page.mouse.down();
+      await page.mouse.move(bounds.x+bounds.width+8,bounds.y+bounds.height+8,{steps:6});
+      await page.mouse.up();await page.keyboard.up('Shift');
+      await frame.locator('#ed-plan text',{hasText:/^r 14 14 0 0$/}).waitFor({timeout:5000});
+    }finally{
+      await page.keyboard.press('Escape');
+      await frame.evaluate(()=>document.getElementById('plan-top-corners')!.remove());
+    }
+
     // While editing, the preview takes the pointer itself; a region does not select the element under it.
     await page.getByRole('button',{name:'Edit app design',exact:true}).click();await page.getByRole('button',{name:'Finish editing app',exact:true}).waitFor();
     await frame.waitForFunction(()=>document.getElementById('exact-inspect'),undefined,{polling:50});
