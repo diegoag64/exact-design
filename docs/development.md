@@ -2,6 +2,8 @@
 
 The root [package.json](../package.json) defines the development commands. [tools/setup.mjs](../tools/setup.mjs) pins the Exact SDK revision, rejects a checkout at another revision, and builds the Contract compiler that validates source writes. Runtime adapters depend on that pin. The current SDK uses Rust 1.99.1 and Forma theme files (`app.forma`, starting with `forma <name>`). Apps connected for source editing must expose the `forma/1` protocol. Older Tamber apps need an SDK update and theme migration before reconnecting.
 
+Before migrating an existing app, stop its Tamber server. If the app has `.exact/tamber.journal`, resolve the unfinished write and its temporary files before renaming theme files, then remove the journal. Remove the stale `.exact/tamber.lock` after stopping the server. Forma refuses to start while either file exists; these ignored files can remain in the studio and Ember folders after updating the checkout.
+
 ## Develop on Windows with WSL2
 
 Run the studio and its helper in Ubuntu on WSL2. Open the studio in your Windows browser. The pinned SDK's compiler and source-editing server fail on native Windows. The compiler can overflow its stack, and the editing server requires Unix filesystem operations. The root launchers stop with these instructions before starting a native Windows build or helper.
