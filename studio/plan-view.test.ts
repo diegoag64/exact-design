@@ -152,7 +152,21 @@ test('plan view draws previews as line plans, regions measure from the canvas an
     expect(await count('#ed-plan [data-layout-box]')).toBe(0);expect(await count('#ed-plan text[data-app]')).toBe(0);
     await page.getByTestId('plan-options').click();
     const boxes=page.getByTestId('plan-boxes'),words=page.getByTestId('plan-text');
-    await boxes.click();await words.click();
+    await page.waitForFunction(()=>document.activeElement?.getAttribute('data-testid')==='plan-boxes');
+    const focused=()=>page.evaluate(()=>document.activeElement?.getAttribute('data-testid'));
+    expect(await focused()).toBe('plan-boxes');
+    await page.keyboard.press('ArrowDown');expect(await focused()).toBe('plan-text');
+    await page.keyboard.press('ArrowDown');expect(await focused()).toBe('plan-boxes');
+    await page.keyboard.press('End');expect(await focused()).toBe('plan-text');
+    await page.keyboard.press('Home');expect(await focused()).toBe('plan-boxes');
+    const checked=await boxes.getAttribute('aria-checked');
+    await page.keyboard.press('Space');
+    expect(await boxes.getAttribute('aria-checked')).toBe(checked==='true'?'false':'true');
+    expect(await page.locator('#plan-menu').evaluate((el:Element)=>el.matches(':popover-open'))).toBe(true);
+    await page.keyboard.press('Escape');
+    expect(await page.locator('#plan-menu').evaluate((el:Element)=>el.matches(':popover-open'))).toBe(false);
+    expect(await focused()).toBe('plan-options');
+    await page.getByTestId('plan-options').click();await words.click();
     expect(await boxes.getAttribute('aria-checked')).toBe('true');expect(await words.getAttribute('aria-checked')).toBe('true');
     await frame.waitForFunction(()=>document.querySelectorAll('#ed-plan [data-layout-box]').length>0&&[...document.querySelectorAll('#ed-plan text[data-app]')].map(n=>n.textContent).join(' ').includes('Room for your thoughts.'),undefined,{polling:50,timeout:5000});
     // A drawn line keeps the width the app laid it out at.
