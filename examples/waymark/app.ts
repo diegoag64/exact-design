@@ -27,14 +27,14 @@ const TILES = [
 ];
 
 const QUESTS = [
-  { id: 'chalk', title: 'The Chalk Sigils', hint: 'Someone drew four signs on a plank behind the mill.', points: 40, art: 'assets/art/quest-1.jpg' },
-  { id: 'effigy', title: 'The Straw Sentinel', hint: 'Strike the target that watches the hollow.', points: 30, art: 'assets/art/quest-2.jpg' },
-  { id: 'spiral', title: 'Stone of the Coiled Wind', hint: 'A whisper stone rests where moss never dries.', points: 20, art: 'assets/art/quest-3.jpg' },
-  { id: 'sun', title: 'Stone of the First Light', hint: 'It faces east, and speaks only at dawn.', points: 20, art: 'assets/art/quest-4.jpg' },
-  { id: 'bench', title: 'The Lantern Seat', hint: 'Rest between two lanterns under the old root.', points: 40, art: 'assets/art/quest-5.jpg' },
-  { id: 'peak', title: 'Stone of the Three Peaks', hint: 'Hidden among ferns on the Highpass Trail.', points: 20, art: 'assets/art/quest-6.jpg' },
-  { id: 'well', title: 'What the Well Remembers', hint: 'Lower the bucket when the moon is hollow.', points: 60, art: 'assets/art/quest-7.jpg' },
-  { id: 'sign', title: 'The Turned Signpost', hint: 'One arm points somewhere no road goes.', points: 80, art: 'assets/art/quest-8.jpg' },
+  { id: 'chalk', title: 'The Chalk Sigils', hint: 'Someone drew four signs on a plank behind the mill.', points: 40, art: 'assets/art/quest-1.webp' },
+  { id: 'effigy', title: 'The Straw Sentinel', hint: 'Strike the target that watches the hollow.', points: 30, art: 'assets/art/quest-2.webp' },
+  { id: 'spiral', title: 'Stone of the Coiled Wind', hint: 'A whisper stone rests where moss never dries.', points: 20, art: 'assets/art/quest-3.webp' },
+  { id: 'sun', title: 'Stone of the First Light', hint: 'It faces east, and speaks only at dawn.', points: 20, art: 'assets/art/quest-4.webp' },
+  { id: 'bench', title: 'The Lantern Seat', hint: 'Rest between two lanterns under the old root.', points: 40, art: 'assets/art/quest-5.webp' },
+  { id: 'peak', title: 'Stone of the Three Peaks', hint: 'Hidden among ferns on the Highpass Trail.', points: 20, art: 'assets/art/quest-6.webp' },
+  { id: 'well', title: 'What the Well Remembers', hint: 'Lower the bucket when the moon is hollow.', points: 60, art: 'assets/art/quest-7.webp' },
+  { id: 'sign', title: 'The Turned Signpost', hint: 'One arm points somewhere no road goes.', points: 80, art: 'assets/art/quest-8.webp' },
 ];
 
 const REWARDS = ['Series Theme', 'Title Theme', 'Hearthside', 'Elderroot Glade', 'Market Ward', 'Millbrook', 'Whisperwood', 'Cinder Crown', 'Mirror Mere'].map((title, i) => ({ id: `song-${i + 1}`, title, cost: GOAL }));
@@ -57,13 +57,13 @@ const BADGES = [
   ['chest', 'Treasure Seeker', 'bronze', 0.33, 'Chests opened'],
   ['mask', 'Mask Collector', 'bronze', 0.2, 'Masks found'],
   ['compass', 'Pathfinder', 'bronze', 0.42, 'Places discovered'],
-].map(([id, title, tier, progress, detail]) => ({ id: id as string, title: title as string, tier: tier as string, progress: progress as number, detail: detail as string, art: `assets/art/badge-${id}.png` }));
+].map(([id, title, tier, progress, detail]) => ({ id: id as string, title: title as string, tier: tier as string, progress: progress as number, detail: detail as string, art: `assets/art/badge-${id}.webp` }));
 
 const STATS = [
-  { id: 'felled', group: 'Combat', title: 'Enemies Defeated', value: '564', known: '', art: 'assets/art/banner-1.jpg', rows: [['Bog Lurkers', '212'], ['Thornbacks', '148'], ['Cinder Imps', '97'], ['Hollow Knights', '64'], ['Others', '43']] },
-  { id: 'kinds', group: 'Combat', title: 'Types of Enemies Defeated', value: '43', known: 'Defeating Bog Lurkers', art: 'assets/art/banner-2.jpg', rows: [['Beasts', '17'], ['Spirits', '11'], ['Constructs', '9'], ['Wardens', '6']] },
-  { id: 'falls', group: 'Defeats', title: 'Times Fallen', value: '4', known: '', art: 'assets/art/banner-3.jpg', rows: [['In the wilds', '2'], ['In a vault', '1'], ['To a warden', '1']] },
-  { id: 'causes', group: 'Defeats', title: 'Ways You Have Fallen', value: '2', known: 'Losing to Cinder Imps', art: 'assets/art/banner-4.jpg', rows: [['Cinder Imps', '3'], ['A long drop', '1']] },
+  { id: 'felled', group: 'Combat', title: 'Enemies Defeated', value: '564', known: '', art: 'assets/art/banner-1.webp', rows: [['Bog Lurkers', '212'], ['Thornbacks', '148'], ['Cinder Imps', '97'], ['Hollow Knights', '64'], ['Others', '43']] },
+  { id: 'kinds', group: 'Combat', title: 'Types of Enemies Defeated', value: '43', known: 'Defeating Bog Lurkers', art: 'assets/art/banner-2.webp', rows: [['Beasts', '17'], ['Spirits', '11'], ['Constructs', '9'], ['Wardens', '6']] },
+  { id: 'falls', group: 'Defeats', title: 'Times Fallen', value: '4', known: '', art: 'assets/art/banner-3.webp', rows: [['In the wilds', '2'], ['In a vault', '1'], ['To a warden', '1']] },
+  { id: 'causes', group: 'Defeats', title: 'Ways You Have Fallen', value: '2', known: 'Losing to Cinder Imps', art: 'assets/art/banner-4.webp', rows: [['Cinder Imps', '3'], ['A long drop', '1']] },
 ].map((s) => ({ ...s, rows: s.rows.map(([label, value]) => ({ label, value })) }));
 
 // Positions are tenths of a percent of the map picture, which is 1000 by 1400.
@@ -91,9 +91,9 @@ const PLACES = [
 const REGIONS = [['The Vale', 0.61], ['Cinder Range', 0.34], ['Whisperwood', 0.52], ['Mirror Mere', 0.2]].map(([name, fraction]) => ({ name: name as string, fraction: fraction as number }));
 
 const CAPTURES = [
-  { id: 'c1', time: '23:45', place: 'Millbrook, by the long house', art: 'assets/art/capture-day.jpg' },
-  { id: 'c2', time: '23:35', place: 'Millbrook at dusk', art: 'assets/art/capture-dusk.jpg' },
-  { id: 'c3', time: '23:25', place: 'Millbrook under the hollow moon', art: 'assets/art/capture-night.jpg' },
+  { id: 'c1', time: '23:45', place: 'Millbrook, by the long house', art: 'assets/art/capture-day.webp' },
+  { id: 'c2', time: '23:35', place: 'Millbrook at dusk', art: 'assets/art/capture-dusk.webp' },
+  { id: 'c3', time: '23:25', place: 'Millbrook under the hollow moon', art: 'assets/art/capture-night.webp' },
 ];
 
 const FACTS = [['Time played', '2 h 14 min'], ['Distance travelled', '3.8 leagues'], ['Foes felled', '37'], ['Gleams gathered', '112'], ['Jars smashed', '19'], ['Songs played', '4']].map(([label, value]) => ({ label, value }));

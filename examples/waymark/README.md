@@ -68,7 +68,25 @@ Quests done, rewards redeemed and the hero's name are kept in `app:/data/waymark
 
 The pictures come from two sources.
 
-- **Interface furniture** is drawn by code: wood panels, torn edges, frames, badges, ornaments and the title emblem. `bun examples/waymark/tools/art/build.mjs` redraws these files from seeded SVG and bakes them to PNG and JPEG with the SDK's headless Chromium. Pass a name prefix, such as `badge`, to redraw part of the set.
-- **Illustrations** are generated images: the forest backdrop, the hero's portrait, the day's captures, the quest pictures, the statistic banners, the home tile icons and the map. They are committed as they are. The build script only derives the dimmed backdrop from the forest picture.
+- **Interface furniture** is drawn by code: wood panels, torn edges, frames, badges, ornaments and the title emblem. `bun examples/waymark/tools/art/build.mjs` renders seeded SVG with the SDK's headless Chromium, then compresses the output to WebP with `cwebp`. Pass a name prefix, such as `badge`, to redraw part of the set.
+- **Illustrations** are generated images: the forest backdrop, the hero's portrait, the day's captures, the quest pictures, the statistic banners, the home tile icons and the map. They are stored as WebP at quality 85, at their original dimensions. The build script derives the dimmed backdrop from the forest picture and the profile tile from the portrait.
 
 Place labels on the map are app elements, not part of the picture, so each one can be selected and edited in the studio. Their positions in `app.ts` are tenths of a percent across the picture and fourteenths of a percent down it.
+
+### Optimize new artwork
+
+Install `cwebp` before rebuilding or optimizing art. On macOS, run `brew install webp`.
+The app uses the committed files and does not need the encoder to run.
+
+After adding PNG or JPEG originals to `assets/art/`, run from the repository root:
+
+```sh
+	bun examples/waymark/tools/art/optimize.mjs
+```
+
+The command replaces each PNG or JPEG with a WebP of the same name. Update new image references to use `.webp`.
+Illustrations and tiles use quality 85. Transparent ornaments use lossless compression.
+All images keep their dimensions, and alpha channels remain lossless.
+Existing WebP files are skipped, so repeated runs do not degrade them.
+The art build runs this step automatically. To trim newly generated home tiles first, run the art build instead.
+Original artwork from before the conversion remains in Git history.
