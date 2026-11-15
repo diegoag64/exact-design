@@ -1,0 +1,21 @@
+routes nav
+  home "/"
+    feature "/feature"
+
+component App
+  action follow(url: string)
+    nav = go(nav, url)
+  action back
+    nav = back(nav)
+  view
+    main navigationKey=`${top(nav).id}` navigationBack="back" navigate=follow width="100%" height="100%" display="flex" flex-direction="column" background-color="page" color="ink" testId="app"
+      for e in stack(nav) key=e.id
+        if e.name == "home"
+          column navigationKey=`${e.id}` navigationBar="none" position="absolute" inset=0
+            image "assets/art/t.svg" alt="" position="absolute" left=0 top=0 width="100%" height=160 object-fit="cover"
+            text "Waymark" position="relative" font-family="Georgia, serif" font-size="2rem" font-weight=700 padding=24
+            link href=(path("feature") + "?id=foes") position="relative" testId="go"
+              text "Open"
+        if e.name == "feature"
+          column navigationKey=`${e.id}` navigationBar="none" position="absolute" inset=0 background-color="page"
+            text `Feature ${searchParam(e, "id")}` padding=24

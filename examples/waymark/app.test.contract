@@ -1,0 +1,2 @@
+test "opens"
+  expect tree has "app"
