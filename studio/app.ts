@@ -240,7 +240,7 @@ const sources: Sources = {
     if(op === 'variant') editor.addView(key);
     if(op === 'variants') { try { editor.addViews(key); } catch(e) { status=(e as Error).message; } }
     let merged=false;
-    if(op === 'arrange') merged=editor.arrange(key==='settle');
+    if(op === 'arrange') merged=editor.arrange(key.endsWith('settle'),key.startsWith('collage'));
     if(op === 'add') editor.add(key);
     if(op === 'property') { if(key === 'source' && !validSource(value.trim())) status = 'Use an http:// or https:// URL'; else { try { editor.property(key, value); } catch(e) {status=(e as Error).message;} } }
     if(op === 'undo') editor.undo();
@@ -250,7 +250,7 @@ const sources: Sources = {
     const saved=await persistence.save(storage.fs,op==='save');
     if(saved&&!merged)try{await logWorkspace(storage,before,op,target,timestamp);}catch{status='Could not save the timeline. Your workspace is saved.';}
     if(op==='save'&&saved&&!status)status='Saved';
-    return reply(['screen','duplicate','variant','variants'].includes(op)||(op==='arrange'&&key!=='settle')||(op==='property'&&['source','route'].includes(key)));
+    return reply(['screen','duplicate','variant','variants'].includes(op)||(op==='arrange'&&!key.endsWith('settle'))||(op==='property'&&['source','route'].includes(key)));
   },
 };
 export const answer: Answer = (source, args, store, storage, native) => sources[source](args, store, storage, native);

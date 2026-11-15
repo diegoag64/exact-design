@@ -147,15 +147,27 @@ export class WorkspaceEditor {
     this.active=first;this.selected=first;
   }
   /** Tidy up: one row per screen in library order, using each frame's displayed height so loaded content never overlaps.
-   *  Settling passes, repeated while new frames report their heights, merge into the first pass's undo step; returns whether this one merged. */
-  arrange(settle=false): boolean {
+   *  Settling passes, repeated while new frames report their heights, merge into the first pass's undo step; returns whether this one merged.
+   *  `collage` packs those rows into columns instead, so the whole workspace fits one wide view; a screen's frames stay side by side. */
+  arrange(settle=false, collage=false): boolean {
     const frames=this.frames; if(!frames.length) return false;
-    const x0=Math.min(...frames.map(v=>v.x)); let y=Math.min(...frames.map(v=>v.y));
+    const x0=Math.min(...frames.map(v=>v.x)),y0=Math.min(...frames.map(v=>v.y));
+    const rows=this.document.screens.map(screen=>frames.filter(v=>v.screenId===screen.id).sort((a,b)=>a.x-b.x||a.y-b.y)).filter(row=>row.length);
     const at=new Map<string,{x:number;y:number}>();
-    for(const screen of this.document.screens) {
-      const row=frames.filter(v=>v.screenId===screen.id).sort((a,b)=>a.x-b.x||a.y-b.y); if(!row.length) continue;
-      let x=x0; for(const v of row){at.set(v.id,{x,y});x+=v.width+FRAME_GAP;}
-      y+=Math.max(...row.map(v=>v.height))+FRAME_GAP;
+    const lay=(row: typeof frames,x: number,y: number)=>{for(const v of row){at.set(v.id,{x,y});x+=v.width+FRAME_GAP;}};
+    if(collage) {
+      // Hidden screens keep a row each below the collage, so showing one later never lands on another frame.
+      const shown=rows.filter(row=>row.some(v=>this.isShown(v.id))),rest=rows.filter(row=>!shown.includes(row));
+      const span=(row: typeof frames)=>row.reduce((w,v)=>w+v.width,0)+FRAME_GAP*(row.length-1),tall=(row: typeof frames)=>Math.max(...row.map(v=>v.height));
+      const width=Math.max(0,...shown.map(span)),gutter=FRAME_GAP*2;
+      // Each row goes to the shortest column; the column count whose outline is nearest a wide screen's wins.
+      const pack=(count: number)=>{const heights=Array.from({length:count},()=>0);const cells=shown.map(row=>{const c=heights.indexOf(Math.min(...heights)),y=heights[c];heights[c]+=tall(row)+gutter;return {row,c,y};});return {cells,height:Math.max(0,...heights)-gutter,width:count*width+(count-1)*gutter};};
+      const packs=Array.from({length:shown.length},(_,i)=>pack(i+1)),target=16/10;
+      const best=packs.sort((a,b)=>Math.abs(Math.log(a.width/Math.max(1,a.height)/target))-Math.abs(Math.log(b.width/Math.max(1,b.height)/target)))[0];
+      for(const cell of best?.cells??[]) lay(cell.row,x0+cell.c*(width+gutter),y0+cell.y);
+      let y=y0+(best?best.height+FRAME_GAP:0); for(const row of rest){lay(row,x0,y);y+=tall(row)+FRAME_GAP;}
+    } else {
+      let y=y0; for(const row of rows){lay(row,x0,y);y+=Math.max(...row.map(v=>v.height))+FRAME_GAP;}
     }
     const place=(d:Workspace)=>{for(const v of d.views){const p=at.get(v.id);if(p){v.x=Math.round(p.x);v.y=Math.round(p.y);}}};
     if(settle&&this.settling){const next=structuredClone(this.document);place(next);this.document=next;this.future=[];return true;}
