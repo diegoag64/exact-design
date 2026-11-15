@@ -1,5 +1,31 @@
 forma waymark
 
 theme
+  AccentColor = #a06a12  scheme=fixed
   page = #14110d  scheme=fixed
+  bar = #0b0907  scheme=fixed
   ink = #fff6e0  scheme=fixed
+  ink-2 = #e0d2b2  scheme=fixed
+  ink-3 = #a3957a  scheme=fixed
+  sun = #f6c21c  scheme=fixed
+  sun-2 = #d9a441  scheme=fixed
+  wood = #74491f  scheme=fixed
+  wood-edge = #3a2410  scheme=fixed
+  tab = #9a6c36  scheme=fixed
+  tab-on = #c08d4c  scheme=fixed
+  card = #6a4f25  scheme=fixed
+  card-edge = #8f7440  scheme=fixed
+  card-shade = #3b2a12  scheme=fixed
+  well = #2e2510  scheme=fixed
+  well-edge = #b9a26a  scheme=fixed
+  quest = #8c6d2f  scheme=fixed
+  quest-edge = #c9a554  scheme=fixed
+  band = #2a251ccc  scheme=fixed
+  veil = #0b0907b3  scheme=fixed
+  fog = #fbf6e2  scheme=fixed
+  map-ink = #3a2c10  scheme=fixed
+  place = #ead796  scheme=fixed
+  vault = #2f5a52  scheme=fixed
+  pill = #3c3a30  scheme=fixed
+  pill-edge = #7d7a68  scheme=fixed
+  track = #3b2a12  scheme=fixed

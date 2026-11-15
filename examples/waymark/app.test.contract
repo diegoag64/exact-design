@@ -1,2 +1,112 @@
-test "opens"
-  expect tree has "app"
+test "home opens a feature and comes back"
+  size 390x844
+  clock data
+  expect tree has "tile-map"
+  tap "tile-global"
+  clock data
+  clock settle
+  expect text "title" == "Global Play Data"
+  expect text "stat-value-felled" == "564"
+  tap "global-home"
+  clock settle
+  expect tree has "home"
+
+test "quests earn points, a reward spends them, and both are kept"
+  size 390x844
+  at "/quests"
+  clock data
+  expect text "quests-done" == "0/8 Completed"
+  expect text "points" == "0"
+  tap "quest-sign"
+  clock data
+  expect text "quests-done" == "1/8 Completed"
+  expect text "points" == "80"
+  tap "tab-second"
+  clock data
+  clock settle
+  tap "reward-song-1"
+  clock data
+  expect text "points-error" == "Series Theme needs 220 more points."
+  tap "tab-first"
+  clock data
+  clock settle
+  tap "quest-well"
+  clock data
+  tap "quest-chalk"
+  clock data
+  tap "quest-bench"
+  clock data
+  tap "quest-effigy"
+  clock data
+  tap "quest-spiral"
+  clock data
+  tap "quest-sun"
+  clock data
+  tap "quest-peak"
+  clock data
+  expect text "points" == "310"
+  tap "tab-second"
+  clock data
+  clock settle
+  tap "reward-song-1"
+  clock data
+  expect text "points" == "10"
+  reload
+  clock data
+  expect text "points" == "10"
+  expect state board.rewards.0 .owned == true
+
+test "a statistic card opens its breakdown"
+  size 390x844
+  at "/global"
+  clock data
+  expect tree missing "stat-rows-felled"
+  tap "expand-felled"
+  expect tree has "stat-rows-felled"
+  tap "expand-felled"
+  expect tree missing "stat-rows-felled"
+
+test "the map filters its places and shows progress by region"
+  size 390x844
+  at "/map"
+  clock data
+  expect tree has "place-mill"
+  expect tree has "place-forge"
+  tap "map-filter"
+  expect tree missing "place-forge"
+  expect text "map-filter-label" == "Places only"
+  tap "map-filter"
+  expect tree missing "place-mill"
+  expect tree has "place-forge"
+  tap "map-progress"
+  clock settle
+  expect tree has "map-regions"
+
+test "the hero is renamed from the profile"
+  size 834x1112
+  at "/me"
+  clock data
+  expect text "hero" == "Wren"
+  tap "rename"
+  clock settle
+  type "name-field" "Juniper"
+  tap "name-save"
+  clock data
+  clock settle
+  expect text "hero" == "Juniper"
+  reload
+  clock data
+  expect text "hero" == "Juniper"
+
+test "the day's record switches between the timeline and its numbers"
+  size 390x844
+  at "/record"
+  epoch "2026-11-08T23:50:00Z"
+  time-zone "UTC"
+  clock data
+  expect text "record-day" == "Records for November 8, 2026"
+  expect tree has "timeline"
+  tap "tab-second"
+  clock data
+  clock settle
+  expect tree has "record-facts"
