@@ -268,7 +268,10 @@ function drawInlineSvg(g,m){
     // The app's class rules are scoped to its root, so the copy carries the computed geometry.
     for(const prop of GEOMETRY){const v=s.getPropertyValue(prop);if(v)set(c,prop,v);}
     set(c,'animation','none');set(c,'transition','none');set(c,'opacity','1');
-    if(o.localName==='text'){set(c,'fill','var(--ink)');set(c,'fill-opacity','.5');set(c,'stroke','none');return;}
+    if(o.localName==='text'){
+      if(!(filled&&visibleColor(s.fill))&&!(stroked&&visibleColor(s.stroke))){c.remove();return;}
+      set(c,'fill','var(--ink)');set(c,'fill-opacity','.5');set(c,'stroke','none');return;
+    }
     if(!stroked&&!filled){set(c,'stroke','none');set(c,'fill','none');return;}
     if(stroked&&sw*unit>=3){
       // A wide stroke (a ring, a chart line) is outlined as a band: the stroke in ink, then a

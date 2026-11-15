@@ -54,11 +54,14 @@ test('plan view draws previews as line plans, regions measure from the canvas an
       const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.id='plan-inline-visibility';
       svg.setAttribute('viewBox','0 0 100 100');svg.style.cssText='position:fixed;left:20px;top:20px;width:100px;height:100px';
       svg.innerHTML='<circle data-plan-visible-shape="" cx="20" cy="20" r="10"/><path data-plan-hidden-shape="" opacity="0" d="M0 0L40 40" stroke="black" stroke-width="6"/><g opacity="0"><g><path data-plan-hidden-shape="" d="M0 40L40 0"/></g></g><g display="none"><path data-plan-hidden-shape="" d="M0 10L40 10"/></g><path data-plan-hidden-shape="" visibility="hidden" d="M0 20L40 20"/><path data-plan-hidden-shape="" style="display:none" d="M0 30L40 30"/>';
+      svg.innerHTML+='<text data-plan-hidden-text="" x="0" y="60" fill-opacity="0" stroke="none">Hidden label</text><text data-plan-visible-text="" x="0" y="80" fill="black" stroke="none">Visible label</text>';
       document.getElementById('exact-root')!.append(svg);
     });
     await frame.locator('#ed-plan [data-plan-visible-shape]').waitFor();
     expect(await frame.locator('#ed-plan [data-plan-visible-shape]').count()).toBe(1);
     expect(await frame.locator('#ed-plan [data-plan-hidden-shape]').count()).toBe(0);
+    expect(await frame.locator('#ed-plan [data-plan-hidden-text]').count()).toBe(0);
+    expect(await frame.locator('#ed-plan [data-plan-visible-text]').textContent()).toBe('Visible label');
     await frame.evaluate(()=>document.getElementById('plan-inline-visibility')!.remove());
     await frame.waitForFunction(()=>!document.querySelector('#ed-plan [data-plan-visible-shape]'));
 

@@ -6,7 +6,7 @@ import {ElementBridge,bridgeFor,stopElementBridges} from '../tools/element-bridg
 import {DesignSession} from '../tools/design-session';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
-import {visibleSvgShape} from '../tools/plan-geometry.js';
+import {visibleSvgShape,visibleColor} from '../tools/plan-geometry.js';
 
 for(const type of ['keydown','pointerdown'])test(`plan regions ignore disconnected frames on ${type}`,()=>{
   const previous=Object.getOwnPropertyDescriptor(globalThis,'window'),handlers=new Map<string,Function>(),sent:any[]=[];
@@ -136,6 +136,33 @@ test('inline SVG plans omit hidden shapes before outlining or cloning wide strok
     draw({append:()=>{}},{node:source,x:0,y:0,w:24,h:24});
     expect(removed).toBe(!drawn);expect(clones).toBe(drawn?1:0);
   }
+});
+
+test.each([
+  {name:'zero fill opacity',own:{fillOpacity:'0'},drawn:false},
+  {name:'no fill',own:{fill:'none'},drawn:false},
+  {name:'transparent fill',own:{fill:'transparent'},drawn:false},
+  {name:'zero alpha fill',own:{fill:'rgba(0, 0, 0, 0)'},drawn:false},
+  {name:'zero alpha modern fill',own:{fill:'color(srgb 0 0 0 / 0)'},drawn:false},
+  {name:'visible stroke without fill',own:{fill:'none',stroke:'black'},drawn:true},
+  {name:'zero stroke opacity',own:{fill:'none',stroke:'black',strokeOpacity:'0'},drawn:false},
+  {name:'zero stroke width',own:{fill:'none',stroke:'black',strokeWidth:'0px'},drawn:false},
+  {name:'transparent stroke',own:{fill:'none',stroke:'rgba(0, 0, 0, 0)'},drawn:false},
+  {name:'normal text',own:{},drawn:true},
+])('inline SVG text respects paint visibility: $name',({own,drawn})=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const computed={display:'inline',visibility:'visible',opacity:'1',fill:'rgb(0, 0, 0)',fillOpacity:'1',stroke:'none',strokeOpacity:'1',strokeWidth:'1px',getPropertyValue:()=>'',...own};
+  const draw=runInNewContext(script.slice(script.indexOf('function drawInlineSvg('),script.indexOf('function drawPlan('))+'\ndrawInlineSvg;',{
+    getComputedStyle:(n:any)=>n.computed,SHAPES:'text',GEOMETRY:[],visibleColor,
+  });
+  let removed=false;const painted:Record<string,string>={};
+  const shape={style:{setProperty:(p:string,v:string)=>{painted[p]=v;}},remove:()=>{removed=true;}};
+  const copy={attributes:[],querySelectorAll:(s:string)=>s==='text'?[shape]:[],removeAttribute:()=>{},setAttribute:()=>{}};
+  const source:any={computed:{opacity:'1',display:'inline'},cloneNode:()=>copy,getScreenCTM:()=>null};
+  source.querySelectorAll=()=>[{localName:'text',computed,parentElement:source}];
+  draw({append:()=>{}},{node:source,x:0,y:0,w:100,h:100});
+  expect(removed).toBe(!drawn);
+  if(drawn){expect(painted.fill).toBe('var(--ink)');expect(painted['fill-opacity']).toBe('.5');expect(painted.stroke).toBe('none');}
 });
 
 test('layer names describe layout spans without repeating their descendants text',()=>{
