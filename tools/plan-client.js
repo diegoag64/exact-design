@@ -132,14 +132,15 @@ function readScene(){
   const root=document.getElementById('exact-root');if(!root)return null;
   const vw=document.documentElement.clientWidth||innerWidth,vh=document.documentElement.clientHeight||innerHeight;
   const records=[],texts=[],media=[],byI=new Map();let n=0;
-  const visit=(parent,p,clip,key)=>{
+  const visit=(parent,p,parentClip,key)=>{
     for(const node of parent.children){
       if(node===host)continue;
       const s=getComputedStyle(node);
       if(s.display==='none'||s.visibility==='hidden'||(s.opacity==='0'&&!node.matches(':modal')))continue;
+      const top=node.matches(':modal,:popover-open'),clip=top?{x:0,y:0,r:vw,b:vh}:parentClip;
       if(s.display==='contents'){visit(node,p,clip,key);continue;}
       const r=node.getBoundingClientRect(),tag=node.localName,i=n++;
-      const positioned=s.position!=='static',top=node.matches(':modal,:popover-open');
+      const positioned=s.position!=='static';
       const z=positioned&&s.zIndex!=='auto'?Number(s.zIndex)||0:key[1];
       const own=[top?1:key[0],z,positioned?1:key[2],i];
       const onScreen=r.width>0&&r.height>0&&r.right>clip.x&&r.left<clip.r&&r.bottom>clip.y&&r.top<clip.b;

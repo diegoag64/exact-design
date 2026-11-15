@@ -60,6 +60,21 @@ test('plan scenes retain zero-opacity modals and their stacking key but skip hid
   expect(scene.records.map((r:any)=>r.margin)).toEqual([[0,0,0,0],[1.5,2,0,-4]]);
   expect(scene.records.map((r:any)=>r.node)).toEqual([modal,visible]);
   expect(scene.records.map((r:any)=>r.key[0])).toEqual([1,1]);
+  const sibling=element('div','1'),card=element('div','1',[modal,sibling]);
+  card.style={...card.style,overflowX:'hidden',overflowY:'hidden'};
+  card.getBoundingClientRect=()=>({left:300,top:600,right:380,bottom:680,width:80,height:80});
+  root.children=[card];
+  for(const selector of [':modal',':popover-open']){
+    modal.matches=(s:string)=>s.includes(selector);modal.style.opacity=selector===':modal'?'0':'1';
+    const records=read().records,record=(node:any)=>records.find((r:any)=>r.node===node);
+    expect(record(modal).clip).toEqual({x:0,y:0,r:400,b:800});expect(record(modal).visible).toBe(true);
+    expect(record(visible).clip).toEqual({x:0,y:0,r:400,b:800});expect(record(visible).visible).toBe(true);
+    expect(record(sibling).clip).toEqual({x:300,y:600,r:380,b:680});expect(record(sibling).visible).toBe(false);
+    expect(record(modal).key[0]).toBe(1);expect(record(sibling).key[0]).toBe(0);
+    modal.style.overflowX='auto';modal.style.overflowY='auto';
+    expect(read().records.find((r:any)=>r.node===visible).clip).toEqual({x:20,y:20,r:220,b:120});
+    modal.style.overflowX='visible';modal.style.overflowY='visible';
+  }
 });
 
 test('file SVG parsing excludes hidden shapes through the SVG root before outlining',()=>{

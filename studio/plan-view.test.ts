@@ -215,6 +215,18 @@ test('plan view draws previews as line plans, regions measure from the canvas an
     await frame.evaluate(()=>{const dialog=document.getElementById('plan-modal') as HTMLDialogElement;dialog.close();dialog.remove();});
     await toggle.click();
     await frame.locator('#ed-plan text[data-app]').first().waitFor();
+    // Top-layer dialogs escape ancestor overflow clips, including for readable text.
+    await frame.evaluate(()=>{
+      const card=document.createElement('div');card.id='plan-modal-card';
+      card.style.cssText='position:fixed;left:0;top:0;width:80px;height:80px;overflow:hidden';
+      const dialog=document.createElement('dialog');dialog.id='plan-clipped-modal';
+      dialog.style.cssText='position:fixed;inset:0;margin:auto;width:200px;height:200px;padding:12px;border:1px solid black;background:white;color:black;font:14px/20px sans-serif';
+      dialog.textContent='Unclipped modal text';card.append(dialog);
+      document.getElementById('exact-root')!.append(card);dialog.showModal();
+    });
+    try{
+      await frame.locator('#ed-plan text[data-app]',{hasText:'Unclipped modal text'}).waitFor({timeout:5000});
+    }finally{await frame.evaluate(()=>{(document.getElementById('plan-clipped-modal') as HTMLDialogElement).close();document.getElementById('plan-modal-card')!.remove();});}
     // The shortcuts switch them off again while the plan shows.
     await page.keyboard.press('Escape');await page.getByTestId('canvas-stage').focus();
     await page.keyboard.press('Shift+KeyB');await page.keyboard.press('Shift+KeyT');
