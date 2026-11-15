@@ -6,6 +6,7 @@ import {ElementBridge,bridgeFor,stopElementBridges} from '../tools/element-bridg
 import {DesignSession} from '../tools/design-session';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
+import {visibleSvgShape} from '../tools/plan-geometry.js';
 
 for(const type of ['keydown','pointerdown'])test(`plan regions ignore disconnected frames on ${type}`,()=>{
   const previous=Object.getOwnPropertyDescriptor(globalThis,'window'),handlers=new Map<string,Function>(),sent:any[]=[];
@@ -59,6 +60,21 @@ test('plan scenes retain zero-opacity modals and their stacking key but skip hid
   expect(scene.records.map((r:any)=>r.margin)).toEqual([[0,0,0,0],[1.5,2,0,-4]]);
   expect(scene.records.map((r:any)=>r.node)).toEqual([modal,visible]);
   expect(scene.records.map((r:any)=>r.key[0])).toEqual([1,1]);
+});
+
+test('file SVG parsing excludes hidden shapes through the SVG root before outlining',()=>{
+  const script=readFileSync(new URL('../tools/plan-client.js',import.meta.url),'utf8');
+  const node=(attrs:Record<string,string>={},parentElement:any=null):any=>({parentElement,getAttribute:(name:string)=>attrs[name]??null,closest:()=>null});
+  const root=node({visibility:'hidden'});root.localName='svg';
+  const visible=node({visibility:'visible'},root),hidden=node({},root),transparent=node({opacity:'0',visibility:'visible'},root);
+  const group=node({style:'display:none'},root),nested=node({visibility:'visible'},group);
+  root.querySelectorAll=()=>[visible,hidden,transparent,nested];
+  const parse=runInNewContext(script.slice(script.indexOf('function parseSvg('),script.indexOf('// Readable text:'))+'\nparseSvg;',{
+    DOMParser:class{parseFromString(){return {documentElement:root};}},SHAPES:'path',visibleSvgShape,
+  });
+  expect(parse('<svg/>').shapes).toEqual([visible]);
+  root.getAttribute=(name:string)=>name==='style'?'opacity:0':null;
+  expect(parse('<svg/>').shapes).toEqual([]);
 });
 
 test('file SVG plans copy only geometry and text attributes',()=>{

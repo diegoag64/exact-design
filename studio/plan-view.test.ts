@@ -77,6 +77,8 @@ test('plan view draws previews as line plans, regions measure from the canvas an
       const source=(id:string)=>`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><defs><rect data-plan-excluded="" width="24" height="24"/></defs><g transform="translate(12 12)" stroke="red"><g transform="scale(2)"><rect data-plan-shape="${id}" transform="translate(1 1)" width="3" height="4" style="fill:red;stroke:none"/></g></g></svg>`;
       add('plan-group-base64','data:image/svg+xml;base64,'+btoa(source('base64')),40);
       add('plan-group-encoded','data:image/svg+xml,'+encodeURIComponent(source('encoded')),80);
+      const hidden='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path opacity="0" d="M0 0L24 24"/><path opacity="0.0" d="M0 1L24 1"/><path opacity="0%" d="M0 2L24 2"/><path display="none" d="M0 3L24 3"/><g opacity="0"><path d="M0 4L24 4"/></g><g display="none"><path d="M0 5L24 5"/></g><g visibility="hidden"><path d="M0 6L24 6"/></g><path visibility="collapse" d="M0 7L24 7"/><path style="opacity:0" d="M0 8L24 8"/><g style="display:none"><path d="M0 9L24 9"/></g><path style="visibility:hidden" d="M0 10L24 10"/></svg>';
+      add('plan-hidden-shapes','data:image/svg+xml;base64,'+btoa(hidden),120);
     });
     await (await maskPlan('plan-group-encoded')).locator('rect').waitFor();
     for(const id of ['base64','encoded']){
@@ -92,6 +94,10 @@ test('plan view draws previews as line plans, regions measure from the canvas an
       expect(geometry.w).toBeCloseTo(6,1);expect(geometry.h).toBeCloseTo(8,1);
       expect(geometry.fill).toBe('none');expect(geometry.stroke).toBe('var(--ink)');expect(geometry.style).toBeNull();
     }
+    const visibleMask=await maskPlan('plan-hidden-shapes');
+    await visibleMask.locator('circle').waitFor();
+    expect(await visibleMask.locator('circle').count()).toBe(1);
+    expect(await visibleMask.locator('path').count()).toBe(0);
     // Invalid SVG or a failed decode draws a placeholder and still reaches later media on every redraw.
     await frame.evaluate(()=>{
       const root=document.getElementById('exact-root')!;

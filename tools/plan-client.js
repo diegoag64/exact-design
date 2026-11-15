@@ -2,7 +2,7 @@
 // drawing of it sits on top, so hit testing, selection and draft editing still reach the
 // app's own elements. Regions measure everything inside a dragged rectangle.
 // Loaded by canvas-input-client.js on the first plan or region message; never in Preview.
-import {maskImageUrl,decodeSvgDataUrl,fieldText,lineWords,isSurface,cornerRadius,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
+import {maskImageUrl,decodeSvgDataUrl,visibleSvgShape,fieldText,lineWords,isSurface,cornerRadius,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
 import {measureSpacing} from './spacing-geometry.js';
 
 const NS='http://www.w3.org/2000/svg';
@@ -94,7 +94,11 @@ function parseSvg(text){
   const doc=new DOMParser().parseFromString(text,'image/svg+xml').documentElement;
   if(doc.localName!=='svg')return null;
   const w=parseFloat(doc.getAttribute('width'))||24,h=parseFloat(doc.getAttribute('height'))||24;
-  return {viewBox:doc.getAttribute('viewBox')||`0 0 ${w} ${h}`,shapes:[...doc.querySelectorAll(SHAPES)].filter(n=>!n.closest('defs,mask,clipPath,pattern'))};
+  return {viewBox:doc.getAttribute('viewBox')||`0 0 ${w} ${h}`,shapes:[...doc.querySelectorAll(SHAPES)].filter(n=>{
+    if(n.closest('defs,mask,clipPath,pattern'))return false;
+    const chain=[];for(let p=n;p;p=p.parentElement){chain.push(p.getAttribute.bind(p));if(p===doc)break;}
+    return visibleSvgShape(chain);
+  })};
 }
 // Readable text: the words on each wrapped line of a text node. A word belongs to the line its
 // first box sits on. Scrolling and redraws reuse the answer while the text and its line widths hold.

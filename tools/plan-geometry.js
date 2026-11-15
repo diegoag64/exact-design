@@ -18,6 +18,26 @@ export function decodeSvgDataUrl(url){
   }catch{return null;}
 }
 
+// Attribute getters run from the shape to the SVG root. Visibility inherits; opacity and display suppress subtrees.
+export function visibleSvgShape(chain){
+  let visibility='';
+  for(const get of chain){
+    const styles={},important=new Set();
+    for(const declaration of (get('style')||'').split(';')){
+      const match=declaration.match(/^\s*(opacity|display|visibility)\s*:\s*(.*?)\s*$/i);if(!match)continue;
+      const name=match[1].toLowerCase(),priority=/\s*!important\s*$/i.test(match[2]);
+      if(important.has(name)&&!priority)continue;
+      styles[name]=match[2].replace(/\s*!important\s*$/i,'').trim().toLowerCase();
+      if(priority)important.add(name);
+    }
+    const value=name=>(styles[name]||get(name)||'').trim().toLowerCase();
+    const opacity=value('opacity'),display=value('display'),v=value('visibility');
+    if((opacity!==''&&Number(opacity.replace(/%$/,''))===0)||display==='none')return false;
+    if(!visibility&&['visible','hidden','collapse'].includes(v))visibility=v;
+  }
+  return visibility!=='hidden'&&visibility!=='collapse';
+}
+
 // Computed colours are `rgb(r, g, b)` when opaque and `rgba(r, g, b, a)` or `rgb(r g b / a)` otherwise.
 // Only an alpha of 0 is invisible: pure black, `rgb(0, 0, 0)`, is a colour.
 export const visibleColor=c=>!!c&&c!=='transparent'&&!/^rgba\([^,]+,[^,]+,[^,]+,\s*0(?:\.0+)?\s*\)$/.test(c)&&!/\/\s*0(?:\.0+)?%?\s*\)$/.test(c);

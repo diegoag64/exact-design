@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {maskImageUrl,decodeSvgDataUrl,fieldText,lineWords,valueFill,surfaceShape,layoutBox,visibleColor,index,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
+import {maskImageUrl,decodeSvgDataUrl,visibleSvgShape,fieldText,lineWords,valueFill,surfaceShape,layoutBox,visibleColor,index,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
 
 test('plan mask URLs preserve parentheses in quoted and unquoted SVG data',()=>{
   const svg='<svg xmlns="http://www.w3.org/2000/svg"><g transform="translate(12 12)"><rect width="10" height="10"/></g></svg>';
@@ -24,6 +24,26 @@ test('plan SVG data URLs decode percent escapes leniently as UTF-8',()=>{
 
 test('plan malformed SVG data URL headers and base64 fail without throwing',()=>{
   for(const url of ['data:image/svg+xml;base64,%%%','data:image/svg+xml'])expect(decodeSvgDataUrl(url)).toBeNull();
+});
+
+test('plan file SVG shapes honor their own and ancestor visibility attributes and styles',()=>{
+  const visible=(...chain:Record<string,string>[])=>visibleSvgShape(chain.map(attrs=>name=>attrs[name]??null));
+  for(const attrs of [{opacity:'0'},{opacity:'0.0'},{opacity:'0%'},{display:'none'},{visibility:'hidden'},{visibility:'collapse'},
+    {style:'opacity:0'},{style:'opacity: 0.0'},{style:'opacity:0%'},{style:'display:none'},{style:'visibility:hidden'},{style:'visibility:collapse'}]){
+    expect(visible(attrs)).toBe(false);expect(visible({}, {},attrs)).toBe(false);
+  }
+  expect(visible({})).toBe(true);
+  for(const opacity of ['0.1','50%','1'])expect(visible({opacity},{opacity})).toBe(true);
+  expect(visible({style:'opacity:.5'}, {style:'opacity:50%'})).toBe(true);
+  expect(visible({visibility:'visible'}, {},{visibility:'hidden'})).toBe(true);
+  expect(visible({}, {style:'visibility:visible'}, {visibility:'collapse'})).toBe(true);
+  expect(visible({visibility:'inherit'}, {visibility:'hidden'})).toBe(false);
+  expect(visible({visibility:'visible'}, {opacity:'0'})).toBe(false);
+  expect(visible({visibility:'visible',display:'block'}, {display:'none'})).toBe(false);
+  expect(visible({opacity:'0',display:'none',visibility:'hidden',style:'opacity:1;display:block;visibility:visible'})).toBe(true);
+  expect(visible({opacity:'1',style:'fill:red; OPACITY: 0 !important; opacity:1'})).toBe(false);
+  expect(visible({style:'display:none; display:block'})).toBe(true);
+  expect(visible({visibility:'visible',style:'visibility:hidden'})).toBe(false);
 });
 
 test('plan fields mask passwords before measuring or drawing text',()=>{
