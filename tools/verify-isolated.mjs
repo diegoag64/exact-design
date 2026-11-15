@@ -46,7 +46,7 @@ async function checkPrivateOrigins(directory) {
   for (const entry of await readdir(directory, {withFileTypes:true})) {
     const path = resolve(directory, entry.name);
     if (entry.isDirectory()) await checkPrivateOrigins(path);
-    else if (!entry.name.endsWith('.test.ts') && /\.(ts|js|mjs|json|contract|tamber)$/.test(entry.name)) {
+    else if (!entry.name.endsWith('.test.ts') && /\.(ts|js|mjs|json|contract|forma)$/.test(entry.name)) {
       if (/:(5175|5176)\b/.test(await readFile(path, 'utf8'))) {
         throw new Error(`Isolation refused: development port remains in ${path}`);
       }

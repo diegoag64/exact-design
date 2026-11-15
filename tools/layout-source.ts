@@ -72,7 +72,7 @@ export async function checkLayout(app:string,file:string,source:string,replaceme
       const rel=relative(app,path),parts=rel.split(sep);
       if(parts.some(p=>['.exact','target','dist','.git','node_modules','assets'].includes(p)))return false;
       if(++count>3000)throw new Error('This project is too large for local layout validation.');
-      return (await lstat(path)).isDirectory() || /\.(contract|tamber|json)$/.test(path);
+      return (await lstat(path)).isDirectory() || /\.(contract|forma|json)$/.test(path);
     };
     for(const name of await readdir(app)) {
       const from=resolve(app,name);

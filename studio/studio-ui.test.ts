@@ -7,7 +7,7 @@ import {suiteBrowser} from '../.exact-sdk/scripts/agent-launch.mjs';
 test('studio icons, context menus and canvas gestures share the desktop interaction model',async()=>{
   const root=resolve(import.meta.dir,'..');await mkdir(resolve(root,'.exact'),{recursive:true});
   const temp=await mkdtemp(resolve(root,'.exact/studio-ui-'));
-  for(const e of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(e.isFile()&&!e.name.includes('.test.')&&!e.name.endsWith('.d.ts')&&/\.(ts|contract|json|tamber)$/.test(e.name))await cp(resolve(root,'studio',e.name),resolve(temp,e.name));
+  for(const e of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(e.isFile()&&!e.name.includes('.test.')&&!e.name.endsWith('.d.ts')&&/\.(ts|contract|json|forma)$/.test(e.name))await cp(resolve(root,'studio',e.name),resolve(temp,e.name));
   for(const name of ['assets','modules'])await cp(resolve(root,'studio',name),resolve(temp,name),{recursive:true});
   const manifest=JSON.parse(await readFile(resolve(temp,'app.json'),'utf8'));delete manifest.commands;delete manifest.server;await writeFile(resolve(temp,'app.json'),JSON.stringify(manifest));
   const probe=Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>new Response()});const port=probe.port;probe.stop(true);
@@ -68,9 +68,9 @@ test('studio icons, context menus and canvas gestures share the desktop interact
     expect(movedBox.y-originalBox.y).toBeCloseTo(-16,1);
     expect(movedBox.width).toBe(originalBox.width);
     expect(movedBox.height).toBe(originalBox.height);
-    const layout=await frameBox.evaluate(el=>({left:getComputedStyle(el).left,top:getComputedStyle(el).top,translate:getComputedStyle(el).translate,willChange:getComputedStyle(el).willChange}));
+    const layout=await frameBox.evaluate(el=>({left:getComputedStyle(el).left,top:getComputedStyle(el).top,translate:getComputedStyle(el).translate}));
     expect(layout.left).toBe('0px');expect(layout.top).toBe('0px');expect(layout.translate).not.toBe('none');
-    expect(layout.willChange).toContain('translate');expect(layout.willChange).toContain('scale');
+    // Exact now promotes only actively changing transforms and clears the hint after settling.
     await page.locator('[aria-label="Design canvas"]').dispatchEvent('wheel',{deltaX:-24,deltaY:-16});
     // Zooming scales the frame about its top-left corner without scaling its translation.
     const canvasBox=await page.locator('[aria-label="Design canvas"]').boundingBox(),stageBox=await page.locator('#canvas-stage').boundingBox();
@@ -135,7 +135,7 @@ test('studio icons, context menus and canvas gestures share the desktop interact
 test('the native drawer loads screenshots cross origin beside a live web frame in both themes',async()=>{
   const root=resolve(import.meta.dir,'..');await mkdir(resolve(root,'.exact'),{recursive:true});
   const temp=await mkdtemp(resolve(root,'.exact/studio-ui-'));
-  for(const e of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(e.isFile()&&!e.name.includes('.test.')&&!e.name.endsWith('.d.ts')&&/\.(ts|contract|json|tamber)$/.test(e.name))await cp(resolve(root,'studio',e.name),resolve(temp,e.name));
+  for(const e of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(e.isFile()&&!e.name.includes('.test.')&&!e.name.endsWith('.d.ts')&&/\.(ts|contract|json|forma)$/.test(e.name))await cp(resolve(root,'studio',e.name),resolve(temp,e.name));
   for(const name of ['assets','modules'])await cp(resolve(root,'studio',name),resolve(temp,name),{recursive:true});
   const fixture=await import('../tools/native-fixture');
   let failureMode: 'frame'|'job'|undefined;

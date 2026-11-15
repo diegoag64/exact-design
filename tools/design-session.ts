@@ -85,15 +85,15 @@ export class DesignSession {
   inspectedPages=new Map<string,string>();
   deferredSelections:{event:any;until:number;plan:string}[]=[];
   constructor(readonly origin:string,private token:string,private request:typeof fetch=fetch) {}
-  async call(body:any,path='/__tamber') {
-    const r=await this.request(this.origin+path,{method:'POST',redirect:'error',headers:{'content-type':'application/json','x-exact-tamber-token':this.token},body:JSON.stringify(body)});
+  async call(body:any,path='/__forma') {
+    const r=await this.request(this.origin+path,{method:'POST',redirect:'error',headers:{'content-type':'application/json','x-exact-forma-token':this.token},body:JSON.stringify(body)});
     const data=await r.json();
     if(!r.ok || data.error) throw new Error(data.error?.message??'The design server refused this change. Select the element again.');
     return data.ok??data;
   }
   async start() {
     const hello=await this.call({method:'hello'});
-    if(!hello.protocol?.startsWith('tamber/1.')) throw new Error('This Exact editing protocol is not supported.');
+    if(!hello.protocol?.startsWith('forma/1.')) throw new Error('This Exact editing protocol is not supported.');
     this.files=hello.files;
     this.app=hello.local===true && typeof hello.app==='string' && isAbsolute(hello.app)?hello.app:'';
     this.bridge?.feedback?.add(this.receivePreview);
@@ -109,7 +109,7 @@ export class DesignSession {
     if(this.bridge)for(const frame of liveFrames(this.bridge.frames))if(frame.build&&this.inspectedPages.get(frame.frame)!==`${frame.build}:${frame.page??""}`){
       try{await this.call({method:'inspect',client:this.client,build:frame.build,on:true});this.builds.add(frame.build);this.inspectedPages.set(frame.frame,`${frame.build}:${frame.page??""}`);}catch{/* The page can report its ID before registration completes. */}
     }
-    const r=await this.call({client:this.client,after:this.cursor,...(this.epoch?{epoch:this.epoch}:{}),wait:false},'/__tamber/events');
+    const r=await this.call({client:this.client,after:this.cursor,...(this.epoch?{epoch:this.epoch}:{}),wait:false},'/__forma/events');
     if(this.epoch && this.epoch!==r.epoch) throw new Error('The app server restarted. Finish editing and reconnect.');
     this.epoch=r.epoch; this.cursor=r.seq;
     if(r.missed || JSON.stringify(this.files)!==JSON.stringify(r.files)) {this.selection=null;this.overrides.clear();this.version++;}
@@ -423,7 +423,7 @@ export async function designRequest(body:any) {
   if(body.op==='open') {
     const origin=projectUrl(body.url),u=new URL(origin);
     if(u.protocol!=='http:' || !['127.0.0.1','localhost','[::1]'].includes(u.hostname)) throw new Error('Source editing currently supports Exact dev servers on this computer.');
-    const r=await fetch(origin+'/__tamber/token',{redirect:'error',signal:AbortSignal.timeout(4000)});
+    const r=await fetch(origin+'/__forma/token',{redirect:'error',signal:AbortSignal.timeout(4000)});
     if(!r.ok) throw new Error('This app does not expose Exact’s development editing API.');
     const {token}=await r.json().catch(()=>({}));
     if(typeof token!=='string'||!token) throw new Error('No local editing session is available.');

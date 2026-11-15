@@ -286,6 +286,7 @@ test('preview proxy injects before bootstrap, forwards routes, and refuses token
     expect(html).toContain('/__exact_design/canvas-input-client.js');
     expect(html.indexOf('/__exact_design/canvas-input-client.js')).toBeLessThan(html.indexOf('original()'));
     expect(html).toContain('/__exact_design/client.js');
+    expect((await fetch(bridge.origin+'/__forma/token')).status).toBe(404);
     expect((await fetch(bridge.origin+'/__tamber/token')).status).toBe(404);
     expect((await fetch(bridge.origin+'/note',{headers:{origin:'https://unrelated.example'}})).status).toBe(403);
     expect(paths.length).toBe(1);
@@ -372,7 +373,7 @@ test('selection restoration waits for the new plan and verifies the source locat
   const request=(async(url:string,init:any)=>{
     const body=JSON.parse(init.body);
     if(url.endsWith('/events')){const reply={files,events,seq:1,epoch:'run'};events=[];return Response.json(reply);}
-    if(body.method==='hello')return Response.json({ok:{protocol:'tamber/1.18',files}});
+    if(body.method==='hello')return Response.json({ok:{protocol:'forma/1.18',files}});
     if(body.method==='inspect')return Response.json({ok:{builds:['page']}});
     if(body.method==='transaction'){files={'app.contract':'after'};return Response.json({ok:{files,inverse:'undo'}});}
     throw new Error('Unexpected request');
@@ -417,7 +418,7 @@ test('the first selection waits for instance paths in the next hierarchy snapsho
   const request=(async(url:string,init:any)=>{
     const body=JSON.parse(init.body);
     if(url.endsWith('/events')){const reply={files:{},events,seq:1,epoch:'run'};events=[];return Response.json(reply);}
-    return Response.json({ok:body.method==='hello'?{protocol:'tamber/1.18',files:{}}:{builds:['page']}});
+    return Response.json({ok:body.method==='hello'?{protocol:'forma/1.18',files:{}}:{builds:['page']}});
   }) as typeof fetch;
   const node={id:'node',identity:'[12,[]]',path:'root/0:div',parent:'',depth:0,label:'Row',tag:'div',site:12,instance:[] as unknown[]};
   const frame={frame:'phone',build:'page',plan:'plan',inspecting:true,nodes:[node],seen:Date.now()};
@@ -432,7 +433,7 @@ test('picking the selected element again keeps its spacing measurement',async()=
   const request=(async(url:string,init:any)=>{
     const body=JSON.parse(init.body);
     if(url.endsWith('/events'))return Response.json({files:{},events:[],seq:1,epoch:'run'});
-    return Response.json({ok:body.method==='hello'?{protocol:'tamber/1.18',files:{}}:{builds:['page']}});
+    return Response.json({ok:body.method==='hello'?{protocol:'forma/1.18',files:{}}:{builds:['page']}});
   }) as typeof fetch;
   const nodes=[{id:'card',identity:'[1,[]]',path:'root/0:div',parent:'',depth:0,label:'Card',tag:'div',site:1,instance:[]},{id:'title',identity:'[2,[]]',path:'root/0:div/0:span',parent:'card',depth:1,label:'Title',tag:'span',site:2,instance:[]}];
   const frame={frame:'phone',build:'page',plan:'plan',inspecting:true,nodes,seen:Date.now()};
@@ -449,7 +450,7 @@ test('picking the selected element again keeps its spacing measurement',async()=
 });
 test('undo before a rebuild retains the source location and restores on the original plan',async()=>{
   let events:any[]=[];const commands:any[]=[];
-  const request=(async(url:string)=>url.endsWith('/events')?Response.json({files:{'app.contract':'before'},events:events.splice(0),seq:1,epoch:'run'}):Response.json({ok:{protocol:'tamber/1.18',files:{'app.contract':'before'},builds:['page']}})) as typeof fetch;
+  const request=(async(url:string)=>url.endsWith('/events')?Response.json({files:{'app.contract':'before'},events:events.splice(0),seq:1,epoch:'run'}):Response.json({ok:{protocol:'forma/1.18',files:{'app.contract':'before'},builds:['page']}})) as typeof fetch;
   const node={id:'node',identity:'[2,[]]',path:'root/0:button',parent:'',depth:0,label:'Save',tag:'button',site:2,instance:[]};
   const frame={frame:'phone',page:'generation',build:'page',plan:'original-plan',inspecting:true,nodes:[node],seen:Date.now()};
   const s=new DesignSession('http://localhost:5174','fixture',request);

@@ -110,7 +110,7 @@ Use the chain control to link spacing or corner values. Unlink them to edit each
 
 Apply checks source hashes and validates the complete batch with the Exact compiler before writing. If source has changed externally, discard the stale draft before editing again. Use source control to revert an applied batch. Draft undo cannot reverse it.
 
-Editing requires a local Exact development server with the `tamber/1` editing API. Remote previews, package sources, data-bound text, and ambiguous source locations remain read-only.
+Editing requires a local Exact development server with the `forma/1` editing API. Remote previews, package sources, data-bound text, and ambiguous source locations remain read-only.
 
 ## Choose light or dark
 

@@ -12,7 +12,7 @@ test('draft edits and undo never write; Apply checks the source version',async()
   const request=(async(url:string,init:any)=>{
     const body=JSON.parse(init.body);
     if(url.endsWith('/events')) {const reply={files,events,seq:1,epoch:'run'};events=[];return Response.json(reply);}
-    if(body.method==='hello') return Response.json({ok:{protocol:'tamber/1.18',files}});
+    if(body.method==='hello') return Response.json({ok:{protocol:'forma/1.18',files}});
     if(body.method==='inspect') return Response.json({ok:{builds:['page']}});
     if(body.method==='describe') return Response.json({ok:{ir:{tokens:[{name:'ember',kind:'color',fallback:['#e8461fff','#ff6a45ff']}]}}});
     writes.push(body);files={file:'after'};return Response.json({ok:{files,inverse:'inverse-1'}});
@@ -36,7 +36,7 @@ test('reconnected viewports sharing a build resolve selection against the intend
   const request=(async(url:string,init:any)=>{
     const body=JSON.parse(init.body);
     if(url.endsWith('/events')){const reply={files:{},events,seq:1,epoch:'run'};events=[];return Response.json(reply);}
-    if(body.method==='hello')return Response.json({ok:{protocol:'tamber/1.18',files:{}}});
+    if(body.method==='hello')return Response.json({ok:{protocol:'forma/1.18',files:{}}});
     if(body.method==='inspect')inspections++;
     return Response.json({ok:{builds:['shared-build']}});
   })as typeof fetch;

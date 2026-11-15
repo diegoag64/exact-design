@@ -13,11 +13,11 @@ export function startDiscoveryFixture(port=5176) {
       return new Response(`<!doctype html><html><head><style>html,body,#exact-root{height:100%;margin:0}main{height:100%;display:flex;flex-direction:column;background:#fafafa}.fill{position:absolute;inset:0;display:flex;flex-direction:column}.header{height:72px;flex-shrink:0}.scroll{flex:1;min-height:0;overflow-y:auto}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:24px}.card{height:240px;background:#ddd}.footer{height:30px;flex-shrink:0}@media(max-width:999px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:599px){.cards{grid-template-columns:1fr}}</style></head><body><div id="exact-root"><main data-site="0"><div class="fill" data-site="1"><header class="header" data-site="2">Full screen</header><div class="scroll" data-site="3"><div class="cards" data-site="4">${Array.from({length:count},(_,i)=>`<article class="card" data-site="${i+5}">Card ${i+1}</article>`).join('')}</div></div><footer class="footer" data-site="20">End of screen</footer></div>${url.pathname==='/sheet'?'<div navigationpresentation="modal" data-site="30" style="position:absolute;inset:0;background:#fff">Sheet</div>':''}</main></div><script>let count=${count};setInterval(async()=>{const state=await(await fetch('/fixture/content')).json(),next=location.pathname==='/short'||state.short?2:12;if(count!==next){count=next;history.replaceState(null,'',state.short?'/dynamic-short':'/');document.querySelector('.cards').innerHTML=Array.from({length:count},(_,i)=>'<article class="card" data-site="'+(i+5)+'">Card '+(i+1)+'</article>').join('');}},150);</script></body></html>`,{headers:{'content-type':'text/html'}});
     }
     if(mode==='elements'||mode==='elements-long'||mode==='elements-gaps'){
-      if(url.pathname==='/__tamber/token')return Response.json({token:'test-fixture-only'});
-      if(url.pathname==='/__tamber/events'){const body=await req.json();return Response.json({files:files(),seq,epoch:'fixture',events:events.filter(e=>e.seq>body.after),missed:false});}
-      if(url.pathname==='/__tamber'){
+      if(url.pathname==='/__forma/token')return Response.json({token:'test-fixture-only'});
+      if(url.pathname==='/__forma/events'){const body=await req.json();return Response.json({files:files(),seq,epoch:'fixture',events:events.filter(e=>e.seq>body.after),missed:false});}
+      if(url.pathname==='/__forma'){
         const body=await req.json();
-        if(body.method==='hello')return Response.json({ok:{protocol:'tamber/1.18',files:files(),local:false}});
+        if(body.method==='hello')return Response.json({ok:{protocol:'forma/1.18',files:files(),local:false}});
         if(body.method==='inspect'){if('on'in body)inspecting=body.on;return Response.json({ok:{builds:['fixture-build']}});}
         if(body.method==='transaction'||body.method==='undo'){color=body.method==='undo'?'#ffffff':body.ops[0].value;version++;return Response.json({ok:{files:files(),inverse:'undo'}});}
         return Response.json({error:{message:'Unsupported fixture request'}},{status:400});
