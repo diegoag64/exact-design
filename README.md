@@ -47,6 +47,7 @@ Select a viewport, click **Edit app**, and change a property. Click **Review** t
 | [Development](docs/development.md) | Commands, test requirements, and source layout |
 | [Studio design system](docs/studio-design-system.md) | Shared controls, tokens, icons, and interactions |
 | [Ember](examples/ember/README.md) | The demo app and its screens |
+| [Waymark](examples/waymark/README.md) | A second, art-directed demo: a game companion app |
 | [Contributing](CONTRIBUTING.md) | Report issues, run checks, and open pull requests |
 
 [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
@@ -59,4 +60,4 @@ Native capture techniques draw on [Expo Explore](https://github.com/expo/explore
 
 ## License
 
-Exact Design is released under the [MIT License](LICENSE). Vendored icons keep their own licenses: [Lucide](studio/assets/lucide/LICENSE) in the studio and [Phosphor](examples/ember/assets/icons/LICENSE) in Ember.
+Exact Design is released under the [MIT License](LICENSE). Vendored icons keep their own licenses: [Lucide](studio/assets/lucide/LICENSE) in the studio and [Phosphor](examples/ember/assets/icons/LICENSE) in Ember. Waymark's typeface, Almendra, is under the [SIL Open Font License](examples/waymark/assets/fonts/OFL.txt).

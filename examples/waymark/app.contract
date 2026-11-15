@@ -117,12 +117,13 @@ keyframes glow
 style Num
   font-family="Almendra, 'Times New Roman', serif"
   font-weight=700
+  line-height=1.4
 
 style Title
   font-size="2.125rem"
   font-weight=800
   letter-spacing="-0.5px"
-  line-height=1.15
+  line-height=1.4
   text-shadow="0 2px 3px wood-edge"
 
 style Label
@@ -169,8 +170,8 @@ style BottomBar
   flex-direction="column"
   position="relative"
   box-sizing="border-box"
+  align-items="center"
   padding="18px 20px 22px"
-  gap=12
   background-color="bar"
   border-top="2px solid card-shade"
   box-shadow="0 -12px 24px -8px bar"
@@ -259,7 +260,8 @@ component App
         if e.name == "map"
           column navigationKey=`${e.id}` navigationScroll=`content-${e.id}` navigationBar="none" position="absolute" inset=0 background-color="fog" overflow="hidden"
             scroll id=`content-${e.id}` flex=1 min-height=0 overflow-x="auto" testId="map-scroll"
-              RealmMap(places=board.places, filter=mapFilter, width=mapWidth)
+              column width=mapWidth padding-bottom=84 background-color="fog"
+                RealmMap(places=board.places, filter=mapFilter, width=mapWidth)
             row position="absolute" left=0 right=0 top=0 align-items="center" gap=6 padding="10px 12px 34px" background-image="linear-gradient(180deg, var(--fog) 0%, var(--fog) 35%, transparent 100%)" color="map-ink"
               button id="back" press=back class=IconButton color="map-ink" aria-label="Home" testId="map-home"
                 image "symbol:home-fill"
@@ -289,18 +291,19 @@ component App
               else
                 RewardGrid(rewards=board.rewards, cols=cols, redeem=redeem)
             column class=BottomBar
-              if (e.name == "rewards" ? redeemError : markError) != ""
-                text (e.name == "rewards" ? redeemError : markError) role="alert" color="sun" font-size="0.875rem" font-weight=600 testId="points-error"
-              row align-items="baseline" gap=8
-                text "Whisper Points" flex=1 class=Label color="ink-2"
-                text `${board.points}` class=Num font-size="2.25rem" line-height=1 testId="points"
-                text "P" class=Num font-size="1.25rem"
-              column position="relative" height=30 justify-content="center" border-radius=2 background-color="pill" border="1.5px solid pill-edge" overflow="hidden"
-                column position="absolute" left=0 top=0 bottom=0 width=pct(board.points, board.goal) background-color="sun-2" opacity=0.55
-                row position="relative" align-items="baseline" padding="0 10px" gap=4
-                  text "Reward Redemption" flex=1 font-size="0.9375rem" font-weight=600
-                  text `${board.goal}` class=Num font-size="1.25rem" color="sun"
-                  text "P" class=Num font-size="0.875rem" color="sun"
+              column width="100%" max-width="43rem" gap=12
+                if (e.name == "rewards" ? redeemError : markError) != ""
+                  text (e.name == "rewards" ? redeemError : markError) role="alert" color="sun" font-size="0.875rem" font-weight=600 testId="points-error"
+                row align-items="baseline" gap=8
+                  text "Whisper Points" flex=1 class=Label color="ink-2"
+                  text `${board.points}` class=Num font-size="2.25rem" testId="points"
+                  text "P" class=Num font-size="1.25rem"
+                column position="relative" height=30 justify-content="center" border-radius=2 background-color="pill" border="1.5px solid pill-edge" overflow="hidden"
+                  column position="absolute" left=0 top=0 bottom=0 width=pct(board.points, board.goal) background-color="sun-2" opacity=0.55
+                  row position="relative" align-items="baseline" padding="0 10px" gap=4
+                    text "Reward Redemption" flex=1 font-size="0.9375rem" font-weight=600
+                    text `${board.goal}` class=Num font-size="1.25rem" color="sun"
+                    text "P" class=Num font-size="0.875rem" color="sun"
         if e.name == "trophyHall" or e.name == "feature"
           column navigationKey=`${e.id}` navigationBar="none" position="absolute" inset=0 background-color="page" overflow="hidden"
             Backdrop()
@@ -336,10 +339,10 @@ component App
             scroll id=`content-${e.id}` flex=1 min-height=0 position="relative"
               Journey(b=board, cols=cols, rename=beginRename)
             column class=BottomBar
-              row align-items="center" gap=10
+              row width="100%" max-width="43rem" align-items="center" gap=10
                 text "Gleams Banked" flex=1 class=Label color="ink-2"
                 image "assets/art/gem.png" alt="" aria-hidden=true width=21 height=28
-                text `${board.banked}` class=Num font-size="2rem" line-height=1 testId="banked"
+                text `${board.banked}` class=Num font-size="2rem" testId="banked"
         if e.name == "editName"
           column navigationKey=`${e.id}` navigationPresentation="modal" navigationDetent="medium" position="absolute" inset=0 background-color="page"
             header
@@ -389,7 +392,7 @@ component Banner
         text game font-size="0.8125rem" color="ink-2"
         row align-items="center" gap=10
           text title role="heading" aria-level=1 class=Title testId="title"
-          text "?" aria-hidden=true width="1.375rem" height="1.375rem" box-sizing="border-box" border-radius="0.6875rem" border="1.5px solid ink-3" color="ink-3" font-size="0.875rem" font-weight=700 line-height="1.2rem" text-align="center"
+          text "?" aria-hidden=true width="1.375rem" height="1.375rem" box-sizing="border-box" border-radius="0.6875rem" border="1.5px solid ink" color="ink" font-size="0.875rem" font-weight=700 line-height="1.2rem" text-align="center"
       if not tabs
         image "assets/art/header-edge.png" alt="" aria-hidden=true position="absolute" left=0 bottom=-20 width="100%" height=22
         image "assets/art/header-curl.png" alt="" aria-hidden=true position="absolute" right=-8 bottom=-34 width=118 height=65
@@ -415,7 +418,7 @@ component Tab
     pick: action
     id: string
   view
-    button role="tab" aria-selected=on press=pick appearance="none" flex=1 display="flex" align-items="center" justify-content="center" gap=12 height=58 padding=0 border-width=0 background-color=(on ? "tab-on" : "transparent") color=(on ? "ink" : "ink-2") opacity=(on ? 1 : 0.7) font-size="1.0625rem" font-weight=800 text-shadow="0 1px 2px wood-edge" testId=`tab-${id}`
+    button role="tab" aria-selected=on press=pick appearance="none" flex="1 1 0" min-width=0 display="flex" align-items="center" justify-content="center" gap=12 height=58 padding=0 border-width=0 background-color=(on ? "tab-on" : "transparent") color=(on ? "ink" : "ink-2") font-size="1.0625rem" font-weight=800 text-shadow="0 1px 2px wood-edge" testId=`tab-${id}`
       if on
         image "assets/art/flourish-dim.png" alt="" aria-hidden=true width=30 height=15
       text label
@@ -506,7 +509,7 @@ component QuestList
               image q.art alt="" aria-hidden=true width="100%" aspect-ratio="16 / 9" object-fit="cover" opacity=(q.done ? 0.45 : 1)
               row align-items="baseline" justify-content="center" gap=2 padding="6px 0 8px" opacity=(q.done ? 0.5 : 1)
                 text "+" font-size="1.125rem" font-weight=800
-                text `${q.points}` class=Num font-size="1.875rem" line-height=1
+                text `${q.points}` class=Num font-size="1.875rem"
                 text "P" class=Num font-size="1rem"
               if q.done
                 column position="absolute" left=0 right=0 top=0 aspect-ratio="16 / 9" align-items="center" justify-content="center" color="ink" font-size="2.25rem"
@@ -531,7 +534,7 @@ component RewardGrid
                   image "symbol:checkmark" position="relative" color="ink" font-size="1rem" aria-hidden=true
                 else
                   row position="relative" align-items="baseline" gap=2 color="ink" text-shadow="0 1px 2px wood-edge"
-                    text `${r.cost}` class=Num font-size="1.375rem" line-height=1
+                    text `${r.cost}` class=Num font-size="1.375rem"
                     text "P" class=Num font-size="0.8125rem"
             text r.title font-size="0.9375rem" font-weight=500 text-align="center"
 
@@ -589,7 +592,7 @@ component StatCard
       column position="relative" padding="0 14px 14px" gap=12
         row align-items="center" gap=12 min-height=92 padding="0 6px"
           text s.title flex=1 class=Label
-          text s.value class=Num font-size="2.5rem" line-height=1 text-shadow="0 2px 3px card-shade" testId=`stat-value-${s.id}`
+          text s.value class=Num font-size="2.5rem" text-shadow="0 2px 3px card-shade" testId=`stat-value-${s.id}`
         if s.known != ""
           row flex-wrap="wrap" align-items="center" justify-content="space-between" gap=8 padding="12px 18px" background-image="linear-gradient(90deg, transparent 0%, var(--card-shade) 12%, var(--card-shade) 88%, transparent 100%)"
             text "You Are Known for…" color="ink-2" font-size="0.9375rem"

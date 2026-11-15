@@ -1,6 +1,5 @@
-// The app's furniture: wood, frames, ornaments, home tiles, badges and the title crest.
-import { rng, n, between, svg, texture, ragged, spiral, cornerCurl, gold, goldLight, goldDark, wood, woodDark, woodLight, cream, ink } from './kit.mjs';
-import { heroBust } from './scenes.mjs';
+// The app's furniture: wood, frames, ornaments, badges and the title emblem.
+import { rng, svg, texture, ragged, spiral, cornerCurl, gold } from './kit.mjs';
 
 const woodPanel = () => {
   const w = 900, h = 320;
@@ -66,51 +65,6 @@ const cardPanel = () => {
     ${texture(w, h, 'grain', 0.5)}`);
 };
 
-const tileBase = (kind) => {
-  const s = 240;
-  const panel = kind === 'gold'
-    ? `<linearGradient id="tp" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e3a93a"/><stop offset="1" stop-color="#b9781f"/></linearGradient>`
-    : kind === 'dark'
-      ? `<linearGradient id="tp" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c140c"/><stop offset="1" stop-color="#0d0906"/></linearGradient>`
-      : `<linearGradient id="tp" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#efe2ba"/><stop offset="1" stop-color="#d6c391"/></linearGradient>`;
-  const motif = kind === 'dark' ? '#6b4a1e' : kind === 'gold' ? '#8f5a14' : '#b9a36c';
-  return { s, defs: panel, body: `
-    <rect x="6" y="6" width="${s - 12}" height="${s - 12}" rx="26" fill="#3a2410"/>
-    <rect x="9" y="9" width="${s - 18}" height="${s - 18}" rx="24" fill="url(#goldGrad)"/>
-    <rect x="20" y="20" width="${s - 40}" height="${s - 40}" rx="14" fill="url(#tp)" stroke="#5a3a14" stroke-width="2.5"/>
-    <g opacity="${kind === 'dark' ? 0.9 : 0.55}">${cornerCurl(30, 30, 1, 1, 34, motif, 2.6)}${cornerCurl(s - 30, s - 30, -1, -1, 34, motif, 2.6)}</g>
-    <rect x="20" y="20" width="${s - 40}" height="${s - 40}" rx="14" filter="url(#grain)" opacity="0.35"/>
-    <path d="M22 60 Q22 22 60 22 H180 Q218 22 218 60" fill="none" stroke="#fff8dc" stroke-width="3" opacity="0.5"/>` };
-};
-
-const out = '#3b2410';
-const icons = {
-  map: ['gold', `<g filter="url(#fine)"><path d="M70 120 L168 76 L140 172 L126 132 Z" fill="${cream}" stroke="${out}" stroke-width="5" stroke-linejoin="round"/><path d="M88 119 L156 89 L137 152 L128 124 Z" fill="#c0282a"/><path d="M88 119 L156 89 L128 124 Z" fill="#e0443a"/></g>`],
-  quests: ['gold', `<g filter="url(#fine)"><path d="M136 140 L174 184" stroke="${out}" stroke-width="30" stroke-linecap="round"/><path d="M138 142 L172 182" stroke="#e07a2c" stroke-width="20" stroke-linecap="round"/><circle cx="108" cy="104" r="46" fill="${cream}" stroke="${out}" stroke-width="6"/><circle cx="108" cy="104" r="33" fill="#9fcfc4" stroke="${out}" stroke-width="4"/><path d="M88 92 Q98 78 114 80" fill="none" stroke="#e8fff8" stroke-width="6" stroke-linecap="round"/></g>`],
-  foes: ['dark', `<g filter="url(#fine)"><path d="M82 96 C62 70 60 48 74 34 C76 58 90 68 104 78" fill="#d9c08a" stroke="${out}" stroke-width="4"/><path d="M158 96 C178 70 180 48 166 34 C164 58 150 68 136 78" fill="#d9c08a" stroke="${out}" stroke-width="4"/><path d="M120 66 C156 66 172 92 168 124 C164 156 142 186 120 196 C98 186 76 156 72 124 C68 92 84 66 120 66 Z" fill="#8a5a30" stroke="${out}" stroke-width="5"/><path d="M120 84 C142 84 154 100 152 122 C150 146 134 168 120 176 C106 168 90 146 88 122 C86 100 98 84 120 84 Z" fill="#b98448"/><path d="M92 112 Q104 104 114 118 Q102 126 92 112 Z M148 112 Q136 104 126 118 Q138 126 148 112 Z" fill="#ffd257" stroke="${out}" stroke-width="3"/><path d="M112 142 L120 158 L128 142 Z" fill="${out}"/><path d="M100 160 Q120 176 140 160" fill="none" stroke="${out}" stroke-width="3"/></g>`],
-  record: ['parchment', `<g filter="url(#fine)"><path d="M78 78 H164 Q178 78 178 92 V164 H92 Q78 164 78 150 Z" fill="#fbf0d2" stroke="#8a3a22" stroke-width="6" stroke-linejoin="round"/><path d="M178 164 Q178 180 162 180 H82 Q66 180 66 164 H150 Q150 172 162 172" fill="#f1dfb2" stroke="#8a3a22" stroke-width="6" stroke-linejoin="round"/><g fill="#e08b7c"><rect x="92" y="94" width="18" height="12"/><rect x="92" y="114" width="18" height="12"/><rect x="92" y="134" width="18" height="12"/></g><g stroke="#8a3a22" stroke-width="5" stroke-linecap="round"><path d="M120 100 H160 M120 120 H150 M120 140 H158"/></g></g>`],
-  global: ['parchment', `<g filter="url(#fine)"><rect x="76" y="118" width="24" height="48" fill="#d8641c"/><rect x="102" y="96" width="24" height="70" fill="#e8881c"/><rect x="128" y="74" width="24" height="92" fill="#f0a81c"/><rect x="154" y="134" width="24" height="32" fill="#f4d23c"/><path d="M76 168 H184" stroke="#7a2e12" stroke-width="7" stroke-linecap="round"/><path d="M76 118 H100 V96 H126 V74 H152 V134 H178" fill="none" stroke="#7a2e12" stroke-width="5" stroke-linejoin="round"/></g>`],
-  sketch: ['parchment', `<g filter="url(#fine)"><rect x="60" y="62" width="120" height="112" rx="6" fill="#9cc7dc"/><path d="M60 136 Q90 108 122 132 T180 124 V174 H60 Z" fill="#8fb268"/><path d="M60 152 Q100 136 180 150 V174 H60 Z" fill="#6f9550"/><circle cx="150" cy="88" r="13" fill="#fff0b0"/><rect x="60" y="62" width="120" height="112" rx="6" fill="none" stroke="#8a3a22" stroke-width="6"/><path d="M96 190 L158 106" stroke="#5a2e16" stroke-width="12" stroke-linecap="round"/><path d="M96 190 L158 106" stroke="#d98a4a" stroke-width="6" stroke-linecap="round"/><path d="M152 114 L170 88 Q178 92 174 104 L162 122 Z" fill="#fbf0d2" stroke="#5a2e16" stroke-width="4"/></g>`],
-  loom: ['dark', `<g><rect x="56" y="50" width="128" height="140" fill="#3a2414"/>${Array.from({ length: 14 }, (_, row) => Array.from({ length: 13 }, (_, col) => {
-    const d = Math.abs(col - 6) + Math.abs(row - 6.5);
-    const c = d < 2 ? '#f3c94a' : d < 4 ? '#d8588a' : d < 5.5 ? '#f0e2b8' : d < 7 ? '#7a5a2c' : (row + col) % 2 ? '#4e3218' : '#5c3c1e';
-    return `<rect x="${58 + col * 9.6}" y="${52 + row * 9.8}" width="8.4" height="8.6" fill="${c}"/>`;
-  }).join('')).join('')}<rect x="56" y="50" width="128" height="140" fill="none" stroke="#7a5326" stroke-width="5"/><path d="M56 50 Q120 20 184 50" fill="none" stroke="#7a5326" stroke-width="5"/></g>`],
-  charms: ['dark', `<g filter="url(#fine)"><path d="M120 46 V70" stroke="#c9a04a" stroke-width="5"/><circle cx="120" cy="44" r="9" fill="none" stroke="#c9a04a" stroke-width="5"/>${Array.from({ length: 8 }, (_, i) => `<path d="M120 72 L134 106 L120 122 L106 106 Z" fill="${['#f04a4a', '#f0a02c', '#f4dc3c', '#5cc86a', '#3cc0c8', '#4a82f0', '#9a5cf0', '#f05cb4'][i]}" transform="rotate(${i * 45} 120 124)"/>`).join('')}<circle cx="120" cy="124" r="24" fill="${cream}" stroke="#3b2410" stroke-width="4"/><path d="${spiral(120, 124, 14, 1.4, 1, 0)}" fill="none" stroke="#b8862c" stroke-width="4" stroke-linecap="round"/></g>`],
-  flute: ['parchment', `<g><g stroke="#c2ac78" stroke-width="2.5"><path d="M44 84 H196 M44 106 H196 M44 128 H196 M44 150 H196"/></g><g filter="url(#fine)" transform="rotate(-24 120 120)"><rect x="46" y="104" width="150" height="32" rx="16" fill="#3b2410"/><rect x="50" y="108" width="142" height="24" rx="12" fill="#3f6fb8"/><rect x="50" y="108" width="142" height="9" rx="4.5" fill="#6a9ae0" opacity="0.8"/><rect x="164" y="104" width="12" height="32" fill="#e8c860" stroke="#3b2410" stroke-width="3"/><g fill="#14233c"><circle cx="72" cy="121" r="5.5"/><circle cx="92" cy="121" r="5.5"/><circle cx="112" cy="121" r="5.5"/><circle cx="132" cy="121" r="5.5"/><ellipse cx="152" cy="121" rx="4" ry="6"/></g></g></g>`],
-  quiz: ['parchment', `<g filter="url(#fine)"><path d="M120 92 C100 78 76 78 60 86 V164 C76 156 100 156 120 170 C140 156 164 156 180 164 V86 C164 78 140 78 120 92 Z" fill="#fbf0d2" stroke="#2f6a4a" stroke-width="6" stroke-linejoin="round"/><path d="M120 92 V170" stroke="#2f6a4a" stroke-width="5"/><path d="M60 164 C76 156 100 156 120 170 C140 156 164 156 180 164 V176 C164 168 140 168 120 182 C100 168 76 168 60 176 Z" fill="#3f8a60" stroke="#2f6a4a" stroke-width="4"/><path d="M140 108 Q150 96 160 106 Q166 116 152 124 V132" fill="none" stroke="#b8482c" stroke-width="7" stroke-linecap="round"/><circle cx="152" cy="146" r="4.5" fill="#b8482c"/><path d="M76 106 H104 M76 122 H104 M76 138 H100" stroke="#b9a36c" stroke-width="5" stroke-linecap="round"/></g>`],
-};
-
-const tile = (id) => {
-  if (id === 'me') {
-    const base = tileBase('dark');
-    return svg(base.s, base.s, `${base.body}<clipPath id="bust"><circle cx="120" cy="120" r="74"/></clipPath><g clip-path="url(#bust)"><g transform="translate(46 46) scale(0.74)">${heroBust()}</g></g><circle cx="120" cy="120" r="74" fill="none" stroke="#8a5a26" stroke-width="5" filter="url(#fine)"/>`, base.defs);
-  }
-  const [kind, art] = icons[id];
-  const base = tileBase(kind);
-  return svg(base.s, base.s, `${base.body}${art}`, base.defs);
-};
-
 // Seventeen glyphs, each drawn around (0, 0) in a 44-point box.
 const glyphs = {
   horned: `<path d="M-14 -6 C-22 -16 -20 -24 -15 -27 C-14 -17 -8 -14 -4 -11 M14 -6 C22 -16 20 -24 15 -27 C14 -17 8 -14 4 -11" stroke-width="4" fill="none"/><path d="M0 -12 C12 -12 16 -2 14 8 C12 17 6 21 0 23 C-6 21 -12 17 -14 8 C-16 -2 -12 -12 0 -12 Z"/><g fill="#fff" stroke="none" opacity="0.9"><circle cx="-6" cy="3" r="3.4"/><circle cx="6" cy="3" r="3.4"/></g>`,
@@ -159,7 +113,7 @@ const note = () => svg(120, 170, `<g fill="none" stroke-linecap="round" filter="
 const price = () => {
   const w = 220, h = 76;
   const d = 'M22 8 H198 L214 38 L198 68 H22 L6 38 Z';
-  return svg(w, h, `<path d="${d}" fill="#3a2208" transform="translate(0 2)" opacity="0.6"/><path d="${d}" fill="#c9861e" stroke="#7a4a10" stroke-width="3"/><path d="M28 15 H192 L204 38 L192 61 H28 L16 38 Z" fill="none" stroke="#f0c460" stroke-width="2.5"/><rect width="${w}" height="${h}" filter="url(#grain)" opacity="0.3" clip-path="path('${d}')"/>`);
+  return svg(w, h, `<path d="${d}" fill="#3a2208" transform="translate(0 2)" opacity="0.6"/><path d="${d}" fill="#99600f" stroke="#5a360a" stroke-width="3"/><path d="M28 15 H192 L204 38 L192 61 H28 L16 38 Z" fill="none" stroke="#e0b050" stroke-width="2.5"/><rect width="${w}" height="${h}" filter="url(#grain)" opacity="0.3" clip-path="path('${d}')"/>`);
 };
 
 const node = () => svg(72, 72, `<g transform="translate(36 36) rotate(45)" filter="url(#fine)"><rect x="-22" y="-22" width="44" height="44" fill="#2a1c0c" stroke="#a87a34" stroke-width="4"/><rect x="-12" y="-12" width="24" height="24" fill="none" stroke="#a87a34" stroke-width="3.5"/><rect x="-4.5" y="-4.5" width="9" height="9" fill="#d8ae58"/></g>`);
@@ -194,7 +148,6 @@ const logo = () => {
     </g>`);
 };
 
-export const tileIds = ['map', 'quests', 'foes', 'record', 'me', 'global', 'sketch', 'loom', 'charms', 'flute', 'quiz'];
 export const badgeTiers = { horned: 'gold', arrow: 'gold', flask: 'gold', target: 'gold', sprout: 'gold', pot: 'gold', reed: 'gold', hourglass: 'silver', gem: 'silver', steps: 'silver', fish: 'silver', lattice: 'silver', keep: 'silver', speech: 'silver', chest: 'bronze', mask: 'bronze', compass: 'bronze' };
 
 export const chrome = () => [
@@ -211,6 +164,5 @@ export const chrome = () => [
   { name: 'node.png', art: node() },
   { name: 'braid.png', art: braid() },
   { name: 'logo.png', art: logo() },
-  ...tileIds.map((id) => ({ name: `tile-${id}.png`, art: tile(id) })),
   ...glyphNames.map((g) => ({ name: `badge-${g}.png`, art: badge(badgeTiers[g], g) })),
 ];

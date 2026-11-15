@@ -11,8 +11,8 @@ theme
   sun-2 = #d9a441  scheme=fixed
   wood = #74491f  scheme=fixed
   wood-edge = #3a2410  scheme=fixed
-  tab = #9a6c36  scheme=fixed
-  tab-on = #c08d4c  scheme=fixed
+  tab = #76501f  scheme=fixed
+  tab-on = #96672c  scheme=fixed
   card = #6a4f25  scheme=fixed
   card-edge = #8f7440  scheme=fixed
   card-shade = #3b2a12  scheme=fixed
