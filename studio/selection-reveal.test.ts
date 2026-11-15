@@ -12,9 +12,9 @@ test('offscreen layer selections pan the camera without scrolling or resizing th
   const root=resolve(import.meta.dir,'..');await mkdir(resolve(root,'.exact'),{recursive:true});
   const temp=await mkdtemp(resolve(root,'.exact/selection-reveal-')),editor=resolve(temp,'studio'),app=resolve(temp,'app');
   await mkdir(editor);await mkdir(app);await cp(resolve(root,'tools'),resolve(temp,'tools'),{recursive:true});
-  for(const entry of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(entry.isFile()&&!entry.name.includes('.test.')&&!entry.name.endsWith('.d.ts')&&/\.(ts|contract|json|tamber)$/.test(entry.name))await cp(resolve(root,'studio',entry.name),resolve(editor,entry.name));
+  for(const entry of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(entry.isFile()&&!entry.name.includes('.test.')&&!entry.name.endsWith('.d.ts')&&/\.(ts|contract|json|forma)$/.test(entry.name))await cp(resolve(root,'studio',entry.name),resolve(editor,entry.name));
   for(const name of ['assets','modules'])await cp(resolve(root,'studio',name),resolve(editor,name),{recursive:true});
-  for(const name of ['app.contract','app.ts','app.tamber','app.json','assets'])await cp(resolve(root,'fixtures/ember',name),resolve(app,name),{recursive:true});
+  for(const name of ['app.contract','app.ts','app.forma','app.json','assets'])await cp(resolve(root,'fixtures/ember',name),resolve(app,name),{recursive:true});
   const helper=startDiscoveryServer(0),helperOrigin=helper.url.origin;
   await writeFile(resolve(editor,'app.ts'),(await readFile(resolve(editor,'app.ts'),'utf8')).replace("'http://127.0.0.1:5175'",JSON.stringify(helperOrigin)));
   const manifest=JSON.parse(await readFile(resolve(editor,'app.json'),'utf8'));delete manifest.commands;delete manifest.server;await writeFile(resolve(editor,'app.json'),JSON.stringify(manifest));

@@ -41,7 +41,7 @@ test('WebSocket control streams preserve upstream IDs and close their subscripti
     socket.send(JSON.stringify({op:'close',id:'editor'}));
     await new Promise(resolve=>setTimeout(resolve,10));expect(bridge.listeners.size).toBe(0);
     socket.send(JSON.stringify({op:'open',id:'bad',path:'http://foreign.invalid/__dev/events'}));
-    socket.send(JSON.stringify({op:'open',id:'bad',path:'/__tamber/token'}));
+    socket.send(JSON.stringify({op:'open',id:'bad',path:'/__forma/token'}));
     await new Promise(resolve=>setTimeout(resolve,10));expect(paths).toEqual(['/__dev/events']);
   }finally{socket.close();bridge.server.stop(true);app.stop(true);}
 });

@@ -1,6 +1,8 @@
 # Development reference
 
-The root [package.json](../package.json) defines the development commands. [tools/setup.mjs](../tools/setup.mjs) pins the Exact SDK revision, rejects a checkout at another revision, and builds the Contract compiler that validates source writes. Runtime adapters depend on that pin.
+The root [package.json](../package.json) defines the development commands. [tools/setup.mjs](../tools/setup.mjs) pins the Exact SDK revision, rejects a checkout at another revision, and builds the Contract compiler that validates source writes. Runtime adapters depend on that pin. The current SDK uses Rust 1.99.1 and Forma theme files (`app.forma`, starting with `forma <name>`). Apps connected for source editing must expose the `forma/1` protocol. Older Tamber apps need an SDK update and theme migration before reconnecting.
+
+Before migrating an existing app, stop its Tamber server. If the app has `.exact/tamber.journal`, resolve the unfinished write and its temporary files before renaming theme files, then remove the journal. Remove the stale `.exact/tamber.lock` after stopping the server. Forma refuses to start while either file exists; these ignored files can remain in the studio and Ember folders after updating the checkout.
 
 ## Develop on Windows with WSL2
 
@@ -83,7 +85,7 @@ The root launchers set `EXACT_FEEDBACK=0`. Generated SDK instructions describe a
 | `studio/model.ts`, `studio/workspace.ts` | Document edits, Contract export, screens, and viewports |
 | `studio/persistence.ts`, `studio/draft-storage.ts` | Workspace saves and per-project drafts |
 | `studio/render.ts` | Canvas labels and selection handles |
-| `studio/ui.contract`, `studio/app.tamber` | Shared controls and theme tokens |
+| `studio/ui.contract`, `studio/app.forma` | Shared controls and theme tokens |
 | `studio/modules/web/` | Browser input, focus, and preview runtime lifecycle |
 | `tools/discovery-server.ts`, `studio/discovery.ts` | Local route discovery |
 | `tools/design-session.ts`, `tools/design-drafts.ts` | Inspection sessions, draft patches, and Apply |

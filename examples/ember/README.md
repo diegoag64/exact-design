@@ -111,7 +111,7 @@ These are demo numbers, not dietary advice.
 
 ## Design tokens
 
-`app.tamber` defines every colour as a light and dark pair:
+`app.forma` defines every colour as a light and dark pair:
 
 - `page`, `card` and `card-2` for surfaces; `ink`, `ink-2` and `ink-3` for text; `line` for dividers.
 - `glass`, `glass-strong`, `glass-edge` and `glass-shade` for glass.
@@ -139,7 +139,7 @@ bun ../../tools/demo.mjs verify --shots .exact/shots
 
 - `app.contract`: routes, state, actions and every screen and component.
 - `app.ts`: the data module, food library and sample week.
-- `app.tamber`: colours and icon tokens.
+- `app.forma`: colours and icon tokens.
 - `app.test.contract`: tests.
 - `app.json`: app identity and hosts.
 - `assets/icons`: SVG icons for non-Apple platforms.

@@ -37,7 +37,7 @@ test('a design session joins real layout source and applies a staged draft',asyn
   const request=(async(url:string,init:any)=>{
     const body=JSON.parse(init.body);
     if(url.endsWith('/events')){const reply={files:await files(),events,seq:1,epoch:'run'};events=[];return Response.json(reply);}
-    if(body.method==='hello')return Response.json({ok:{protocol:'tamber/1.18',files:await files(),local:true,app}});
+    if(body.method==='hello')return Response.json({ok:{protocol:'forma/1.18',files:await files(),local:true,app}});
     if(body.method==='inspect')return Response.json({ok:{builds:['page']}});
     throw new Error('Layout edits must not use the appearance transaction API.');
   }) as typeof fetch;
@@ -81,7 +81,7 @@ test('on-canvas spacing drafts preserve shorthand sides before Apply',async()=>{
   const request=(async(url:string,init:any)=>{
     const body=JSON.parse(init.body);
     if(url.endsWith('/events')){const reply={files:await files(),events,seq:1,epoch:'run'};events=[];return Response.json(reply);}
-    if(body.method==='hello')return Response.json({ok:{protocol:'tamber/1.18',files:await files(),local:true,app}});
+    if(body.method==='hello')return Response.json({ok:{protocol:'forma/1.18',files:await files(),local:true,app}});
     if(body.method==='inspect')return Response.json({ok:{builds:['page']}});
     throw new Error('Spacing must use checked source writes.');
   }) as typeof fetch;

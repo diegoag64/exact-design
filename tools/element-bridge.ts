@@ -199,7 +199,7 @@ export class ElementBridge {
       if(previous?.page!==frame.page||previous?.plan!==frame.plan||previous?.inspecting!==frame.inspecting)for(const listener of this.feedback)listener(frame,{kind:'ready'});
       return Response.json({commands:(this.commands.get(body.frame)||[]).filter(c=>c.seq>Number(body.after))});
     }
-    if(url.pathname.startsWith('/__exact_design/')||url.pathname.startsWith('/__tamber'))return new Response(null,{status:404});
+    if(url.pathname.startsWith('/__exact_design/')||url.pathname.startsWith('/__forma')||url.pathname.startsWith('/__tamber'))return new Response(null,{status:404});
     const target=new URL(url.pathname+url.search,this.target);for(const key of [...target.searchParams.keys()])if(key.startsWith('__ed_'))target.searchParams.delete(key);
     if(target.origin!==this.target)return new Response(null,{status:400});
     const headers=new Headers(req.headers);for(const name of ['host','origin','referer','connection','accept-encoding'])headers.delete(name);

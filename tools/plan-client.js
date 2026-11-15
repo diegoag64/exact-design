@@ -6,8 +6,8 @@ import {maskImageUrl,decodeSvgDataUrl,visibleSvgShape,fieldText,lineWords,isSurf
 import {measureSpacing} from './spacing-geometry.js';
 
 const NS='http://www.w3.org/2000/svg';
-// The canvas renderer cannot read Tamber tokens, so the studio's spacing, accent and panel
-// colors are repeated here (studio/app.tamber). The plan palette is drawing paper and
+// The canvas renderer cannot read Forma tokens, so the studio's spacing, accent and panel
+// colors are repeated here (studio/app.forma). The plan palette is drawing paper and
 // graphite in light mode and a blueprint in dark mode. It follows the Screens theme: the plan is a drawing of the screens.
 const CSS=`
 #ed-plan{position:fixed;inset:0;pointer-events:none;z-index:2147483646;contain:strict;

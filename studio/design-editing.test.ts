@@ -12,9 +12,9 @@ test('design inspector edits text, linked spacing and corners as drafts, with pe
   const root=resolve(import.meta.dir,'..');await mkdir(resolve(root,'.exact'),{recursive:true});
   const temp=await mkdtemp(resolve(root,'.exact/selection-reveal-')),editor=resolve(temp,'studio'),app=resolve(temp,'app');
   await mkdir(editor);await mkdir(app);await cp(resolve(root,'tools'),resolve(temp,'tools'),{recursive:true});
-  for(const entry of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(entry.isFile()&&!entry.name.includes('.test.')&&!entry.name.endsWith('.d.ts')&&/\.(ts|contract|json|tamber)$/.test(entry.name))await cp(resolve(root,'studio',entry.name),resolve(editor,entry.name));
+  for(const entry of await readdir(resolve(root,'studio'),{withFileTypes:true}))if(entry.isFile()&&!entry.name.includes('.test.')&&!entry.name.endsWith('.d.ts')&&/\.(ts|contract|json|forma)$/.test(entry.name))await cp(resolve(root,'studio',entry.name),resolve(editor,entry.name));
   for(const name of ['assets','modules'])await cp(resolve(root,'studio',name),resolve(editor,name),{recursive:true});
-  for(const name of ['app.contract','app.ts','app.tamber','app.json','assets'])await cp(resolve(root,'fixtures/ember',name),resolve(app,name),{recursive:true});
+  for(const name of ['app.contract','app.ts','app.forma','app.json','assets'])await cp(resolve(root,'fixtures/ember',name),resolve(app,name),{recursive:true});
   const helper=startDiscoveryServer(0),helperOrigin=helper.url.origin;
   await writeFile(resolve(editor,'app.ts'),(await readFile(resolve(editor,'app.ts'),'utf8')).replace("'http://127.0.0.1:5175'",JSON.stringify(helperOrigin)));
   const manifest=JSON.parse(await readFile(resolve(editor,'app.json'),'utf8'));delete manifest.commands;delete manifest.server;await writeFile(resolve(editor,'app.json'),JSON.stringify(manifest));
@@ -65,8 +65,8 @@ test('design inspector edits text, linked spacing and corners as drafts, with pe
     await frame.getByText('A calmer place to think.',{exact:true}).waitFor();
     expect(await readFile(resolve(app,'app.contract'),'utf8')).toContain('Room for your thoughts.');
     const oldSession=await page.evaluate(()=>exact.state[0].find(s=>s.n.devName==='designSession')());
-    const {token}=await(await fetch('http://127.0.0.1:'+appPort+'/__tamber/token')).json();
-    const registered=async()=> (await(await fetch('http://127.0.0.1:'+appPort+'/__tamber',{method:'POST',headers:{'content-type':'application/json','x-exact-tamber-token':token},body:JSON.stringify({method:'hello'})})).json()).ok.builds;
+    const {token}=await(await fetch('http://127.0.0.1:'+appPort+'/__forma/token')).json();
+    const registered=async()=> (await(await fetch('http://127.0.0.1:'+appPort+'/__forma',{method:'POST',headers:{'content-type':'application/json','x-exact-forma-token':token},body:JSON.stringify({method:'hello'})})).json()).ok.builds;
     const oldOwner=(await registered()).find(b=>b.inspector)?.inspector;
     // Reload while editing, with a pending draft and an active selection.
     await page.reload();

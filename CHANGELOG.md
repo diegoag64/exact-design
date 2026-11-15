@@ -26,6 +26,8 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Changed
 
+- Upgrade the pinned Exact SDK from `114bb88f` to `32f79aa8`. Migrate theme files and the local editing protocol from Tamber to Forma, including compiler validation and preview fixtures. The SDK now uses Rust 1.99.1 and includes web transform-layer promotion, navigation fixes, and native rendering updates. Connected apps must use the Forma editing API.
+
 - While editing an app, Escape clears the selected element, from the canvas or the studio, and inspection continues. With nothing selected, Escape finishes editing. The inspector also has a **×** beside the selected element's name.
 
 ### Fixed
