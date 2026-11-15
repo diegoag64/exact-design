@@ -46,8 +46,14 @@ export function visibleSvgShape(chain){
 export const visibleColor=c=>!!c&&c!=='transparent'&&!/^rgba\([^,]+,[^,]+,[^,]+,\s*0(?:\.0+)?\s*\)$/.test(c)&&!/\/\s*0(?:\.0+)?%?\s*\)$/.test(c);
 export const near=(a,b,t=0.75)=>Math.abs(a-b)<=t;
 export const isSurface=e=>e.surface||e.borders.some(Boolean);
-export const cornerRadius=e=>Math.min(e.radius,e.w/2,e.h/2);
-export const cornerRadii=e=>e.radii.map(r=>Math.min(r,e.w/2,e.h/2));
+// CSS corner overlap reduces all radii by the same factor.
+export function scaleRadii(radii,w,h){
+  const sums=radii.map((r,i)=>r+radii[(i+1)%4]);
+  const f=Math.min(1,...sums.map((sum,i)=>sum?(i%2?h:w)/sum:1));
+  return radii.map(r=>r*f);
+}
+export const cornerRadius=e=>Math.max(...cornerRadii(e));
+export const cornerRadii=e=>scaleRadii(e.radii,e.w,e.h);
 export const radiusText=e=>values(cornerRadii(e).map(Math.round));
 const round=n=>Math.round(n*10)/10;
 

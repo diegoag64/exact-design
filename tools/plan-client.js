@@ -2,7 +2,7 @@
 // drawing of it sits on top, so hit testing, selection and draft editing still reach the
 // app's own elements. Regions measure everything inside a dragged rectangle.
 // Loaded by canvas-input-client.js on the first plan or region message; never in Preview.
-import {maskImageUrl,decodeSvgDataUrl,visibleSvgShape,fieldText,lineWords,isSurface,cornerRadii,radiusText,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
+import {maskImageUrl,decodeSvgDataUrl,visibleSvgShape,fieldText,lineWords,isSurface,scaleRadii,cornerRadii,radiusText,index,valueFill,surfaceShape,layoutBox,visibleColor,measureRegion,regionSpec,placeLabel} from './plan-geometry.js';
 import {measureSpacing} from './spacing-geometry.js';
 
 const NS='http://www.w3.org/2000/svg';
@@ -190,8 +190,8 @@ function readScene(){
 
 /* Drawing the plan ------------------------------------------------------------------ */
 const compare=(a,b)=>{for(let j=0;j<Math.max(a.length,b.length);j++){const d=(a[j]??-1)-(b[j]??-1);if(d)return d;}return 0;};
-function roundedPath(x,y,w,h,[tl,tr,br,bl]){
-  const c=r=>Math.min(r,w/2,h/2);[tl,tr,br,bl]=[tl,tr,br,bl].map(c);
+function roundedPath(x,y,w,h,radii){
+  const [tl,tr,br,bl]=scaleRadii(radii,w,h);
   return `M${x+tl} ${y}H${x+w-tr}A${tr} ${tr} 0 0 1 ${x+w} ${y+tr}V${y+h-br}A${br} ${br} 0 0 1 ${x+w-br} ${y+h}H${x+bl}A${bl} ${bl} 0 0 1 ${x} ${y+h-bl}V${y+tl}A${tl} ${tl} 0 0 1 ${x+tl} ${y}Z`;
 }
 let clips=new Map();

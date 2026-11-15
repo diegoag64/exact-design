@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {maskImageUrl,decodeSvgDataUrl,visibleSvgShape,fieldText,lineWords,valueFill,surfaceShape,layoutBox,visibleColor,index,cornerRadii,radiusText,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
+import {maskImageUrl,decodeSvgDataUrl,visibleSvgShape,fieldText,lineWords,valueFill,surfaceShape,layoutBox,visibleColor,index,cornerRadius,cornerRadii,radiusText,measureRegion,regionSpec,placeLabel} from '../tools/plan-geometry.js';
 
 test('plan mask URLs preserve parentheses in quoted and unquoted SVG data',()=>{
   const svg='<svg xmlns="http://www.w3.org/2000/svg"><g transform="translate(12 12)"><rect width="10" height="10"/></g></svg>';
@@ -95,16 +95,30 @@ test('plan buttons show only their value and non-text inputs show no text',()=>{
 const box=(i:number,p:number,x:number,y:number,w:number,h:number,extra:any={})=>({i,p,x,y,w,h,radius:0,radii:[0,0,0,0],surface:false,borders:[false,false,false,false],
   display:'block',dir:'row',gap:[0,0],pad:[0,0,0,0],margin:[0,0,0,0],flow:true,decorative:false,label:'Container',hint:'',media:0,clip:{x:0,y:0,r:390,b:844},...extra});
 
-test('region corner radii clamp each corner and format in CSS order',()=>{
+test('region corner radii scale together for CSS overlap and format whole pixels',()=>{
   for(const [radii,w,h,expected,text] of [
     [[12,12,12,12],80,40,[12,12,12,12],'12'],
     [[12,12,0,0],80,40,[12,12,0,0],'12 12 0 0'],
-    [[40,12,0,30],80,20,[10,10,0,10],'10 10 0 10'],
-    [[40,12,0,30],20,80,[10,10,0,10],'10 10 0 10'],
+    [[40,12,0,30],80,20,[80/7,24/7,0,60/7],'11 3 0 9'],
+    [[40,12,0,30],20,80,[200/13,60/13,0,150/13],'15 5 0 12'],
+    [[80,0,0,0],100,100,[80,0,0,0],'80 0 0 0'],
+    [[80,40,0,0],100,100,[200/3,100/3,0,0],'67 33 0 0'],
+    [[9999,9999,9999,9999],40,20,[10,10,10,10],'10'],
     [[0,0,0,0],80,40,[0,0,0,0],'0'],
   ] as const){
     const e=box(0,-1,0,0,w,h,{radius:Math.max(...radii),radii});
-    expect(cornerRadii(e)).toEqual([...expected]);expect(radiusText(e)).toBe(text);
+    cornerRadii(e).forEach((r,i)=>expect(r).toBeCloseTo(expected[i],10));
+    expect(cornerRadius(e)).toBeCloseTo(Math.max(...expected),10);expect(radiusText(e)).toBe(text);
+  }
+});
+
+test('CSS overlap scales every corner when any side limits the radii',()=>{
+  for(let side=0;side<4;side++){
+    const radii=[0,0,0,0],expected=[0,0,0,0];
+    radii[side]=80;radii[(side+1)%4]=40;radii[(side+2)%4]=12;
+    expected[side]=200/3;expected[(side+1)%4]=100/3;expected[(side+2)%4]=10;
+    const e=box(0,-1,0,0,side%2?200:100,side%2?100:200,{radii});
+    cornerRadii(e).forEach((r,i)=>expect(r).toBeCloseTo(expected[i],10));
   }
 });
 
@@ -137,7 +151,7 @@ test('a fill that starts at its track and shares its height reads as a value; fu
   expect(valueFill(track,byI)).toBe(false);
   expect(surfaceShape(box(4,0,0,787,390,57,{surface:true}),390,844)).toEqual({kind:'edges',edges:[[0,787,390,787]]});
   expect(surfaceShape(box(5,0,47,491,296,1,{surface:true}),390,844)).toMatchObject({kind:'line',y1:491.5});
-  expect(surfaceShape(box(6,0,24,97,342,455,{surface:true,radius:28}),390,844)).toEqual({kind:'rect',r:28});
+  expect(surfaceShape(box(6,0,24,97,342,455,{surface:true,radius:28,radii:[28,28,28,28]}),390,844)).toEqual({kind:'rect',r:28});
 });
 
 // A card with a header and three macro rows of the same structure, each a label row above a bar.
