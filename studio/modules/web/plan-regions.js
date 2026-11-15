@@ -8,6 +8,7 @@ export function installPlanRegions(root){
   const states=new Map(); // iframe → {region, copy, text}, as each preview reports it
   const prune=()=>{for(const f of states.keys())if(!f.isConnected)states.delete(f);};
   let drag=null,pointer=null,lastFrame=null;
+  const loaded=e=>{const frame=e.target;if(frame?.localName!=='iframe')return;states.delete(frame);if(lastFrame===frame)lastFrame=null;};
   const frames=()=>[...root.querySelectorAll(FRAMES)];
   const local=(frame,x,y)=>{
     const r=frame.getBoundingClientRect();if(!frame.clientWidth||!frame.clientHeight)return null;
@@ -91,10 +92,12 @@ export function installPlanRegions(root){
     if(packet.region)lastFrame=frame;
     prune();
   };
+  root.addEventListener('load',loaded,true);
   window.addEventListener('pointerdown',press,true);
   window.addEventListener('pointermove',move,true);window.addEventListener('pointerup',lift,true);window.addEventListener('pointercancel',lift,true);
   window.addEventListener('keydown',key,true);window.addEventListener('keyup',key,true);window.addEventListener('blur',blur);window.addEventListener('message',message);
   return ()=>{
+    root.removeEventListener('load',loaded,true);
     crosshair(false);window.removeEventListener('pointerdown',press,true);
     window.removeEventListener('pointermove',move,true);window.removeEventListener('pointerup',lift,true);window.removeEventListener('pointercancel',lift,true);
     window.removeEventListener('keydown',key,true);window.removeEventListener('keyup',key,true);window.removeEventListener('blur',blur);window.removeEventListener('message',message);

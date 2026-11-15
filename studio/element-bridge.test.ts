@@ -14,7 +14,7 @@ for(const type of ['keydown','pointerdown'])test(`plan regions ignore disconnect
   const frame={isConnected:true,src:'http://localhost/?__ed_events=project-v2&__ed_canvas=1',
     contentWindow:{postMessage:(packet:any)=>sent.push(packet)},closest:target.closest,
     clientWidth:100,clientHeight:100,getBoundingClientRect:()=>({left:0,top:0,right:100,bottom:100,width:100,height:100})};
-  const root={dataset:{},contains:(node:any)=>node===target,
+  const root={dataset:{},contains:(node:any)=>node===target,addEventListener:()=>{},removeEventListener:()=>{},
     querySelectorAll:()=>frame.isConnected?[frame]:[],
     querySelector:(selector:string)=>selector==='[aria-label="Design canvas"]'?{closest:()=>null}:null};
   Object.defineProperty(globalThis,'window',{configurable:true,value:{
@@ -38,6 +38,49 @@ for(const type of ['keydown','pointerdown'])test(`plan regions ignore disconnect
   }finally{
     dispose?.();
     if(previous)Object.defineProperty(globalThis,'window',previous);else Reflect.deleteProperty(globalThis,'window');
+  }
+});
+
+for(const type of ['keydown','pointerdown'])test(`plan regions forget reloaded frames on ${type}`,()=>{
+  const previous=Object.getOwnPropertyDescriptor(globalThis,'window'),navigatorBefore=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  const handlers=new Map<string,Function>(),loads=new Set<Function>(),sent:any[]=[],copied:string[]=[];
+  const target={localName:'img',closest:(selector:string)=>selector==='#canvas-stage'?target:null};
+  const frame={localName:'iframe',isConnected:true,src:'http://localhost/?__ed_events=project-v2&__ed_canvas=1',
+    contentWindow:{postMessage:(packet:any)=>sent.push(packet)},closest:target.closest,
+    clientWidth:100,clientHeight:100,getBoundingClientRect:()=>({left:0,top:0,right:100,bottom:100,width:100,height:100})};
+  const root={dataset:{},contains:(node:any)=>node===target,querySelectorAll:()=>[frame],
+    querySelector:(selector:string)=>selector==='[aria-label="Design canvas"]'?{closest:()=>null}:null,
+    addEventListener:(name:string,handler:Function,capture:boolean)=>{expect(name).toBe('load');expect(capture).toBe(true);loads.add(handler);},
+    removeEventListener:(name:string,handler:Function,capture:boolean)=>{expect(name).toBe('load');expect(capture).toBe(true);expect(loads.delete(handler)).toBe(true);}};
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{
+    addEventListener:(name:string,handler:Function)=>handlers.set(name,handler),removeEventListener:(name:string)=>handlers.delete(name),
+  }});
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{clipboard:{writeText:(text:string)=>{copied.push(text);return Promise.resolve();}}}});
+  let dispose:undefined|(()=>void);
+  try{
+    dispose=installPlanRegions(root);
+    handlers.get('message')!({source:frame.contentWindow,origin:'http://localhost',data:{kind:'exact-design:canvas',op:'region',
+      region:{x:10,y:10,width:80,height:80},copy:{x:20,y:20,width:30,height:20},text:'stale spec'}});
+    const dispatch=(kind:string,extra={})=>{
+      let prevented=false,stopped=false;
+      handlers.get(kind)!({type:kind,key:'Escape',button:0,target,clientX:25,clientY:25,...extra,
+        preventDefault:()=>{prevented=true;},stopImmediatePropagation:()=>{stopped=true;},stopPropagation:()=>{stopped=true;}});
+      return {prevented,stopped};
+    };
+    expect(dispatch('keydown')).toEqual({prevented:true,stopped:true});
+    for(const load of loads)load({target});
+    expect(dispatch('keydown')).toEqual({prevented:true,stopped:true});
+    sent.length=0;
+    for(const load of loads)load({target:frame});
+    expect(dispatch(type)).toEqual({prevented:false,stopped:false});
+    if(type==='keydown')expect(dispatch('keydown',{key:'a',code:'KeyA',altKey:true})).toEqual({prevented:false,stopped:false});
+    expect(sent).toEqual([]);expect(copied).toEqual([]);
+    expect(loads.size).toBe(1);
+    dispose();dispose=undefined;expect(loads.size).toBe(0);
+  }finally{
+    dispose?.();
+    if(previous)Object.defineProperty(globalThis,'window',previous);else Reflect.deleteProperty(globalThis,'window');
+    if(navigatorBefore)Object.defineProperty(globalThis,'navigator',navigatorBefore);else Reflect.deleteProperty(globalThis,'navigator');
   }
 });
 
