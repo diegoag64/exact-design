@@ -61,6 +61,7 @@ Commands run from the repository root after `bun run setup`.
 | `bun run dev` | Start the studio on port 5173 and the helper on 5175 |
 | `bun run demo` | Start Ember on port 5174 and print its setup link |
 | `bun run demo:waymark` | Start Waymark on port 5176 and print its setup link |
+| `bun run demo:lumen` | Start Lumen on port 5177 and print its setup link |
 | `bun run test` | Test models, persistence, source editing, and preview services |
 | `bun run test:ui` | Run Exact behavior tests |
 | `bun run test:preview` | Run browser regressions in isolated app copies |
@@ -70,6 +71,7 @@ Commands run from the repository root after `bun run setup`.
 | `bun run icons` | Generate the Contract icon component from vendored SVGs |
 | `bun tools/demo.mjs test web` | Run Ember behavior tests |
 | `bun tools/demo.mjs --app waymark test web` | Run Waymark behavior tests |
+| `bun tools/demo.mjs --app lumen test web` | Run Lumen behavior tests |
 
 `test:ui` and `verify` copy current tracked and untracked source into `.exact/verification/run-*/workspace`. They start private helper and fixture servers on OS-assigned ports, then substitute those origins only in the copied app and tests. Each run has separate build output. The copied generated launcher uses the pinned SDK and retains its Bun version check. Direct SDK commands, including `bun tools/run.mjs test web`, still use fixed ports and are not isolated. The preview tests create temporary copies under `.exact` and use separate ports. Tests that compile Contract require the SDK toolchain even when run through `bun run test`.
 
@@ -103,6 +105,7 @@ The root launchers set `EXACT_FEEDBACK=0`. Generated SDK instructions describe a
 | `studio/design-history.ts`, `studio/draft-review.ts` | Persistent timeline and draft review model |
 | `examples/ember/` | Interactive demo app |
 | `examples/waymark/` | Art-directed demo app: a game companion |
+| `examples/lumen/` | Finance example app |
 | `fixtures/ember/` | Notebook app used by browser regressions |
 
 The [studio design system](studio-design-system.md) describes UI ownership and interaction rules in detail.
@@ -135,7 +138,7 @@ Exact Design implements these techniques with the Exact SDK and local Simulator 
 
 ### Pipeline
 
-1. **Find the app.** The studio sends only the project URL. The helper reads that server's `manifest.json` and matches it, by `name` and `protocol_handlers`, against registered app folders: `examples/ember` and each entry of `EXACT_DESIGN_NATIVE_APPS` (separated by `:`, absolute or relative to the repository). The helper never builds a folder named by a request.
+1. **Find the app.** The studio sends only the project URL. The helper reads that server's `manifest.json` and matches it, by `name` and `protocol_handlers`, against registered app folders: `examples/ember`, `examples/lumen` and each entry of `EXACT_DESIGN_NATIVE_APPS` (separated by `:`, absolute or relative to the repository). The helper never builds a folder named by a request.
 2. **Build.** `tools/native-build.mjs` runs the SDK's per-app CLI with `ios --no-install`, as `tools/demo.mjs` does. The input signature hashes the app folder's files (skipping `.exact`, `target`, `node_modules`, `dist` and dot-folders), the SDK revision and the Xcode version. An unchanged signature skips the build. The helper tracks installed builds by device and bundle ID across projects, so switching projects with the same bundle ID reinstalls the correct build. After a helper restart, the first capture reinstalls once because installation ownership is unknown. The build keeps the signature read before it starts. Source edits during a build leave its screenshots stale. If the SDK adds native settings to `app.json` on the first build, the next refresh rebuilds once to include those changes. A first build needs 20 GB free and any build 10 GB. A build is first when the helper has no app for the checkout and its `target/aarch64-apple-ios-sim` folder is missing, so a checkout built by `bun exact.mjs ios` or an interrupted refresh rebuilds as warm. The helper streams the build's output through `BuildProgress`, which names the build's stage from cargo's `Compiling <crate>` lines and the SDK's Swift and packaging lines, and records each build's duration. The cache and `target/` belong to the checkout, so a new checkout or worktree starts with a cold build.
 3. **Prepare devices.** Each device runs on the newest installed iOS runtime that supports its device type. A runtime can support only a few types; on the development Mac, iOS 27.1 runs only iPhone Duo, so iPhone 17 uses iOS 27.0. The helper creates and reuses simulators named `Exact Design <device>` and never touches others. Capture jobs from different projects queue across the helper so they cannot drive the same device at once. Each job lists the simulators once (`simctl list devices`). A device is prepared once per helper process: boot, the 9:41 status bar, install when the build changed, approval of the app's link scheme, and Reduce Motion. A later job skips these unless the device was shut down or the app reinstalled. The helper finds simctl once with `xcrun --find simctl` and runs it directly. It keeps the simulators it booted running until `bun run dev` stops. Shutdown discards queued jobs and stops the active job between steps, then closes accessibility sessions and shuts down owned devices. An external command already in progress must finish first.
 4. **Open and capture.** The scheme approval (a `com.apple.launchservices.schemeapproval` default) lets `simctl openurl` open the app's links without the "Open in …?" prompt. The app keeps running between screens and jobs. It is launched only when it is not running, and relaunched only after an install or a Reduce Motion change. For each screen the helper opens the root link `<scheme>://`, which dismisses a sheet and leaves a full-screen route, waits until the screen is ready, opens `<scheme>://<route>`, waits again, and takes a PNG with `simctl io screenshot`. For `/`, the root link is the capture. A screen that does not become ready is reset and opened once more; a second miss marks that frame as an error and keeps its previous screenshot visible with a compact error notice.

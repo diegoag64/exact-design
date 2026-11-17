@@ -10,6 +10,7 @@ const { run } = await import(resolve(root, '.exact-sdk/scripts/app-cli.mjs'));
 // Each showcase app has its own folder, default port and first screens. `--app <id>` picks one.
 const apps = {
   ember: { name: 'Ember', port: '5174', show: 'Today,Welcome,Onboarding%20Goal' },
+  lumen: { name: 'Lumen', port: '5177', show: 'Home,Activity,Cards,Budgets,Goals,Send' },
   waymark: { name: 'Waymark', port: '5176', show: 'Home,Map,My%20Play%20Data' },
 };
 const args = process.argv.slice(2);
