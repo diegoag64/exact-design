@@ -80,6 +80,7 @@ const MONTHLY: Record<number, Omit<Raw, 'id' | 'day'>[]> = {
 
 const ACCOUNT_NAMES: Record<string, string> = { checking: 'Everyday', savings: 'Savings', invest: 'Investments', credit: 'Lumen Metal' };
 const HISTORY = 75;
+const ACTIVITY_LIMIT = 8;
 
 // Days are ISO dates compared as text; arithmetic happens at UTC noon so no offset moves them.
 const toMs = (day: string) => Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10), 12);
@@ -238,7 +239,8 @@ function activity(data: Data, today: string, query: string, filter: string) {
     (filter === 'spending' ? spends(t) : filter === 'income' ? t.category === 'income' : filter === 'transfers' ? t.category === 'transfer' : true) &&
     (q === '' || t.merchant.toLowerCase().includes(q) || t.category.includes(q) || t.note.toLowerCase().includes(q)));
   const groups: { day: string; label: string; total: number; items: Tx[] }[] = [];
-  for (const t of picked.slice(0, 240)) {
+  // A short sample keeps the screen at a readable length in Studio.
+  for (const t of picked.slice(0, ACTIVITY_LIMIT)) {
     let g = groups.at(-1);
     if (!g || g.day !== t.day) groups.push((g = { day: t.day, label: dayLabel(today, t.day), total: 0, items: [] }));
     g.total += t.amount;
