@@ -82,4 +82,4 @@ bun tools/demo.mjs --app lumen test web
 bun tools/demo.mjs --app lumen verify --shots .exact/shots
 ```
 
-The latest web audit found no layout problems at normal text sizes in light and dark, at phone and desktop widths. It reported 268 layout findings at the largest accessibility text size, four fixed-width text warnings, and one relaunch storage finding after reset. Accessibility-tree coverage was incomplete for the cold deep-link test. These findings remain unresolved.
+The latest web audit found no layout problems in light and dark, at phone and desktop widths, at normal text sizes or at the largest accessibility text size. Rows wrap their values onto a second line as text grows, and money amounts, glyphs in fixed tiles, and text drawn on the payment card grow up to a cap. One relaunch storage finding after reset remains, and accessibility-tree coverage was incomplete for the cold deep-link test.

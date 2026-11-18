@@ -186,22 +186,22 @@ style Round
   padding=0
   border-width=0
   border-radius=18
-  font-size="0.9375rem"
+  font-size="min(-exact-subheadline, 20px)"
 
 style Pill
   display="flex"
   align-items="center"
   justify-content="center"
   gap=8
-  height=56
-  padding-left=24
-  padding-right=24
+  min-height=56
+  padding="12px 24px"
+  text-align="center"
   border-width=0
   border-radius=28
   background-color="cta"
   background-image="linear-gradient(135deg, var(--cta) 0%, var(--cta-2) 100%)"
   color="on-accent"
-  font-size="1.125rem"
+  font-size="min(-exact-body, 30px)"
   font-weight=700
   box-shadow="0 16px 32px -14px cta"
 
@@ -209,21 +209,19 @@ style Chip
   display="flex"
   align-items="center"
   gap=6
-  height=32
-  padding-left=10
-  padding-right=12
+  min-height=32
+  padding="4px 12px 4px 10px"
   border-width=0
   border-radius=16
-  font-size="0.8125rem"
+  font-size="min(-exact-footnote, 30px)"
   font-weight=650
 
 style GlassChip
   display="flex"
   align-items="center"
   gap=6
-  height=36
-  padding-left=12
-  padding-right=14
+  min-height=36
+  padding="6px 14px 6px 12px"
   border-radius=18
   font-size="0.875rem"
   font-weight=650
@@ -421,7 +419,7 @@ component App
                   header appearance="none" display="flex" flex-direction="column" padding="20px 20px 8px" background-color="page"
                     SheetTitle(icon="symbol:icon.receipt", tint="accent", title="Payment", detail=tx.date)
                       button id="back" press=back class=Round background-color="card-2" color="ink" aria-label="Close" testId="tx-close"
-                        image "symbol:icon.close" font-size="0.875rem"
+                        image "symbol:icon.close" font-size="min(-exact-subheadline, 18px)"
                   scroll id=`content-${e.id}` flex=1 min-height=0
                     Receipt(t=tx, still=still, again=openSend)
               if e.name == "send"
@@ -429,7 +427,7 @@ component App
                   header appearance="none" display="flex" flex-direction="column" padding="20px 20px 12px" background-color="page"
                     SheetTitle(icon="symbol:icon.send", tint="accent", title="Send money", detail=`From Everyday · ${money(checking)} available`)
                       button id="back" press=back class=Round background-color="card-2" color="ink" aria-label="Close" testId="send-close"
-                        image "symbol:icon.close" font-size="0.875rem"
+                        image "symbol:icon.close" font-size="min(-exact-subheadline, 18px)"
                   scroll id=`content-${e.id}` flex=1 min-height=0
                     SendForm(contacts=board.contacts, payee=payee, typed=typed, note=note, error=sendError, phone=phone, choose=choosePayee, key=key, editNote=editNote)
                   column width="100%" max-width="30rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="10px 20px 20px"
@@ -441,7 +439,7 @@ component App
                   header appearance="none" display="flex" flex-direction="column" padding="20px 20px 12px" background-color="page"
                     SheetTitle(icon=goalIcon(goal.icon), tint=goal.tint, title="Add to a goal", detail=`${goal.name} · ${money(goal.saved)} of ${money(goal.target)}`)
                       button id="back" press=back class=Round background-color="card-2" color="ink" aria-label="Close" testId="deposit-close"
-                        image "symbol:icon.close" font-size="0.875rem"
+                        image "symbol:icon.close" font-size="min(-exact-subheadline, 18px)"
                   scroll id=`content-${e.id}` flex=1 min-height=0
                     DepositForm(goals=board.goals, goal=goal, cents=addCents, checking=checking, error=moveError, still=still, choose=chooseGoal, set=setAdd, nudge=nudgeAdd)
                   column width="100%" max-width="30rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="10px 20px 20px"
@@ -453,18 +451,18 @@ component App
                   header appearance="none" display="flex" flex-direction="column" padding="20px 20px 8px" background-color="page"
                     SheetTitle(icon="symbol:icon.person", tint="accent", title="Account", detail=`${board.profile.plan} · ${board.profile.since}`)
                       button id="back" press=back class=Round background-color="card-2" color="ink" aria-label="Close" testId="profile-close"
-                        image "symbol:icon.close" font-size="0.875rem"
+                        image "symbol:icon.close" font-size="min(-exact-subheadline, 18px)"
                   scroll id=`content-${e.id}` flex=1 min-height=0
                     ProfileView(b=board, still=still, alerts=alerts, faceId=faceId, setAlerts=setAlerts, setFaceId=setFaceId)
                       column class=Card gap=0 padding="4px 20px"
                         button press=welcome appearance="none" display="flex" align-items="center" gap=14 padding="14px 0" border-width=0 background-color="transparent" color="ink" text-align="left" testId="replay-welcome"
                           column class=Tile width=34 height=34 border-radius=11 background-color="accent-soft" color="accent"
-                            image "symbol:icon.sparkle" font-size="1rem" aria-hidden=true
+                            image "symbol:icon.sparkle" font-size="min(-exact-callout, 20px)" aria-hidden=true
                           text "Replay welcome" flex=1 font-size="1rem" font-weight=600
                           image "symbol:icon.next" color="ink-3" font-size="0.8125rem" aria-hidden=true
                         button commandfor="reset-demo" command="show-modal" appearance="none" display="flex" align-items="center" gap=14 padding="14px 0" border-width=0 border-top="1px solid line" background-color="transparent" color="flame" text-align="left" testId="reset"
                           column class=Tile width=34 height=34 border-radius=11 background-color="flame-soft" color="flame"
-                            image "symbol:icon.refresh" font-size="1rem" aria-hidden=true
+                            image "symbol:icon.refresh" font-size="min(-exact-callout, 20px)" aria-hidden=true
                           text "Reset demo data" flex=1 font-size="1rem" font-weight=600
                       dialog id="reset-demo" role="alertdialog" aria-label="Reset demo data?"
                         text "Balances, goals and the payments you made return to the sample."
@@ -539,7 +537,10 @@ component TopBar
     row flex-wrap="wrap" align-items="flex-end" gap=12 padding-top=(phone ? 14 : 40) padding-bottom=2
       column flex="1 1 12rem" min-width=0 gap=4
         text eyebrow class=Eyebrow
-        text title role="heading" aria-level=1 font-size=(phone ? "1.875rem" : "2.375rem") font-weight=800 letter-spacing="-1px" line-height=1.2
+        if phone
+          text title role="heading" aria-level=1 font-size="min(-exact-title1, 46px)" font-weight=800 letter-spacing="-1px" line-height=1.2
+        else
+          text title role="heading" aria-level=1 font-size="min(-exact-large-title, 56px)" font-weight=800 letter-spacing="-1px" line-height=1.2
       children
 
 component Head
@@ -547,8 +548,8 @@ component Head
     title: string
     detail: string
   view
-    row align-items="baseline" gap=8 flex=1 min-width=0
-      text title role="heading" aria-level=2 flex=1 font-size="1.125rem" font-weight=700 letter-spacing="-0.3px"
+    row flex-wrap="wrap" align-items="baseline" column-gap=8 row-gap=2 flex="1 1 auto" min-width=0
+      text title role="heading" aria-level=2 flex="1 1 8rem" font-size="1.125rem" font-weight=700 letter-spacing="-0.3px"
       text detail class=Caption
 
 component CatTile
@@ -557,7 +558,10 @@ component CatTile
     size: number
   view
     column class=Tile width=size height=size border-radius=(size * 0.32) background-color=`${catTint(category)}-soft` color=catTint(category)
-      image catIcon(category) font-size=(size >= 56 ? "1.75rem" : "1.125rem") aria-hidden=true
+      if size >= 56
+        image catIcon(category) font-size="min(-exact-title1, 34px)" aria-hidden=true
+      else
+        image catIcon(category) font-size="min(-exact-body, 22px)" aria-hidden=true
 
 component Avatar
   props
@@ -566,7 +570,10 @@ component Avatar
     size: number
   view
     column width=size height=size flex-shrink=0 border-radius=(size / 2) align-items="center" justify-content="center" background-color=`${tint}-soft` color=tint
-      text initials(name) class=Num font-size=(size >= 56 ? "1.25rem" : "0.9375rem") aria-hidden=true
+      if size >= 56
+        text initials(name) class=Num font-size="min(-exact-title3, 26px)" aria-hidden=true
+      else
+        text initials(name) class=Num font-size="min(-exact-subheadline, 18px)" aria-hidden=true
 
 component TxRow
   props
@@ -575,15 +582,15 @@ component TxRow
     scope: string
     open: action
   view
-    button press=open(t.id) appearance="none" display="flex" align-items="center" gap=14 padding="12px 0" border-width=0 border-top=(first ? "none" : "1px solid line") background-color="transparent" color="ink" text-align="left" testId=`${scope}-${t.id}`
+    button press=open(t.id) appearance="none" display="flex" flex-wrap="wrap" align-items="center" column-gap=14 row-gap=4 padding="12px 0" border-width=0 border-top=(first ? "none" : "1px solid line") background-color="transparent" color="ink" text-align="left" testId=`${scope}-${t.id}`
       if t.category == "transfer"
         Avatar(name=t.merchant, tint="accent", size=44)
       else
         CatTile(category=t.category, size=44)
-      column flex=1 min-width=0 gap=2
+      column flex="1 1 9rem" min-width=0 gap=2
         text t.merchant font-size="1rem" font-weight=650 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
         text `${catTitle(t.category)} · ${t.when}` class=Caption white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
-      column align-items="flex-end" gap=2
+      column align-items="flex-end" gap=2 margin-left="auto"
         text signed(t.amount) class=Num font-size="1rem" color=amountTint(t.amount) testId=`${scope}-amount-${t.id}`
         if t.status == "Pending"
           text "Pending" font-size="0.6875rem" font-weight=650 color="amber"
@@ -606,7 +613,7 @@ component HomeView
     column gap=18
       TopBar(eyebrow=b.label.toUpperCase(), title=hello, phone=phone)
         button press=openProfile appearance="none" width=44 height=44 padding=0 border-radius=22 border="2px solid glass-edge" background-image="linear-gradient(135deg, var(--cta) 0%, var(--cta-2) 100%)" color="on-accent" box-shadow="0 10px 24px -12px cta" aria-label="Account" testId="open-profile"
-          text initials(b.profile.name) class=Num font-size="0.9375rem"
+          text initials(b.profile.name) class=Num font-size="min(-exact-subheadline, 18px)"
       if cols == 1
         Worth(b=b, wide=false, still=still, hidden=hidden, toggle=toggleHidden)
         Actions(b=b, openSend=openSend, openDeposit=openDeposit, pick=pick)
@@ -635,17 +642,19 @@ component Worth
     column position="relative" border-radius=34 overflow="hidden" testId="worth" animation=(still ? "none" : "rise 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
       Aurora(kind="indigo", still=still)
       column position="relative" class=Glass margin=8 border-radius=28 padding=(wide ? 28 : 22) gap=14
-        row align-items="center" gap=10
-          row class=Chip background-color="glass-strong" color="accent"
+        row flex-wrap="wrap" align-items="center" gap=10
+          row class=Chip flex-shrink=1 min-width=0 background-color="glass-strong" color="accent"
             image "symbol:icon.wallet" aria-hidden=true
             text "Net worth" color="ink"
-          row flex=1
-          button press=toggle class=Round background-color="glass-strong" color="ink-2" aria-label=(hidden ? "Show balances" : "Hide balances") testId="toggle-hidden"
-            image "symbol:icon.eye" font-size="1rem"
-        row align-items="baseline" gap=0
-          text veil(hidden, whole(b.net)) class=Num font-size=(wide ? "3.5rem" : "2.875rem") letter-spacing="-2px" line-height=1.2 testId="net"
+          button press=toggle margin-left="auto" class=Round background-color="glass-strong" color="ink-2" aria-label=(hidden ? "Show balances" : "Hide balances") testId="toggle-hidden"
+            image "symbol:icon.eye" font-size="min(-exact-callout, 20px)"
+        row align-items="baseline" gap=0 min-width=0
+          text veil(hidden, whole(b.net)) class=Num font-size=(wide ? "3.5rem" : "2.875rem") letter-spacing="-2px" line-height=1.2 -exact-fit="shrink" white-space="nowrap" flex="0 1 auto" min-width=0 testId="net"
           if not hidden
-            text centsOf(b.net) class=Num font-size=(wide ? "1.75rem" : "1.5rem") color="ink-2" letter-spacing="-0.5px"
+            if wide
+              text centsOf(b.net) class=Num font-size="min(-exact-title1, 36px)" color="ink-2" letter-spacing="-0.5px" flex-shrink=0
+            else
+              text centsOf(b.net) class=Num font-size="min(-exact-title2, 32px)" color="ink-2" letter-spacing="-0.5px" flex-shrink=0
         row align-items="center" gap=8 flex-wrap="wrap"
           row class=Chip background-color=(b.change >= 0 ? "mint-soft" : "flame-soft") color=(b.change >= 0 ? "mint" : "flame")
             image (b.change >= 0 ? "symbol:icon.up" : "symbol:icon.down") aria-hidden=true
@@ -669,7 +678,7 @@ component Actions
     openDeposit: action
     pick: action
   view
-    row gap=10 testId="actions"
+    row flex-wrap="wrap" gap=10 testId="actions"
       Action(icon="symbol:icon.send", label="Send", tint="accent", press=openSend("maya"), id="send")
       Action(icon="symbol:icon.target", label="Save", tint="tide", press=openDeposit("japan"), id="save")
       Action(icon="symbol:icon.card", label="Cards", tint="grape", press=pick("cards"), id="cards")
@@ -683,10 +692,10 @@ component Action
     press: action
     id: string
   view
-    button press=press appearance="none" flex=1 min-width=0 display="flex" flex-direction="column" align-items="center" gap=8 padding="14px 4px 12px" border-radius=22 class=Glass color="ink" testId=`action-${id}`
+    button press=press appearance="none" flex="1 1 4.5rem" min-width=0 display="flex" flex-direction="column" align-items="center" gap=8 padding="14px 4px 12px" border-radius=22 class=Glass color="ink" testId=`action-${id}`
       column class=Tile width=42 height=42 border-radius=21 background-color=`${tint}-soft` color=tint
-        image icon font-size="1.125rem" aria-hidden=true
-      text label font-size="0.8125rem" font-weight=650
+        image icon font-size="min(-exact-body, 22px)" aria-hidden=true
+      text label font-size="0.8125rem" font-weight=650 text-align="center"
 
 component Accounts
   props
@@ -696,13 +705,13 @@ component Accounts
     column class=Card gap=4 testId="accounts"
       Head(title="Accounts", detail=`${items.length} linked`)
       for a, i in items key=a.id
-        row align-items="center" gap=14 padding-top=12 padding-bottom=12 border-top=(i == 0 ? "none" : "1px solid line")
+        row flex-wrap="wrap" align-items="center" column-gap=14 row-gap=4 padding-top=12 padding-bottom=12 border-top=(i == 0 ? "none" : "1px solid line")
           column class=Tile background-color=`${a.tint}-soft` color=a.tint
-            image `symbol:icon.${a.icon}` font-size="1.25rem" aria-hidden=true
-          column flex=1 min-width=0 gap=2
+            image `symbol:icon.${a.icon}` font-size="min(-exact-title3, 26px)" aria-hidden=true
+          column flex="1 1 9rem" min-width=0 gap=2
             text a.name font-size="1rem" font-weight=650
             text `${a.kind} ${a.number}` class=Caption white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
-          text veil(hidden, money(a.balance)) class=Num font-size="1rem" color=(a.balance < 0 ? "flame" : "ink") testId=`balance-${a.id}`
+          text veil(hidden, money(a.balance)) class=Num font-size="1rem" margin-left="auto" color=(a.balance < 0 ? "flame" : "ink") testId=`balance-${a.id}`
 
 component Spending
   props
@@ -711,13 +720,13 @@ component Spending
     pick: action
   view
     column class=Card gap=16 testId="spending"
-      row align-items="center" gap=8
+      row flex-wrap="wrap" align-items="center" gap=8
         Head(title=`Spent in ${b.month}`, detail="")
         button press=pick("budgets") appearance="none" display="flex" align-items="center" gap=4 padding=0 border-width=0 background-color="transparent" color="accent-ink" font-size="0.875rem" font-weight=600 testId="see-budgets"
           text "Budgets"
           image "symbol:icon.next" font-size="0.75rem" aria-hidden=true
-      row align-items="baseline" gap=6
-        text money(b.spent) class=Num font-size="1.75rem" letter-spacing="-1px" testId="month-spent"
+      row flex-wrap="wrap" align-items="baseline" column-gap=6
+        text money(b.spent) class=Num font-size="min(-exact-title1, 40px)" letter-spacing="-1px" white-space="nowrap" testId="month-spent"
         text `of ${rounded(b.budget)}` class=Caption
       row height=12 gap=3 border-radius=6 overflow="hidden" background-color="card-2"
         for c in b.categories.filter(x => x.spent > 0) key=c.id
@@ -736,7 +745,7 @@ component Recent
     open: action
   view
     column class=Card gap=4 testId="recent"
-      row align-items="center" gap=8 padding-bottom=4
+      row flex-wrap="wrap" align-items="center" gap=8 padding-bottom=4
         Head(title="Recent activity", detail="")
         button press=pick("activity") appearance="none" display="flex" align-items="center" gap=4 padding=0 border-width=0 background-color="transparent" color="accent-ink" font-size="0.875rem" font-weight=600 testId="see-activity"
           text "See all"
@@ -758,25 +767,25 @@ component ActivityView
   view
     column gap=18 width="100%" max-width="48rem" margin-left="auto" margin-right="auto"
       TopBar(eyebrow=b.month.toUpperCase(), title="Activity", phone=phone)
-      row gap=10
+      row flex-wrap="wrap" gap=10
         InOut(label="Money in", value=money(b.income), tint="mint", icon="symbol:icon.receive", id="in")
         InOut(label="Money out", value=money(b.spent), tint="flame", icon="symbol:icon.send", id="out")
-      row align-items="center" gap=10 height=48 padding-left=16 padding-right=8 border-radius=16 class=Glass
-        image "symbol:icon.search" color="ink-2" font-size="1.0625rem" aria-hidden=true
-        input value=query input=search placeholder="Search payments" aria-label="Search payments" autocomplete="off" enterkeyhint="search" outline="none" flex=1 min-width=0 height=46 padding=0 border="none" background-color="transparent" color="ink" font-size="1rem" testId="tx-search"
+      row align-items="center" gap=10 min-height=48 padding-left=16 padding-right=8 border-radius=16 class=Glass
+        image "symbol:icon.search" color="ink-2" font-size="min(-exact-body, 22px)" aria-hidden=true
+        input value=query input=search placeholder="Search payments" aria-label="Search payments" autocomplete="off" enterkeyhint="search" outline="none" flex=1 min-width=0 min-height=46 padding="8px 0" border="none" background-color="transparent" color="ink" font-size="1rem" testId="tx-search"
         if query != ""
           button press=search("") class=Round width=30 height=30 background-color="ink-3" color="page" aria-label="Clear search" testId="clear-search"
-            image "symbol:icon.close" font-size="0.75rem"
-      row role="radiogroup" aria-label="Show" gap=4 padding=4 border-radius=18 background-color="card-2"
+            image "symbol:icon.close" font-size="min(-exact-caption1, 16px)"
+      row role="radiogroup" aria-label="Show" flex-wrap="wrap" gap=4 padding=4 border-radius=18 background-color="card-2"
         for f in ["all", "spending", "income", "transfers"] key=f
-          button role="radio" aria-checked=(filter == f) press=setFilter(f) appearance="none" flex=1 min-width=0 height=36 padding="0 6px" border-width=0 border-radius=14 background-color=(filter == f ? "card" : "transparent") box-shadow=(filter == f ? "0 1px 2px glass-shade, 0 6px 16px -8px glass-shade" : "none") color=(filter == f ? "ink" : "ink-2") font-size="0.8125rem" font-weight=650 testId=`filter-${f}`
+          button role="radio" aria-checked=(filter == f) press=setFilter(f) appearance="none" flex="1 1 5rem" min-width=0 min-height=36 padding="4px 6px" border-width=0 border-radius=14 background-color=(filter == f ? "card" : "transparent") box-shadow=(filter == f ? "0 1px 2px glass-shade, 0 6px 16px -8px glass-shade" : "none") color=(filter == f ? "ink" : "ink-2") font-size="0.8125rem" font-weight=650 testId=`filter-${f}`
             text (f == "all" ? "All" : f == "spending" ? "Spending" : f == "income" ? "Income" : "Transfers") white-space="nowrap"
       if groups.length == 0 and not loading
         EmptyState(symbol="symbol:search", title="No payments", message=(query.trim() == "" ? "Nothing here yet. Payments you make land in this list." : `Nothing matches “${query.trim()}”.`))
       for g in groups key=g.day
         column gap=8 testId=`group-${g.day}`
-          row align-items="baseline" padding-left=4 padding-right=4
-            text g.label.toUpperCase() class=Eyebrow flex=1
+          row flex-wrap="wrap" align-items="baseline" column-gap=8 padding-left=4 padding-right=4
+            text g.label.toUpperCase() class=Eyebrow flex="1 1 8rem"
             text signed(g.total) class=Caption font-variant-numeric="tabular-nums"
           column class=Card gap=0 padding="4px 18px"
             for t, i in g.items key=t.id
@@ -790,12 +799,12 @@ component InOut
     icon: string
     id: string
   view
-    column flex=1 min-width=0 gap=10 padding=16 border-radius=22 class=Card
+    column flex="1 1 9rem" min-width=0 gap=10 padding=16 border-radius=22 class=Card
       row align-items="center" gap=8
         column class=Tile width=28 height=28 border-radius=14 background-color=`${tint}-soft` color=tint
-          image icon font-size="0.875rem" aria-hidden=true
+          image icon font-size="min(-exact-subheadline, 18px)" aria-hidden=true
         text label class=Caption font-weight=600
-      text value class=Num font-size="1.25rem" testId=`month-${id}`
+      text value class=Num font-size="min(-exact-title3, 32px)" white-space="nowrap" testId=`month-${id}`
 
 component Receipt
   props
@@ -812,7 +821,7 @@ component Receipt
           else
             CatTile(category=t.category, size=64)
           text t.merchant role="heading" aria-level=2 font-size="1.25rem" font-weight=750 testId="tx-merchant"
-          text signed(t.amount) class=Num font-size="2.75rem" letter-spacing="-1.5px" color=amountTint(t.amount) testId="tx-amount"
+          text signed(t.amount) class=Num font-size="2.75rem" letter-spacing="-1.5px" -exact-fit="shrink" white-space="nowrap" max-width="100%" color=amountTint(t.amount) testId="tx-amount"
           row class=Chip background-color="glass-strong" color=(t.status == "Pending" ? "amber" : "mint")
             image (t.status == "Pending" ? "symbol:icon.lock" : "symbol:icon.check") aria-hidden=true
             text t.status color="ink" testId="tx-status"
@@ -836,10 +845,10 @@ component Fact
     detail: string
     first: bool
   view
-    row align-items="center" gap=12 padding-top=13 padding-bottom=13 border-top=(first ? "none" : "1px solid line")
-      dt flex=1 class=Caption font-weight=600
+    row flex-wrap="wrap" align-items="center" column-gap=12 row-gap=2 padding-top=13 padding-bottom=13 border-top=(first ? "none" : "1px solid line")
+      dt flex="1 1 7rem" class=Caption font-weight=600
         text term
-      dd margin=0 font-size="0.9375rem" font-weight=600 text-align="right"
+      dd margin=0 margin-left="auto" font-size="0.9375rem" font-weight=600 text-align="right"
         text detail
 
 component CardsView
@@ -863,21 +872,21 @@ component CardsView
             for c in b.cards key=c.id
               button role="radio" aria-checked=(c.id == card.id) press=chooseCard(c.id) appearance="none" flex="0 1 6.5rem" min-width=0 display="flex" flex-direction="column" gap=6 padding=6 border-radius=16 border=(c.id == card.id ? "2px solid accent" : "2px solid transparent") background-color="transparent" color="ink" testId=`card-${c.id}`
                 column height=44 border-radius=9 background-image=(c.style == "midnight" ? "linear-gradient(135deg, var(--midnight-1) 0%, var(--midnight-2) 100%)" : c.style == "iris" ? "linear-gradient(135deg, var(--iris-1) 0%, var(--iris-2) 100%)" : "linear-gradient(135deg, var(--lagoon-1) 0%, var(--lagoon-2) 100%)") opacity=(c.frozen ? 0.45 : 1)
-                text c.name font-size="0.6875rem" font-weight=650 color=(c.id == card.id ? "ink" : "ink-2") white-space="nowrap" overflow="hidden" text-overflow="ellipsis" text-align="center"
+                text c.name font-size="min(-exact-caption2, 15px)" font-weight=650 color=(c.id == card.id ? "ink" : "ink-2") white-space="nowrap" overflow="hidden" text-overflow="ellipsis" text-align="center"
         column flex=1 min-width=0 gap=18
           column class=Card gap=14 testId="card-spend"
             Head(title="This month", detail=card.kind)
-            row align-items="baseline" gap=6
-              text money(card.spent) class=Num font-size="1.75rem" letter-spacing="-1px" testId="card-spent"
+            row flex-wrap="wrap" align-items="baseline" column-gap=6
+              text money(card.spent) class=Num font-size="min(-exact-title1, 40px)" letter-spacing="-1px" testId="card-spent"
               text `of ${rounded(card.limit)} limit` class=Caption
             column height=10 border-radius=5 background-color="accent-soft" overflow="hidden"
               column height="100%" width=pct(card.spent, card.limit) border-radius=5 background-image="linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%)" animation=(still ? "none" : "grow 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
             text `${rounded(max(0, card.limit - card.spent))} left to spend this month` class=Caption
           column class=Card gap=0 padding="4px 20px" testId="card-controls"
-            row align-items="center" gap=14 padding-top=12 padding-bottom=12
+            row flex-wrap="wrap" align-items="center" column-gap=14 row-gap=8 padding-top=12 padding-bottom=12
               column class=Tile width=34 height=34 border-radius=11 background-color="sky-soft" color="sky"
-                image "symbol:icon.freeze" font-size="1rem" aria-hidden=true
-              column flex=1 min-width=0 gap=2
+                image "symbol:icon.freeze" font-size="min(-exact-callout, 20px)" aria-hidden=true
+              column flex="1 1 9rem" min-width=0 gap=2
                 text "Freeze card" font-size="1rem" font-weight=600
                 text (card.frozen ? "Payments are declined until you unfreeze." : "Stop new payments in a tap.") class=Caption
               input type="checkbox" switch checked=card.frozen change=freeze disabled=busy aria-label="Freeze card" testId="freeze"
@@ -892,11 +901,11 @@ component CardRow
     label: string
     value: string
   view
-    row align-items="center" gap=14 padding-top=12 padding-bottom=12 border-top="1px solid line"
+    row flex-wrap="wrap" align-items="center" column-gap=14 row-gap=2 padding-top=12 padding-bottom=12 border-top="1px solid line"
       column class=Tile width=34 height=34 border-radius=11 background-color=`${tint}-soft` color=tint
-        image icon font-size="1rem" aria-hidden=true
-      text label flex=1 font-size="1rem" font-weight=600
-      text value class=Num font-size="0.9375rem" color="ink-2"
+        image icon font-size="min(-exact-callout, 20px)" aria-hidden=true
+      text label flex="1 1 8rem" font-size="1rem" font-weight=600
+      text value class=Num font-size="0.9375rem" color="ink-2" margin-left="auto"
 
 // A payment card drawn at the ISO card's 1.586 aspect, with a sheen; frozen cards wear frost.
 component BankCard
@@ -909,21 +918,21 @@ component BankCard
       if not c.frozen
         column position="relative" flex=1 padding=22 justify-content="space-between"
           row align-items="center" gap=8
-            text "Lumen" font-size="1.125rem" font-weight=800 letter-spacing="-0.4px" flex=1
-            text c.kind.toUpperCase() font-size="0.6875rem" font-weight=700 letter-spacing="1.2px" color="card-ink-2"
+            text "Lumen" font-size="min(-exact-body, 22px)" font-weight=800 letter-spacing="-0.4px" flex=1
+            text c.kind.toUpperCase() font-size="min(-exact-caption2, 13px)" font-weight=700 letter-spacing="1.2px" color="card-ink-2"
           column width=42 height=32 border-radius=7 background-image="linear-gradient(135deg, var(--chip-1) 0%, var(--chip-2) 100%)" aria-hidden=true
           column gap=10
-            text `••••  ••••  ••••  ${c.number}` class=Num font-size="1.125rem" letter-spacing="1.5px" testId="card-number"
+            text `••••  ••••  ••••  ${c.number}` class=Num font-size="min(-exact-body, 20px)" white-space="nowrap" letter-spacing="1.5px" testId="card-number"
             row align-items="flex-end" gap=12
               column flex=1 min-width=0 gap=2
-                text c.holder font-size="0.75rem" font-weight=650 letter-spacing="1px" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
-                text `EXP ${c.expires}` font-size="0.6875rem" color="card-ink-2"
-              text c.network font-size="1rem" font-weight=800 font-style="italic" letter-spacing="0.5px"
+                text c.holder font-size="min(-exact-caption1, 14px)" font-weight=650 letter-spacing="1px" white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
+                text `EXP ${c.expires}` font-size="min(-exact-caption2, 13px)" color="card-ink-2"
+              text c.network font-size="min(-exact-callout, 20px)" font-weight=800 font-style="italic" letter-spacing="0.5px"
       else
         column position="relative" flex=1 align-items="center" justify-content="center" gap=6 backgroundMaterial="glass" background-color="glass" backdrop-filter="blur(14px) saturate(1.4)" color="ink" testId="frozen"
-          image "symbol:icon.freeze" font-size="2rem" color="sky" aria-hidden=true
-          text "Frozen" font-size="1.0625rem" font-weight=750
-          text `${c.name} ·· ${c.number}` font-size="0.8125rem" font-weight=600 font-variant-numeric="tabular-nums"
+          image "symbol:icon.freeze" font-size="min(-exact-large-title, 40px)" color="sky" aria-hidden=true
+          text "Frozen" font-size="min(-exact-body, 22px)" font-weight=750
+          text `${c.name} ·· ${c.number}` font-size="min(-exact-footnote, 16px)" font-weight=600 font-variant-numeric="tabular-nums"
 
 component BudgetsView
   props
@@ -960,8 +969,8 @@ component BudgetHero
             for c in b.categories.filter(x => x.spent > 0) key=c.id
               circle cx=100 cy=100 r=86 fill="none" stroke=catTint(c.id) stroke-width=20 pathLength=100 stroke-dasharray=`${max(0, c.share * frac(b.spent, b.budget) - 0.8)} 100` stroke-dashoffset=(0 - c.start * frac(b.spent, b.budget)) transform="rotate(-90 100 100)" animation=(still ? "none" : "ringIn 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) both")
           column align-items="center" gap=2
-            text rounded(max(0, b.budget - b.spent)) class=Num font-size="2.25rem" letter-spacing="-1.5px" testId="budget-left"
-            text (b.spent <= b.budget ? "left to spend" : "over budget") class=Caption font-weight=600
+            text rounded(max(0, b.budget - b.spent)) class=Num font-size="min(-exact-large-title, 44px)" letter-spacing="-1.5px" testId="budget-left"
+            text (b.spent <= b.budget ? "left to spend" : "over budget") class=Caption font-size="min(-exact-footnote, 16px)" font-weight=600
         column flex=1 width="100%" gap=14
           row flex-wrap="wrap" row-gap=14 gap=12
             Stat(icon="symbol:icon.pie", tint="amber", label="Spent", value=rounded(b.spent))
@@ -994,12 +1003,12 @@ component Categories
       Head(title="Categories", detail=`${b.categories.length} budgets`)
       for c, i in b.categories key=c.id
         column gap=10 padding-top=14 padding-bottom=14 border-top=(i == 0 ? "none" : "1px solid line") testId=`budget-${c.id}`
-          row align-items="center" gap=12
+          row flex-wrap="wrap" align-items="center" column-gap=12 row-gap=4
             CatTile(category=c.id, size=40)
-            column flex=1 min-width=0 gap=2
+            column flex="1 1 8rem" min-width=0 gap=2
               text catTitle(c.id) font-size="1rem" font-weight=650
               text `${c.count} ${c.count == 1 ? "payment" : "payments"}` class=Caption
-            column align-items="flex-end" gap=2
+            column align-items="flex-end" gap=2 margin-left="auto"
               text rounded(c.spent) class=Num font-size="1rem" color=(c.spent > c.limit ? "flame" : "ink")
               text `of ${rounded(c.limit)}` class=Caption
           column height=8 border-radius=4 background-color=`${catTint(c.id)}-soft` overflow="hidden"
@@ -1019,7 +1028,7 @@ component Week
               column width="100%" max-width=30 height=pct(d.spent, max(1, b.weekTop)) min-height=4 border-radius=9 background-color=(i == b.week.length - 1 ? "accent" : "card-2") background-image=(i == b.week.length - 1 ? "linear-gradient(180deg, var(--accent-2) 0%, var(--accent) 100%)" : "none") animation=(still ? "none" : `lift 700ms ${i * 50}ms cubic-bezier(0.2, 0.8, 0.2, 1) both`)
         row gap=8
           for d, i in b.week key=d.day
-            text d.label flex=1 text-align="center" font-size="0.75rem" font-weight=(i == b.week.length - 1 ? 700 : 500) color=(i == b.week.length - 1 ? "ink" : "ink-2")
+            text d.label flex=1 min-width=0 text-align="center" font-size="min(-exact-caption1, 15px)" font-weight=(i == b.week.length - 1 ? 700 : 500) color=(i == b.week.length - 1 ? "ink" : "ink-2")
 
 component GoalsView
   props
@@ -1040,9 +1049,9 @@ component GoalsView
           row class=Chip align-self="flex-start" background-color="glass-strong" color="tide"
             image "symbol:icon.piggy" aria-hidden=true
             text "Saved toward goals" color="ink"
-          row align-items="baseline" gap=0
-            text whole(b.saved) class=Num font-size="2.75rem" letter-spacing="-2px" testId="goals-saved"
-            text centsOf(b.saved) class=Num font-size="1.5rem" color="ink-2"
+          row align-items="baseline" gap=0 min-width=0
+            text whole(b.saved) class=Num font-size="2.75rem" letter-spacing="-2px" -exact-fit="shrink" white-space="nowrap" flex="0 1 auto" min-width=0 testId="goals-saved"
+            text centsOf(b.saved) class=Num font-size="min(-exact-title2, 32px)" color="ink-2" flex-shrink=0
           column height=10 border-radius=5 background-color="glass-edge" overflow="hidden"
             column height="100%" width=pct(b.saved, sum(b.goals.map(g => g.target))) border-radius=5 background-image="linear-gradient(90deg, var(--tide) 0%, var(--mint-2) 100%)" animation=(still ? "none" : "grow 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
           text `${pct(b.saved, sum(b.goals.map(g => g.target)))} of ${rounded(sum(b.goals.map(g => g.target)))} across ${count(b.goals.length, "goal", "goals")}` class=Caption font-weight=600
@@ -1057,18 +1066,18 @@ component GoalCard
     add: action
   view
     column class=Card flex="1 1 18rem" gap=16 testId=`goal-${g.id}`
-      row align-items="center" gap=16
+      row flex-wrap="wrap" align-items="center" gap=16
         Ring(size=76, width=8, fraction=frac(g.saved, g.target), from=g.tint, to=g.tint, track=`${g.tint}-soft`, gid=`goal-ring-${g.id}`, still=still)
-          image goalIcon(g.icon) color=g.tint font-size="1.5rem" aria-hidden=true
-        column flex=1 min-width=0 gap=4
+          image goalIcon(g.icon) color=g.tint font-size="min(-exact-title2, 30px)" aria-hidden=true
+        column flex="1 1 9rem" min-width=0 gap=4
           text g.name font-size="1.0625rem" font-weight=700
-          row align-items="baseline" gap=4
-            text money(g.saved) class=Num font-size="1.25rem" testId=`goal-saved-${g.id}`
+          row flex-wrap="wrap" align-items="baseline" column-gap=4
+            text money(g.saved) class=Num font-size="min(-exact-title3, 32px)" testId=`goal-saved-${g.id}`
             text `of ${rounded(g.target)}` class=Caption
           text `${pct(g.saved, g.target)} · by ${g.due}` class=Caption
-      row align-items="center" gap=10 padding-top=12 border-top="1px solid line"
+      row flex-wrap="wrap" align-items="center" gap=10 padding-top=12 border-top="1px solid line"
         image "symbol:icon.sparkle" color=g.tint font-size="0.875rem" aria-hidden=true
-        text (g.monthly <= 0 ? "Reached. Nicely done." : `${rounded(g.monthly)} a month gets you there`) flex=1 class=Caption
+        text (g.monthly <= 0 ? "Reached. Nicely done." : `${rounded(g.monthly)} a month gets you there`) flex="1 1 8rem" class=Caption
         button press=add(g.id) class=Chip background-color=`${g.tint}-soft` color=g.tint aria-label=`Add money to ${g.name}` testId=`goal-add-${g.id}`
           image "symbol:icon.plus" aria-hidden=true
           text "Add" color="ink"
@@ -1084,7 +1093,7 @@ component SheetTitle
   view
     row width="100%" max-width="40rem" box-sizing="border-box" margin-left="auto" margin-right="auto" align-items="center" gap=14
       column class=Tile width=46 height=46 border-radius=15 background-color=`${tint}-soft` color=tint
-        image icon font-size="1.375rem" aria-hidden=true
+        image icon font-size="min(-exact-title2, 28px)" aria-hidden=true
       column flex=1 min-width=0 gap=2
         text title role="heading" aria-level=1 font-size="1.375rem" font-weight=800 letter-spacing="-0.4px"
         text detail class=Caption white-space="nowrap" overflow="hidden" text-overflow="ellipsis" testId="sheet-detail"
@@ -1103,28 +1112,28 @@ component SendForm
     editNote: action
   view
     column width="100%" max-width="30rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="8px 20px 12px" gap=18
-      row role="radiogroup" aria-label="Pay" gap=6 justify-content="space-between"
+      row role="radiogroup" aria-label="Pay" flex-wrap="wrap" gap=6 justify-content="space-between"
         for c in contacts key=c.id
-          button role="radio" aria-checked=(c.id == payee) press=choose(c.id) appearance="none" flex=1 min-width=0 display="flex" flex-direction="column" align-items="center" gap=6 padding="8px 2px" border-radius=18 border-width=0 background-color=(c.id == payee ? "accent-soft" : "transparent") color="ink" testId=`payee-${c.id}`
+          button role="radio" aria-checked=(c.id == payee) press=choose(c.id) appearance="none" flex="1 1 3.75rem" min-width=0 display="flex" flex-direction="column" align-items="center" gap=6 padding="8px 2px" border-radius=18 border-width=0 background-color=(c.id == payee ? "accent-soft" : "transparent") color="ink" testId=`payee-${c.id}`
             column border-radius=28 border=(c.id == payee ? "2px solid accent" : "2px solid transparent")
               Avatar(name=c.name, tint=c.tint, size=48)
-            text firstName(c.name) font-size="0.75rem" font-weight=(c.id == payee ? 700 : 550) color=(c.id == payee ? "ink" : "ink-2") white-space="nowrap"
+            text firstName(c.name) max-width="100%" overflow="hidden" text-overflow="ellipsis" font-size="0.75rem" font-weight=(c.id == payee ? 700 : 550) color=(c.id == payee ? "ink" : "ink-2") white-space="nowrap"
       column align-items="center" gap=4 padding="6px 0"
-        row align-items="baseline" justify-content="center" gap=2
-          text "$" class=Num font-size="2rem" color=(typed == "" ? "ink-3" : "ink-2")
-          text typedShown(typed) class=Num font-size="4rem" letter-spacing="-2.5px" line-height=1.2 color=(typed == "" ? "ink-3" : "ink") testId="send-amount"
-        input value=note input=editNote placeholder="Add a note" aria-label="Note" maxlength=80 autocomplete="off" outline="none" width="100%" max-width="16rem" height=36 padding=0 border="none" background-color="transparent" color="ink" font-size="0.9375rem" text-align="center" testId="send-note"
+        row align-items="baseline" justify-content="center" gap=2 max-width="100%"
+          text "$" class=Num font-size="min(-exact-large-title, 40px)" color=(typed == "" ? "ink-3" : "ink-2") flex-shrink=0
+          text typedShown(typed) class=Num font-size="4rem" letter-spacing="-2.5px" line-height=1.2 -exact-fit="shrink" white-space="nowrap" flex="0 1 auto" min-width=0 color=(typed == "" ? "ink-3" : "ink") testId="send-amount"
+        input value=note input=editNote placeholder="Add a note" aria-label="Note" maxlength=80 autocomplete="off" outline="none" width="100%" max-width="16rem" min-height=36 padding="6px 0" border="none" background-color="transparent" color="ink" font-size="0.9375rem" text-align="center" testId="send-note"
       if error != ""
         text error role="alert" color="flame" font-size="0.875rem" text-align="center" testId="send-error"
       column gap=8 role="group" aria-label="Amount keypad"
         for r in [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], [".", "0", "del"]] key=r.join("")
           row gap=8
             for k in r key=k
-              button press=key(k) appearance="none" flex=1 height=(phone ? 54 : 58) display="flex" align-items="center" justify-content="center" padding=0 border-radius=18 class=Glass color="ink" aria-label=(k == "del" ? "Delete" : k == "." ? "Decimal point" : k) testId=`key-${k == "." ? "dot" : k}`
+              button press=key(k) appearance="none" flex=1 min-width=0 min-height=(phone ? 54 : 58) display="flex" align-items="center" justify-content="center" padding=0 border-radius=18 class=Glass color="ink" aria-label=(k == "del" ? "Delete" : k == "." ? "Decimal point" : k) testId=`key-${k == "." ? "dot" : k}`
                 if k == "del"
-                  image "symbol:icon.backspace" font-size="1.25rem" aria-hidden=true
+                  image "symbol:icon.backspace" font-size="min(-exact-title3, 26px)" aria-hidden=true
                 else
-                  text k class=Num font-size="1.625rem" font-weight=600
+                  text k class=Num font-size="min(-exact-title1, 34px)" font-weight=600
 
 component DepositForm
   props
@@ -1141,7 +1150,7 @@ component DepositForm
     column width="100%" max-width="30rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="8px 20px 12px" gap=20
       row role="radiogroup" aria-label="Goal" flex-wrap="wrap" gap=8
         for g in goals key=g.id
-          button role="radio" aria-checked=(g.id == goal.id) press=choose(g.id) class=Chip height=36 background-color=(g.id == goal.id ? g.tint : "card-2") color=(g.id == goal.id ? "on-accent" : "ink") testId=`pick-goal-${g.id}`
+          button role="radio" aria-checked=(g.id == goal.id) press=choose(g.id) class=Chip min-height=36 background-color=(g.id == goal.id ? g.tint : "card-2") color=(g.id == goal.id ? "on-accent" : "ink") testId=`pick-goal-${g.id}`
             image goalIcon(g.icon) aria-hidden=true
             text g.name
       column position="relative" border-radius=32 overflow="hidden"
@@ -1149,17 +1158,17 @@ component DepositForm
         column position="relative" class=Glass margin=8 border-radius=26 padding=22 gap=18 align-items="center"
           Ring(size=150, width=14, fraction=frac(goal.saved + cents, goal.target), from=goal.tint, to="accent", track="glass-edge", gid="deposit-ring", still=still)
             column align-items="center" gap=0
-              text pct(goal.saved + cents, goal.target) class=Num font-size="1.875rem" letter-spacing="-1px" testId="deposit-pct"
-              text "after this" class=Caption font-weight=600
-          row align-items="center" gap=18
+              text pct(goal.saved + cents, goal.target) class=Num font-size="min(-exact-title1, 36px)" letter-spacing="-1px" testId="deposit-pct"
+              text "after this" class=Caption font-size="min(-exact-footnote, 16px)" font-weight=600
+          row align-items="center" justify-content="center" gap=14 width="100%"
             button press=nudge(-1000) class=Round width=48 height=48 border-radius=24 background-color="glass-strong" color="ink" aria-label="Ten dollars less" testId="deposit-less"
               image "symbol:icon.minus"
-            text money(cents) class=Num font-size="2.25rem" letter-spacing="-1px" min-width="9.5rem" text-align="center" testId="deposit-amount"
+            text money(cents) class=Num font-size="min(-exact-large-title, 40px)" letter-spacing="-1px" -exact-fit="shrink" white-space="nowrap" flex="0 1 auto" min-width=0 text-align="center" testId="deposit-amount"
             button press=nudge(1000) class=Round width=48 height=48 border-radius=24 background-color="glass-strong" color="ink" aria-label="Ten dollars more" testId="deposit-more"
               image "symbol:icon.plus"
-      row gap=8
+      row flex-wrap="wrap" gap=8
         for c in [2500, 5000, 10000, 25000] key=c
-          button press=set(c) appearance="none" flex=1 height=40 padding=0 border-radius=14 border=(cents == c ? "2px solid accent" : "1px solid line") background-color=(cents == c ? "accent-soft" : "card") color="ink" font-size="0.875rem" font-weight=650 testId=`quick-${c}`
+          button press=set(c) appearance="none" flex="1 1 4rem" min-height=40 padding="6px 4px" border-radius=14 border=(cents == c ? "2px solid accent" : "1px solid line") background-color=(cents == c ? "accent-soft" : "card") color="ink" font-size="0.875rem" font-weight=650 testId=`quick-${c}`
             text rounded(c)
       text `From Everyday · ${money(checking)} available` class=Caption text-align="center"
       if error != ""
@@ -1179,10 +1188,10 @@ component ProfileView
       column position="relative" border-radius=34 overflow="hidden" testId="profile-card"
         Aurora(kind="dusk", still=still)
         column position="relative" class=Glass margin=8 border-radius=28 padding=22 gap=18
-          row align-items="center" gap=16
+          row flex-wrap="wrap" align-items="center" gap=16
             column width=68 height=68 flex-shrink=0 border-radius=34 align-items="center" justify-content="center" background-image="linear-gradient(135deg, var(--cta) 0%, var(--cta-2) 100%)" box-shadow="0 0 0 4px glass-edge"
-              text initials(b.profile.name) class=Num font-size="1.5rem" color="on-accent"
-            column flex=1 min-width=0 gap=4
+              text initials(b.profile.name) class=Num font-size="min(-exact-title2, 28px)" color="on-accent"
+            column flex="1 1 10rem" min-width=0 gap=4
               text b.profile.name font-size="1.375rem" font-weight=800 letter-spacing="-0.5px" testId="profile-name"
               text b.profile.email class=Caption
           row flex-wrap="wrap" row-gap=14 gap=12
@@ -1190,17 +1199,17 @@ component ProfileView
             Stat(icon="symbol:icon.card", tint="grape", label="Cards", value=`${b.cards.length}`)
             Stat(icon="symbol:icon.target", tint="tide", label="Goals", value=`${b.goals.length}`)
       column class=Card gap=0 padding="4px 20px" testId="settings"
-        row align-items="center" gap=14 padding-top=12 padding-bottom=12
+        row flex-wrap="wrap" align-items="center" column-gap=14 row-gap=8 padding-top=12 padding-bottom=12
           column class=Tile width=34 height=34 border-radius=11 background-color="rose-soft" color="rose"
-            image "symbol:icon.bell" font-size="1rem" aria-hidden=true
-          column flex=1 min-width=0 gap=2
+            image "symbol:icon.bell" font-size="min(-exact-callout, 20px)" aria-hidden=true
+          column flex="1 1 9rem" min-width=0 gap=2
             text "Payment alerts" font-size="1rem" font-weight=600
             text "Every card payment, as it happens." class=Caption
           input type="checkbox" switch checked=alerts change=setAlerts aria-label="Payment alerts" testId="alerts"
-        row align-items="center" gap=14 padding-top=12 padding-bottom=12 border-top="1px solid line"
+        row flex-wrap="wrap" align-items="center" column-gap=14 row-gap=8 padding-top=12 padding-bottom=12 border-top="1px solid line"
           column class=Tile width=34 height=34 border-radius=11 background-color="mint-soft" color="mint"
-            image "symbol:icon.scan" font-size="1rem" aria-hidden=true
-          column flex=1 min-width=0 gap=2
+            image "symbol:icon.scan" font-size="min(-exact-callout, 20px)" aria-hidden=true
+          column flex="1 1 9rem" min-width=0 gap=2
             text "Unlock with Face ID" font-size="1rem" font-weight=600
             text "Asked each time Lumen opens." class=Caption
           input type="checkbox" switch checked=faceId change=setFaceId aria-label="Unlock with Face ID" testId="face-id"
@@ -1216,11 +1225,11 @@ component Welcome
   view
     column min-height="100%" width="100%" max-width="32.5rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding=(phone ? "56px 22px 28px" : "72px 28px 40px") gap=30 justify-content="space-between" testId="welcome"
       column align-items="center" gap=22 text-align="center" animation=(still ? "none" : "rise 800ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
-        column class=Glass width=96 height=96 border-radius=30 align-items="center" justify-content="center" color="accent"
+        column class=Glass width="6rem" height="6rem" border-radius=30 align-items="center" justify-content="center" color="accent"
           image "symbol:icon.sparkle" font-size="3rem" aria-hidden=true
         column align-items="center" gap=14
           text "LUMEN" class=Eyebrow letter-spacing="5px" color="ink"
-          text "Money, in a clearer light." role="heading" aria-level=1 font-size=(phone ? "2.375rem" : "2.875rem") font-weight=800 letter-spacing="-1.5px" line-height=1.05
+          text "Money, in a clearer light." role="heading" aria-level=1 font-size="min(-exact-large-title, 56px)" font-weight=800 letter-spacing="-1.5px" line-height=1.1
           text "Every account, card and goal in one calm place, with budgets that keep pace with you." font-size="1.0625rem" line-height=1.45 color="ink-2" max-width="25rem"
       column class=Glass border-radius=28 padding="6px 18px" animation=(still ? "none" : "rise 800ms 120ms cubic-bezier(0.2, 0.8, 0.2, 1) both")
         Feature(icon="symbol:icon.growth", tint="accent", title="See your whole picture", detail="Net worth across every account, day by day.", first=true)
@@ -1241,7 +1250,7 @@ component Feature
   view
     row align-items="center" gap=14 padding-top=14 padding-bottom=14 border-top=(first ? "none" : "1px solid glass-edge")
       column class=Tile width=40 height=40 border-radius=13 background-color=`${tint}-soft` color=tint
-        image icon font-size="1.1875rem" aria-hidden=true
+        image icon font-size="min(-exact-title3, 24px)" aria-hidden=true
       column flex=1 min-width=0 gap=2
         text title font-size="1rem" font-weight=650
         text detail class=Caption
