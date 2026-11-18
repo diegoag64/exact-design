@@ -60,6 +60,9 @@ Commands run from the repository root after `bun run setup`.
 | --- | --- |
 | `bun run dev` | Start the studio on port 5173 and the helper on 5175 |
 | `bun run demo` | Start Ember on port 5174 and print its setup link |
+| `bun run tide` | Start Tide on port 5194 and print its setup link |
+| `bun run tide test web` | Run Tide behavior tests |
+| `bun run tide verify` | Audit Tide layouts and behavior |
 | `bun run demo:waymark` | Start Waymark on port 5176 and print its setup link |
 | `bun run test` | Test models, persistence, source editing, and preview services |
 | `bun run test:ui` | Run Exact behavior tests |

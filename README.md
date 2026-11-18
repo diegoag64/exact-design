@@ -47,6 +47,7 @@ Select a viewport, click **Edit app**, and change a property. Click **Review** t
 | [Development](docs/development.md) | Commands, test requirements, and source layout |
 | [Studio design system](docs/studio-design-system.md) | Shared controls, tokens, icons, and interactions |
 | [Ember](examples/ember/README.md) | The demo app and its screens |
+| [Tide](examples/tide/README.md) | A personal finance app experiment |
 | [Waymark](examples/waymark/README.md) | A second, art-directed demo: a game companion app |
 | [Contributing](CONTRIBUTING.md) | Report issues, run checks, and open pull requests |
 
