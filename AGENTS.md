@@ -27,6 +27,7 @@ Use the root package scripts to select checks for the changed behavior:
 - Studio UI or layout changes: `bun run verify` and `bun run build`.
 - Ember behavior changes: `bun tools/demo.mjs test web`.
 - Waymark behavior changes: `bun tools/demo.mjs --app waymark test web`.
+- Lumen behavior changes: `bun tools/demo.mjs --app lumen test web`.
 - Documentation-only changes: check local links, command names, and `git diff --check`.
 
 `test:ui` and `verify` run in temporary copies with private ports. Preserve the user's running studio and demo. See `docs/development.md` for verification artifacts and socket-permission failures.

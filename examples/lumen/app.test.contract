@@ -1,0 +1,193 @@
+test "home opens on the sample accounts"
+  epoch "2026-11-17T16:30:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  clock data
+  expect text "balance-checking" == "$6,286.42"
+  expect text "balance-savings" == "$36,820.00"
+  expect text "balance-invest" == "$23,518.77"
+  tap "toggle-hidden"
+  expect text "balance-checking" == "••••••"
+  reload
+  clock data
+  expect text "balance-checking" == "••••••"
+
+test "sending money lowers Everyday and lands in activity"
+  epoch "2026-11-17T16:30:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  clock data
+  tap "action-send"
+  clock data
+  clock settle
+  tap "payee-leo"
+  tap "key-4"
+  tap "key-2"
+  tap "key-dot"
+  tap "key-5"
+  expect text "send-amount" == "42.5"
+  expect text "send-confirm" == "Send $42.50 to Leo"
+  tap "send-confirm"
+  clock data
+  clock settle
+  expect tree missing "send-confirm"
+  expect text "balance-checking" == "$6,243.92"
+  tap "tab-activity"
+  clock data
+  type "tx-search" "leo"
+  clock data
+  expect text "tx-amount-sent-1" == "-$42.50"
+  reload
+  clock data
+  expect text "tx-amount-sent-1" == "-$42.50"
+
+test "the keypad keeps cents to two places and refuses an oversized transfer"
+  epoch "2026-11-17T16:30:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  clock data
+  tap "action-send"
+  clock data
+  clock settle
+  expect disabled "send-confirm"
+  tap "key-1"
+  tap "key-dot"
+  tap "key-2"
+  tap "key-3"
+  tap "key-4"
+  expect text "send-amount" == "1.23"
+  tap "key-del"
+  expect text "send-amount" == "1.2"
+  tap "key-del"
+  tap "key-del"
+  tap "key-del"
+  tap "key-9"
+  tap "key-9"
+  tap "key-9"
+  tap "key-9"
+  tap "key-9"
+  tap "key-9"
+  expect text "send-amount" == "99999"
+  tap "send-confirm"
+  clock data
+  expect text "send-error" == "Transfers stop at $5,000 a payment."
+  expect text "send-amount" == "99999"
+
+test "adding to a goal moves money into savings"
+  epoch "2026-11-17T16:30:00Z"
+  time-zone "America/Los_Angeles"
+  size 834x1112
+  clock data
+  tap "tab-goals"
+  clock data
+  expect text "goals-saved" == "$34,350"
+  tap "goal-add-laptop"
+  clock data
+  clock settle
+  tap "quick-25000"
+  expect text "deposit-amount" == "$250.00"
+  tap "deposit-more"
+  expect text "deposit-amount" == "$260.00"
+  tap "deposit-confirm"
+  clock data
+  clock settle
+  expect tree missing "deposit-confirm"
+  expect text "goal-saved-laptop" == "$1,120.00"
+  expect text "goals-saved" == "$34,610"
+  tap "tab-home"
+  clock data
+  expect text "balance-checking" == "$6,026.42"
+  expect text "balance-savings" == "$37,080.00"
+
+test "a frozen card stays frozen"
+  epoch "2026-11-17T16:30:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  clock data
+  tap "tab-cards"
+  clock data
+  tap "card-everyday"
+  expect tree missing "frozen"
+  tap "freeze"
+  clock data
+  expect tree has "frozen"
+  tap "card-metal"
+  expect tree missing "frozen"
+  reload
+  clock data
+  tap "card-everyday"
+  expect tree has "frozen"
+
+test "activity filters by kind and opens a payment"
+  epoch "2026-11-17T16:30:00Z"
+  time-zone "America/Los_Angeles"
+  size 1440x900
+  clock data
+  tap "tab-activity"
+  clock data
+  expect tree has "tx-2026-11-17-blue-bottle-coffee"
+  tap "filter-income"
+  clock data
+  expect tree has "tx-2026-11-15-northwind-studio-payroll"
+  expect tree missing "tx-2026-11-17-blue-bottle-coffee"
+  tap "filter-all"
+  clock data
+  tap "tx-2026-11-17-blue-bottle-coffee"
+  clock data
+  clock settle
+  expect text "tx-merchant" == "Blue Bottle Coffee"
+  expect text "tx-status" == "Pending"
+  tap "tx-close"
+  clock settle
+  expect tree missing "tx-merchant"
+
+test "reset returns the sample"
+  epoch "2026-11-17T16:30:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  clock data
+  tap "tab-goals"
+  clock data
+  tap "goal-add-japan"
+  clock data
+  clock settle
+  tap "deposit-confirm"
+  clock data
+  clock settle
+  expect text "goal-saved-japan" == "$4,040.00"
+  tap "tab-home"
+  tap "open-profile"
+  clock settle
+  tap "reset"
+  tap "confirm-reset"
+  clock data
+  tap "profile-close"
+  clock settle
+  tap "tab-goals"
+  clock data
+  expect text "goal-saved-japan" == "$3,940.00"
+
+test "a cold deep link opens the screen it names"
+  epoch "2026-11-17T16:30:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  at "/open?u=web%2Blumen%3A%2F%2Fgoals%2Fadd"
+  clock data
+  clock settle
+  expect tree has "deposit-close"
+  expect tree missing "opening"
+  tap "deposit-close"
+  clock settle
+  expect tree has "add-money"
+
+test "a warm deep link moves the running app"
+  epoch "2026-11-17T16:30:00Z"
+  time-zone "America/Los_Angeles"
+  size 390x844
+  clock data
+  expect text "balance-checking" == "$6,286.42"
+  type "app" "/open?u=web%2Blumen%3A%2F%2Fcards"
+  clock data
+  clock settle
+  expect tree has "bank-card"
+  expect tree missing "opening"

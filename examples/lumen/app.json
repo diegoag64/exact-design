@@ -1,0 +1,28 @@
+{
+  "name": "Lumen",
+  "app": {
+    "id": "dev.exactdesign.lumen",
+    "name": "Lumen"
+  },
+  "protocol_handlers": [
+    {
+      "protocol": "web+lumen",
+      "url": "/open?u=%s"
+    }
+  ],
+  "host": {
+    "web": {},
+    "ios": {
+      "minimumOS": "17.0",
+      "deviceFamily": [
+        "iphone",
+        "ipad"
+      ]
+    }
+  },
+  "deploy": {
+    "store": {
+      "ios": "0"
+    }
+  }
+}
