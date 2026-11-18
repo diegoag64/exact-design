@@ -1,0 +1,28 @@
+forma tide
+
+theme
+  AccentColor = light-dark(#006a65, #227d72)
+  page = light-dark(#f0f5f3, #0b1719)
+  paper = light-dark(#ffffffda, #18282adc)
+  edge = light-dark(#d5e2dc, #304547)
+  ink = light-dark(#132e31, #eef9f5)
+  muted = light-dark(#526b6c, #a8bdbd)
+  tint = light-dark(#d6ede5, #203e3c)
+  sea = light-dark(#006960, #91e4c9)
+  copper = light-dark(#9c542f, #eeae87)
+  deep = #0d343c  scheme=fixed
+  foam = #d7f8e5  scheme=fixed
+  surf = #7bd4be  scheme=fixed
+  glaze = #ffffff16  scheme=fixed
+  glint = #dbffed55  scheme=fixed
+
+icons
+  icon.home = icon(sf "water.waves", svg "icons/house.svg")
+  icon.activity = icon(sf "arrow.left.arrow.right", svg "icons/arrow-right.svg")
+  icon.spending = icon(sf "chart.bar.fill", svg "icons/chart-bar.svg")
+  icon.savings = icon(sf "target", svg "icons/target.svg")
+  icon.coffee = icon(sf "cup.and.saucer.fill", svg "icons/coffee.svg")
+  icon.market = icon(sf "leaf.fill", svg "icons/leaf.svg")
+  icon.pay = icon(sf "arrow.down.left", svg "icons/trend-down.svg")
+  icon.rail = icon(sf "tram.fill", svg "icons/lightning.svg")
+  icon.trip = icon(sf "mountain.2.fill", svg "icons/mountains.svg")

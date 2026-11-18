@@ -1,0 +1,175 @@
+routes nav
+  tab overview "/"
+    opening "/open"
+  tab activity "/activity"
+  tab spending "/spending"
+  tab savings "/savings"
+
+shape Viewport
+  width: number
+
+fn folded(rest: string): string = rest.startsWith("///") ? rest.slice(2) : rest.startsWith("//") ? `/${rest.slice(2)}` : rest.startsWith("/") ? rest : `/${rest}`
+fn linkPath(u: string): string = u.startsWith("web+tide:") ? folded(u.slice(9)) : "/"
+
+style Panel
+  background-color="paper"
+  border="1px solid edge"
+  border-radius=24
+  padding=20
+  gap=16
+  min-width=0
+
+style Label
+  font-size="0.8125rem"
+  color="muted"
+  font-weight=550
+
+style Title
+  font-size="1.25rem"
+  font-weight=680
+  letter-spacing="-0.5px"
+
+style Glass
+  background-color="glaze"
+  backdrop-filter="blur(16px) saturate(1.6)"
+  border="1px solid glint"
+  border-radius=20
+  padding="6px 12px"
+
+component App
+  resource viewport = exactViewport() as shape Viewport
+  derive wide = viewport.width >= 780
+  state filter = "All"
+  action setFilter(value: string)
+    filter = value
+  action pick(tab: string)
+    nav = select(nav, tab)
+  action follow(url: string)
+    nav = go(nav, url)
+  action back
+    nav = back(nav)
+  task deepLink when top(nav).name == "opening"
+    after(1, followLink)
+  action followLink
+    nav = open(back(nav), linkPath(searchParam(top(nav), "u")))
+  view
+    main navigationKey=`${top(nav).id}` navigationBack="back" navigate=follow width="100%" height="100%" display="flex" flex-direction="column" background-color="page" color="ink" font-family="system-ui"
+      column flex=1 min-height=0 position="relative"
+        for t in nav.tabs key=t.name
+          column role="tabpanel" id=`panel-${t.name}` position="absolute" inset=0
+            for e in t.stack key=e.id
+              column navigationKey=`${e.id}` navigationScroll=`scroll-${e.id}` navigationBar="none" position="absolute" inset=0 background-color="page"
+                scroll id=`scroll-${e.id}` flex=1 min-height=0
+                  column width="100%" max-width="67.5rem" margin="0 auto" box-sizing="border-box" padding=(wide ? "44px 36px 72px" : "22px 16px 112px") gap=20
+                    row justify-content="space-between" align-items="center"
+                      row gap=7 align-items="center"
+                        svg width=27 height=22 viewBox="0 0 27 22" aria-hidden=true
+                          path d="M1 12 Q7 1 14 8 T26 4 M1 18 Q7 7 14 14 T26 10" stroke="sea" stroke-width=3 fill="none"
+                        text "Tide" font-size="1.125rem" font-weight=750
+                      text "November 2026" class=Label
+                    h1 (e.name == "activity" ? "Activity" : e.name == "spending" ? "Spending" : e.name == "savings" ? "Savings" : "Overview") font-size=(wide ? "3rem" : "min(-exact-large-title, 55px)") letter-spacing="-1.5px" margin=0 testId="heading"
+                    if e.name == "overview"
+                      Hero(label="Total cash balance", value="$24,860.40", detail="+$1,420.00 this month")
+                      column flex-direction=(wide ? "row" : "column") gap=16
+                        column class=Panel flex=1
+                          text "Accounts" class=Title
+                          Item(icon="home", name="Everyday", detail="Checking · 4018", amount="$6,360.40")
+                          Item(icon="savings", name="Reserve", detail="Savings · 9024", amount="$18,500.00")
+                        column class=Panel flex=1
+                          row flex-wrap="wrap" align-items="center" justify-content="space-between"
+                            text "Recent activity" class=Title
+                            button "View all" press=pick("activity") testId="view-all"
+                          Ledger(filter="All", recent=true)
+                    else if e.name == "activity"
+                      row gap=8 flex-wrap="wrap"
+                        for f in ["All", "Income", "Expenses"] key=f
+                          button f press=setFilter(f) aria-pressed=(filter == f) buttonStyle=(filter == f ? "filled" : "bordered") testId=`filter-${f}`
+                      column class=Panel
+                        text "Nov 14–17" class=Title
+                        Ledger(filter=filter, recent=false)
+                    else if e.name == "spending"
+                      Hero(label="November spending", value="$1,780.00", detail="$720.00 left in your budget")
+                      column class=Panel
+                        text "Budget by category" class=Title
+                        Meter(name="Housing", detail="$1,200 of $1,400", fraction="86%", tint="sea")
+                        Meter(name="Food & dining", detail="$380 of $700", fraction="54%", tint="copper")
+                        Meter(name="Transport", detail="$200 of $400", fraction="50%", tint="muted")
+                    else if e.name == "savings"
+                      Hero(label="Set aside in Reserve", value="$18,500.00", detail="Across 3 savings goals")
+                      column class=Panel
+                        text "Your goals" class=Title
+                        Meter(name="Safety net", detail="$12,000 of $15,000", fraction="80%", tint="sea")
+                        Meter(name="Japan trip", detail="$4,500 of $6,000", fraction="75%", tint="copper")
+                        Meter(name="New studio", detail="$2,000 of $8,000", fraction="25%", tint="muted")
+      row role="tablist"
+        button role="tab" aria-controls="panel-overview" aria-selected=(nav.tab == "overview") press=pick("overview") testId="tab-overview" flex=1
+          image "symbol:icon.home"
+          text "Overview"
+        button role="tab" aria-controls="panel-activity" aria-selected=(nav.tab == "activity") press=pick("activity") testId="tab-activity" flex=1
+          image "symbol:icon.activity"
+          text "Activity"
+        button role="tab" aria-controls="panel-spending" aria-selected=(nav.tab == "spending") press=pick("spending") testId="tab-spending" flex=1
+          image "symbol:icon.spending"
+          text "Spending"
+        button role="tab" aria-controls="panel-savings" aria-selected=(nav.tab == "savings") press=pick("savings") testId="tab-savings" flex=1
+          image "symbol:icon.savings"
+          text "Savings"
+
+component Hero
+  props
+    label: string
+    value: string
+    detail: string
+  view
+    column background-color="deep" color="foam" position="relative" overflow="hidden" border-radius=28 background-image="radial-gradient(80% 130% at 100% 100%, #417e80 0%, transparent 90%)"
+      svg position="absolute" right=-30 bottom=-16 width="74%" height=156 viewBox="0 0 400 180" preserveAspectRatio="none" aria-hidden=true
+        for n in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] key=n
+          path d="M-15 164 C55 190 80 152 117 113 S177 39 224 66 S301 139 341 76 S395 -5 424 11" transform=`translate(0 ${n * 4 - 28})` stroke="surf" opacity=0.55 stroke-width=1 fill="none"
+      column position="relative" padding=24 gap=6 align-items="flex-start"
+        text label font-size="0.9375rem" font-weight=550
+        text value font-size="min(-exact-large-title, 52px)" font-weight=600 letter-spacing="-2px" testId="hero-value"
+        row class=Glass margin-top=34
+          text detail font-size="0.8125rem" font-weight=600
+
+component Item
+  props
+    icon: string
+    name: string
+    detail: string
+    amount: string
+  view
+    row flex-wrap="wrap" align-items="center" gap=10 min-height=44
+      column width=38 height=38 border-radius=13 flex-shrink=0 align-items="center" justify-content="center" background-color="tint" color="sea"
+        image `symbol:icon.${icon}` width=20 height=20 aria-hidden=true
+      column flex=1 flex-basis="7rem" min-width=0 gap=3
+        text name font-size="0.9375rem" font-weight=620
+        text detail class=Label
+      text amount font-size="0.9375rem" font-weight=650 color=(amount.startsWith("+") ? "sea" : "ink")
+
+component Ledger
+  props
+    filter: string
+    recent: bool
+  view
+    column gap=16
+      if filter != "Income"
+        Item(icon="coffee", name="Café Morrow", detail="Nov 17 · Dining", amount="−$6.80")
+      if filter != "Expenses"
+        Item(icon="pay", name="North Studio", detail="Nov 16 · Payroll", amount="+$3,200.00")
+      if not recent and filter != "Income"
+        Item(icon="market", name="Union Market", detail="Nov 15 · Groceries", amount="−$48.60")
+        Item(icon="rail", name="Metro Transit", detail="Nov 14 · Transport", amount="−$22.00")
+
+component Meter
+  props
+    name: string
+    detail: string
+    fraction: string
+    tint: string
+  view
+    column gap=9 padding="4px 0"
+      row gap=8 align-items="center" flex-wrap="wrap" justify-content="space-between"
+        text name font-weight=620
+        text detail class=Label
+      column height=8 border-radius=4 background-color="tint" overflow="hidden"
+        column width=fraction height=8 border-radius=4 background-color=tint

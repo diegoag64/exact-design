@@ -1,0 +1,28 @@
+{
+  "name": "Tide",
+  "app": {
+    "id": "dev.exactdesign.tide",
+    "name": "Tide"
+  },
+  "protocol_handlers": [
+    {
+      "protocol": "web+tide",
+      "url": "/open?u=%s"
+    }
+  ],
+  "host": {
+    "web": {},
+    "ios": {
+      "minimumOS": "17.0",
+      "deviceFamily": [
+        "iphone",
+        "ipad"
+      ]
+    }
+  },
+  "deploy": {
+    "store": {
+      "ios": "0"
+    }
+  }
+}

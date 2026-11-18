@@ -1,0 +1,11 @@
+test "review balances, filter activity and open monthly totals"
+  size 390x844
+  clock data
+  expect text "hero-value" == "$24,860.40"
+  tap "view-all"
+  tap "filter-Income"
+  expect state filter == "Income"
+  tap "tab-spending"
+  expect text "hero-value" == "$1,780.00"
+  tap "tab-savings"
+  expect text "hero-value" == "$18,500.00"
