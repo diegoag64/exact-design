@@ -2,6 +2,8 @@
 
 Lumen is a personal finance app built with Exact: net worth, accounts, payments, cards, budgets and savings goals. The same app runs on iOS, macOS and the web. Phones get a single column and a bottom tab bar. Wide windows get a dashboard with the tabs in a sidebar.
 
+> **Experimental.** Lumen is a superficial demo, mainly for benchmarking performance changes in Exact and the studio. Its data is sample data, and it isn't a supported or production-ready app. For the reference example, see [Ember](../ember/README.md).
+
 ## Run it
 
 From the repository root:
