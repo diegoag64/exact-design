@@ -82,4 +82,4 @@ bun tools/demo.mjs --app lumen test web
 bun tools/demo.mjs --app lumen verify --shots .exact/shots
 ```
 
-`verify` finds nothing at normal text sizes in light and dark, at phone and desktop widths. At the largest accessibility text size, layouts still overflow and need a dedicated pass, as in Ember.
+The latest web audit found no layout problems at normal text sizes in light and dark, at phone and desktop widths. It reported 268 layout findings at the largest accessibility text size, four fixed-width text warnings, and one relaunch storage finding after reset. Accessibility-tree coverage was incomplete for the cold deep-link test. These findings remain unresolved.

@@ -35,7 +35,7 @@ bun run demo
 
 Open the setup link printed in the terminal to add Ember's screens at phone, tablet, and desktop sizes.
 
-For a second example, `bun run demo:lumen` starts Lumen, a personal finance app, on port 5176 and prints its setup link.
+`bun run demo:lumen` starts Lumen, a personal finance app, on port 5177 and prints its setup link.
 
 Select a viewport, click **Edit app**, and change a property. Click **Review** to inspect the draft, then **Apply changes** to write it to source.
 
