@@ -4,7 +4,7 @@
 
 - For setup, commands, test ports, or source ownership, read [docs/development.md](docs/development.md).
 - Before changing studio controls, theme tokens, icons, or canvas interactions, read [docs/studio-design-system.md](docs/studio-design-system.md).
-- For user workflows, read [docs/use-the-studio.md](docs/use-the-studio.md). For Ember changes, also read [examples/ember/README.md](examples/ember/README.md).
+- For user workflows, read [docs/use-the-studio.md](docs/use-the-studio.md). For Ember changes, also read [examples/ember/README.md](examples/ember/README.md). For Waymark changes, read [examples/waymark/README.md](examples/waymark/README.md).
 - Before writing Exact Contract, read `.exact-sdk/docs/start-here.md`. Run SDK lookup commands from the app directory, such as `bun exact.mjs contract vocab <name>`.
 
 ## Preserve repository boundaries
@@ -26,6 +26,7 @@ Use the root package scripts to select checks for the changed behavior:
 - Browser input, preview, or app-editing changes: `bun run test:preview`.
 - Studio UI or layout changes: `bun run verify` and `bun run build`.
 - Ember behavior changes: `bun tools/demo.mjs test web`.
+- Waymark behavior changes: `bun tools/demo.mjs --app waymark test web`.
 - Documentation-only changes: check local links, command names, and `git diff --check`.
 
 `test:ui` and `verify` run in temporary copies with private ports. Preserve the user's running studio and demo. See `docs/development.md` for verification artifacts and socket-permission failures.

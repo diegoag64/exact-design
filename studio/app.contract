@@ -728,8 +728,10 @@ component Studio
     addingViewport = false
     startTidy()
     command("variants", name)
+  // `layout=collage` in the studio's address packs screens into columns when tidying, for a workspace that fits one view.
+  derive collage = searchParam(top(nav), "layout") == "collage"
   action tidyUp
-    command("arrange", "")
+    command("arrange", (collage ? "collage" : ""))
   state projectName = ""
   state projectUrl = ""
   state projectNameChanged = false
@@ -832,7 +834,7 @@ component Studio
     after(20000, finishTidy)
   action tidyLoadedScreens
     tidySignature = previews.signature
-    command("arrange", "settle")
+    command("arrange", (collage ? "collage-settle" : "settle"))
   task autoTidy when tidyWhenReady and previews.ready and previews.signature != tidySignature and previews.requests == doc.previewRequests and not pending(doc) and not pending(renderedScene) and not pending(libraryChanged) and not pending(changed)
     after(400, tidyLoadedScreens)
   action refitAfterTidy

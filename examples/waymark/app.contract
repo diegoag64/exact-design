@@ -1,0 +1,607 @@
+// Waymark: the companion app for an adventure game, The Chronicles of Aldermere. A home grid
+// opens each feature as a route of its own: the realm map, quests and their rewards, the day's
+// record, the player's badges and the worldwide tallies. The pictures live in assets/art.
+routes nav
+  home "/"
+    map "/map"
+    quests "/quests"
+    rewards "/rewards"
+    trophyHall "/trophy-hall"
+    record "/record"
+    recordData "/record/data"
+    myPlayData "/me"
+      editName "/me/name"
+    globalPlayData "/global"
+    feature "/feature"
+
+shape Viewport
+  width: number
+  prefersReducedMotion: bool
+
+shape Time
+  epochAtZero: number
+  utcOffset: number
+
+shape Tile
+  id: string
+  title: string
+  href: string
+  dot: bool
+
+shape Quest
+  id: string
+  title: string
+  hint: string
+  points: number
+  art: string
+  done: bool
+
+shape Reward
+  id: string
+  title: string
+  cost: number
+  owned: bool
+
+shape Badge
+  id: string
+  title: string
+  tier: string
+  progress: number
+  detail: string
+  art: string
+
+shape StatRow
+  label: string
+  value: string
+
+shape Stat
+  id: string
+  group: string
+  title: string
+  value: string
+  known: string
+  art: string
+  rows: StatRow[]
+
+shape Place
+  id: string
+  name: string
+  x: number
+  y: number
+  kind: string
+  marked: bool
+
+shape Region
+  name: string
+  fraction: number
+
+shape Capture
+  id: string
+  time: string
+  place: string
+  art: string
+
+shape Board
+  game: string
+  hero: string
+  day: string
+  points: number
+  goal: number
+  banked: number
+  completion: number
+  tiles: Tile[]
+  quests: Quest[]
+  rewards: Reward[]
+  badges: Badge[]
+  stats: Stat[]
+  places: Place[]
+  regions: Region[]
+  captures: Capture[]
+  facts: StatRow[]
+
+shape Reply
+  ok: bool
+  error: string
+
+font "Almendra"
+  700 = "assets/fonts/Almendra-Bold.ttf"
+
+keyframes rise
+  from opacity=0 translate="0px 14px"
+
+keyframes glow
+  from opacity=0.55
+  to opacity=1
+
+// The look, named once so the design editor shows each as a shared style.
+style Num
+  font-family="Almendra, 'Times New Roman', serif"
+  font-weight=700
+  line-height=1.4
+
+style Title
+  font-size="2.125rem"
+  font-weight=800
+  letter-spacing="-0.5px"
+  line-height=1.4
+  text-shadow="0 2px 3px wood-edge"
+
+style Label
+  font-size="1.0625rem"
+  font-weight=700
+  text-shadow="0 1px 3px bar"
+
+style IconButton
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  width=44
+  height=44
+  padding=0
+  border-width=0
+  background-color="transparent"
+  color="ink"
+  font-size="1.625rem"
+
+style Panel
+  display="flex"
+  flex-direction="column"
+  position="relative"
+  box-sizing="border-box"
+  overflow="hidden"
+  border-radius=6
+  background-color="card"
+  border="2px solid card-edge"
+  box-shadow="0 0 0 2px card-shade, 0 10px 24px -10px bar"
+
+style Well
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  height=48
+  padding=0
+  border-radius=2
+  background-color="well"
+  border="1.5px solid well-edge"
+  color="ink"
+
+style BottomBar
+  display="flex"
+  flex-direction="column"
+  position="relative"
+  box-sizing="border-box"
+  align-items="center"
+  padding="18px 20px 22px"
+  background-color="bar"
+  border-top="2px solid card-shade"
+  box-shadow="0 -12px 24px -8px bar"
+
+style Frame
+  display="flex"
+  position="relative"
+  width="100%"
+  aspect-ratio="1 / 1"
+  overflow="hidden"
+  box-shadow="0 8px 18px -8px bar"
+
+fn frac(part: number, whole: number): number = whole <= 0 ? 0 : max(0, min(1, part / whole))
+fn pct(part: number, whole: number): string = `${round(frac(part, whole) * 100)}%`
+fn featureTitle(id: string): string = id == "sketch" ? "Sketchbook" : id == "loom" ? "Loom of Days" : id == "charms" ? "Charms" : id == "flute" ? "Play the Reed Flute" : id == "quiz" ? "Aldermere Lore Quiz" : "Coming Soon"
+fn pts(n: number): string = `${n} ${n == 1 ? "point" : "points"}`
+fn filterLabel(f: string): string = f == "vaults" ? "Vaults only" : f == "places" ? "Places only" : "Everything"
+
+component App
+  resource viewport = exactViewport() as shape Viewport
+  resource time = exactTime() as shape Time
+  derive today = formatDate(time.epochAtZero, time.utcOffset, "iso")
+  resource board = loadBoard(today) as shape Board else empty()
+  mutation marked as shape Reply queue refreshes board
+  mutation redeemed as shape Reply queue refreshes board
+  mutation renamed as shape Reply queue refreshes board then afterRename
+  mutation cleared as shape Reply queue refreshes board
+  state sortByPoints = false
+  state open = []
+  state mapFilter = "all"
+  state progressOpen = false
+  state draftName = ""
+  derive w = viewport.width
+  derive still = viewport.prefersReducedMotion
+  derive cols = w >= 900 ? 5 : w >= 600 ? 4 : 3
+  derive questCols = w >= 900 ? 4 : w >= 600 ? 3 : 2
+  derive mapWidth = max(w, 760)
+  derive done = board.quests.filter(q => q.done).length
+  derive redeemError = match redeemed { case some(r) => r.error, case none => "" }
+  derive markError = match marked { case some(r) => r.error, case none => "" }
+  derive renameError = match renamed { case some(r) => r.error, case none => "" }
+  action follow(url: string)
+    nav = go(nav, url)
+  action back
+    nav = back(nav)
+  action swap(url: string)
+    nav = replace(nav, url)
+  action toggleSort
+    sortByPoints = not sortByPoints
+  action toggleQuest(id: string)
+    send marked = toggleQuest(id)
+  action redeem(id: string)
+    send redeemed = redeem(id)
+  action expand(id: string)
+    open = open.includes(id) ? open.filter(o => o != id) : open.concat([id])
+  action cycleFilter
+    mapFilter = mapFilter == "all" ? "places" : mapFilter == "places" ? "vaults" : "all"
+  action toggleProgress
+    progressOpen = not progressOpen
+  action beginRename
+    draftName = board.hero
+    nav = go(nav, path("editName"))
+  action editName(v: string)
+    draftName = v
+  action saveName
+    send renamed = rename(draftName)
+  action afterRename
+    if renameError == ""
+      nav = back(nav)
+  action reset
+    send cleared = resetDemo()
+  view
+    main navigationKey=`${top(nav).id}` navigationBack="back" navigate=follow width="100%" height="100%" display="flex" flex-direction="column" background-color="page" color="ink" font-family="system-ui" testId="app"
+      for e in stack(nav) key=e.id
+        if e.name == "home"
+          column navigationKey=`${e.id}` navigationScroll=`content-${e.id}` navigationBar="none" position="absolute" inset=0 background-color="page" overflow="hidden"
+            image "assets/art/forest.webp" alt="" aria-hidden=true position="absolute" left=0 top=0 width="100%" height="100%" object-fit="cover"
+            scroll id=`content-${e.id}` flex=1 min-height=0 position="relative"
+              Home(b=board, cols=(w >= 900 ? 6 : w >= 600 ? 4 : 3), still=still)
+              dialog id="reset-demo" role="alertdialog" aria-label="Reset demo data?"
+                text "Quests, rewards and the hero's name return to a fresh journey."
+                button press=reset destructive=true commandfor="reset-demo" command="close" testId="confirm-reset"
+                  text "Reset"
+                button commandfor="reset-demo" command="close"
+                  text "Cancel"
+        if e.name == "map"
+          column navigationKey=`${e.id}` navigationScroll=`content-${e.id}` navigationBar="none" position="absolute" inset=0 background-color="fog" overflow="hidden"
+            scroll id=`content-${e.id}` flex=1 min-height=0 overflow-x="auto" testId="map-scroll"
+              column width=mapWidth padding-bottom=84 background-color="fog"
+                RealmMap(places=board.places, filter=mapFilter, width=mapWidth)
+            row position="absolute" left=0 right=0 top=0 align-items="center" gap=6 padding="10px 12px 34px" background-image="linear-gradient(180deg, var(--fog) 0%, var(--fog) 35%, transparent 100%)" color="map-ink"
+              button id="back" press=back class=IconButton color="map-ink" aria-label="Home" testId="map-home"
+                image "symbol:home-fill"
+              text "Map" role="heading" aria-level=1 flex=1 font-size="1.5rem" font-weight=800
+              button press=cycleFilter class=IconButton width=56 height=56 border-radius=28 background-color="pill" border="2px solid pill-edge" color="ink" font-size="1.375rem" box-shadow="0 6px 14px -6px bar" aria-label=`Show: ${filterLabel(mapFilter)}` testId="map-filter"
+                image "symbol:filter"
+            if mapFilter != "all"
+              text filterLabel(mapFilter) position="absolute" right=16 top=82 padding="4px 10px" border-radius=12 background-color="pill" color="ink" font-size="0.8125rem" font-weight=700 testId="map-filter-label"
+            column position="absolute" left=0 right=0 bottom=0 align-items="center" gap=10 padding="40px 20px 26px" background-image="linear-gradient(0deg, var(--fog) 0%, transparent 100%)" pointer-events="none"
+              if progressOpen
+                column width="100%" max-width="22.5rem" box-sizing="border-box" padding="14px 18px" gap=10 border-radius=18 background-color="pill" border="2px solid pill-edge" pointer-events="auto" animation=(still ? "none" : "rise 260ms ease-out both") testId="map-regions"
+                  for r in board.regions key=r.name
+                    Meter(label=r.name, value=`${round(r.fraction * 100)}%`, fraction=r.fraction)
+              button press=toggleProgress appearance="none" display="flex" align-items="center" justify-content="center" gap=12 height=56 padding="0 28px" border-radius=28 background-color="pill" border="2px solid pill-edge" color="ink" font-size="1.125rem" font-weight=800 box-shadow="0 8px 18px -8px bar" pointer-events="auto" aria-expanded=progressOpen testId="map-progress"
+                Chevron(up=(not progressOpen))
+                text `Completion Progress ${board.completion}%`
+        if e.name == "quests" or e.name == "rewards"
+          column navigationKey=`${e.id}` navigationScroll=`content-${e.id}` navigationBar="none" position="absolute" inset=0 background-color="page" overflow="hidden"
+            Backdrop()
+            Banner(game=board.game, title="Whisper Quests", tabs=true)
+              button id="back" press=back class=IconButton aria-label="Home" testId="quests-home"
+                image "symbol:home-fill"
+            Tabs(first="Quests", second="Rewards", onFirst=(e.name == "quests"), pickFirst=swap(path("quests")), pickSecond=swap(path("rewards")))
+            scroll id=`content-${e.id}` flex=1 min-height=0 position="relative"
+              if e.name == "quests"
+                QuestList(quests=(sortByPoints ? sortBy(board.quests, q => q.points, "desc") : board.quests), done=done, cols=questCols, sorted=sortByPoints, toggleSort=toggleSort, toggle=toggleQuest)
+              else
+                RewardGrid(rewards=board.rewards, cols=cols, redeem=redeem)
+            column class=BottomBar
+              column width="100%" max-width="43rem" gap=12
+                if (e.name == "rewards" ? redeemError : markError) != ""
+                  text (e.name == "rewards" ? redeemError : markError) role="alert" color="sun" font-size="0.875rem" font-weight=600 testId="points-error"
+                row align-items="baseline" gap=8
+                  text "Whisper Points" flex=1 class=Label color="ink-2"
+                  text `${board.points}` class=Num font-size="2.25rem" testId="points"
+                  text "P" class=Num font-size="1.25rem"
+                column position="relative" height=30 justify-content="center" border-radius=2 background-color="pill" border="1.5px solid pill-edge" overflow="hidden"
+                  column position="absolute" left=0 top=0 bottom=0 width=pct(board.points, board.goal) background-color="sun-2" opacity=0.55
+                  row position="relative" align-items="baseline" padding="0 10px" gap=4
+                    text "Reward Redemption" flex=1 font-size="0.9375rem" font-weight=600
+                    text `${board.goal}` class=Num font-size="1.25rem" color="sun"
+                    text "P" class=Num font-size="0.875rem" color="sun"
+        if e.name == "trophyHall" or e.name == "feature"
+          column navigationKey=`${e.id}` navigationBar="none" position="absolute" inset=0 background-color="page" overflow="hidden"
+            Backdrop()
+            Banner(game=board.game, title=(e.name == "trophyHall" ? "Trophy Hall" : featureTitle(searchParam(e, "id"))), tabs=false)
+              button id="back" press=back class=IconButton aria-label="Home" testId="feature-home"
+                image "symbol:home-fill"
+            column position="relative" flex=1 align-items="center" padding="72px 28px" gap=10
+              text "This feature is currently unavailable." class=Label text-align="center" testId="unavailable"
+              text "It opens once your journey reaches it." color="ink-2" font-size="0.9375rem" text-align="center"
+        if e.name == "record" or e.name == "recordData"
+          column navigationKey=`${e.id}` navigationScroll=`content-${e.id}` navigationBar="none" position="absolute" inset=0 background-color="page" overflow="hidden"
+            Banner(game=board.game, title="Today's Record", tabs=true)
+              button id="back" press=back class=IconButton aria-label="Home" testId="record-home"
+                image "symbol:home-fill"
+            Tabs(first="Timeline", second="Data", onFirst=(e.name == "record"), pickFirst=swap(path("record")), pickSecond=swap(path("recordData")))
+            scroll id=`content-${e.id}` flex=1 min-height=0 position="relative"
+              column width="100%" max-width="45rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="34px 16px 40px" gap=24
+                text `Records for ${board.day}` role="heading" aria-level=2 font-size="1.5rem" font-weight=800 testId="record-day"
+                if e.name == "record"
+                  Timeline(captures=board.captures)
+                else
+                  column class=Panel padding="6px 18px" testId="record-facts"
+                    for f, i in board.facts key=f.label
+                      row align-items="baseline" gap=12 padding="14px 0" border-top=(i == 0 ? "none" : "1px solid card-edge")
+                        text f.label flex=1 font-size="1rem" font-weight=600
+                        text f.value class=Num font-size="1.25rem"
+        if e.name == "myPlayData"
+          column navigationKey=`${e.id}` navigationScroll=`content-${e.id}` navigationBar="none" position="absolute" inset=0 background-color="page" overflow="hidden"
+            Backdrop()
+            Banner(game=board.game, title="My Play Data", tabs=false)
+              button id="back" press=back class=IconButton aria-label="Home" testId="me-home"
+                image "symbol:home-fill"
+            scroll id=`content-${e.id}` flex=1 min-height=0 position="relative"
+              Journey(b=board, cols=cols, rename=beginRename)
+            column class=BottomBar
+              row width="100%" max-width="43rem" align-items="center" gap=10
+                text "Gleams Banked" flex=1 class=Label color="ink-2"
+                image "assets/art/gem.webp" alt="" aria-hidden=true width=21 height=28
+                text `${board.banked}` class=Num font-size="2rem" testId="banked"
+        if e.name == "editName"
+          column navigationKey=`${e.id}` navigationPresentation="modal" navigationDetent="medium" position="absolute" inset=0 background-color="page"
+            header
+              button id="back" press=back aria-label="Cancel" testId="name-cancel"
+                image "symbol:close"
+              text "Hero's Name" role="heading" aria-level=1
+              button press=saveName buttonStyle="bordered-prominent" disabled=(draftName.trim() == "" or pending(renamed)) aria-label="Save" testId="name-save"
+                image "symbol:checkmark"
+            column padding=20 gap=10
+              input value=draftName input=editName submit=saveName maxlength=16 placeholder="Name" aria-label="Hero's name" autofocus=true testId="name-field"
+              if renameError != "" and not pending(renamed)
+                text renameError role="alert" color="sun" font-size="0.875rem" testId="name-error"
+              text "Shown on your profile and beside your records." color="ink-3" font-size="0.875rem"
+        if e.name == "globalPlayData"
+          column navigationKey=`${e.id}` navigationScroll=`content-${e.id}` navigationBar="none" position="absolute" inset=0 background-color="page" overflow="hidden"
+            Backdrop()
+            Banner(game=board.game, title="Global Play Data", tabs=false)
+              button id="back" press=back class=IconButton aria-label="Home" testId="global-home"
+                image "symbol:home-fill"
+            scroll id=`content-${e.id}` flex=1 min-height=0 position="relative"
+              column width="100%" max-width="45rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="44px 16px 48px" gap=22
+                for s, i in board.stats key=s.id
+                  if i == 0 or match board.stats.at(i - 1) { case some(p) => p.group != s.group, case none => true }
+                    row align-items="center" gap=8 padding-top=(i == 0 ? 0 : 10)
+                      image "assets/art/flourish.webp" alt="" aria-hidden=true width=24 height=12
+                      text s.group role="heading" aria-level=2 font-size="1.25rem" font-weight=800
+                  StatCard(s=s, open=open.includes(s.id), expand=expand)
+
+// The blurred forest behind every inner screen.
+component Backdrop
+  view
+    image "assets/art/forest-dim.webp" alt="" aria-hidden=true position="absolute" left=0 top=0 width="100%" height="100%" object-fit="cover"
+
+// The carved wood header: the game's name over the screen's title, with a torn lower edge.
+component Banner
+  props
+    game: string
+    title: string
+    tabs: bool
+  slot
+  view
+    column position="relative" z-index=2 flex-shrink=0
+      image "assets/art/wood.webp" alt="" aria-hidden=true position="absolute" left=0 top=0 width="100%" height="100%" object-fit="cover"
+      column position="relative" width="100%" max-width="45rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding=(tabs ? "8px 16px 16px" : "8px 16px 20px") gap=4
+        row align-items="center" margin-left=-10 height=48
+          children
+        text game font-size="0.8125rem" color="ink-2"
+        row align-items="center" gap=10
+          text title role="heading" aria-level=1 class=Title testId="title"
+          text "?" aria-hidden=true width="1.375rem" height="1.375rem" box-sizing="border-box" border-radius="0.6875rem" border="1.5px solid ink" color="ink" font-size="0.875rem" font-weight=700 line-height="1.2rem" text-align="center"
+      if not tabs
+        image "assets/art/header-edge.webp" alt="" aria-hidden=true position="absolute" left=0 bottom=-20 width="100%" height=22
+        image "assets/art/header-curl.webp" alt="" aria-hidden=true position="absolute" right=-8 bottom=-34 width=118 height=65
+
+component Tabs
+  props
+    first: string
+    second: string
+    onFirst: bool
+    pickFirst: action
+    pickSecond: action
+  view
+    column position="relative" z-index=2 flex-shrink=0 background-color="tab" box-shadow="0 8px 16px -6px bar"
+      row role="tablist" width="100%" max-width="45rem" margin-left="auto" margin-right="auto"
+        Tab(label=first, on=onFirst, pick=pickFirst, id="first")
+        Tab(label=second, on=(not onFirst), pick=pickSecond, id="second")
+      image "assets/art/header-edge.webp" alt="" aria-hidden=true position="absolute" left=0 bottom=-18 width="100%" height=20 opacity=0.9
+
+component Tab
+  props
+    label: string
+    on: bool
+    pick: action
+    id: string
+  view
+    button role="tab" aria-selected=on press=pick appearance="none" flex="1 1 0" min-width=0 display="flex" align-items="center" justify-content="center" gap=12 height=58 padding=0 border-width=0 background-color=(on ? "tab-on" : "transparent") color=(on ? "ink" : "ink-2") font-size="1.0625rem" font-weight=800 text-shadow="0 1px 2px wood-edge" testId=`tab-${id}`
+      if on
+        image "assets/art/flourish-dim.webp" alt="" aria-hidden=true width=30 height=15
+      text label
+      if on
+        image "assets/art/flourish-dim.webp" alt="" aria-hidden=true width=30 height=15 scale=-1
+
+component Chevron
+  props
+    up: bool
+  view
+    svg width=20 height=12 viewBox="0 0 20 12" aria-hidden=true
+      path d=(up ? "M2 10 L10 2 L18 10" : "M2 2 L10 10 L18 2") fill="none" stroke="currentColor" stroke-width=3 stroke-linecap="round" stroke-linejoin="round"
+
+component Meter
+  props
+    label: string
+    value: string
+    fraction: number
+  view
+    column gap=6
+      row align-items="baseline" gap=8
+        text label flex=1 font-size="0.9375rem" font-weight=700
+        text value class=Num font-size="1rem"
+      column height=6 border-radius=3 background-color="track" overflow="hidden"
+        column height="100%" width=`${round(fraction * 100)}%` background-color="sun"
+
+component Home
+  props
+    b: Board
+    cols: number
+    still: bool
+  view
+    column width="100%" max-width=(cols == 3 ? "30rem" : cols == 4 ? "40rem" : "60rem") box-sizing="border-box" margin-left="auto" margin-right="auto" padding="6px 10px 40px" testId="home"
+      row align-items="center" padding="0 6px" height=52
+        row flex=1 align-items="center" gap=10 color="ink"
+          svg width=22 height=22 viewBox="0 0 22 22" aria-hidden=true
+            rect x=0 y=0 width=9 height=9 fill="currentColor"
+            rect x=13 y=0 width=9 height=9 fill="currentColor"
+            rect x=0 y=13 width=9 height=9 fill="currentColor"
+            rect x=13 y=13 width=9 height=9 fill="currentColor"
+          text "Titles" class=Label
+        button commandfor="reset-demo" command="show-modal" class=IconButton aria-label="More" testId="more"
+          image "symbol:ellipsis"
+      image "assets/art/logo.webp" alt=b.game width="100%" max-width=330 aspect-ratio="720 / 400" align-self="center" margin-bottom=14 animation=(still ? "none" : "rise 700ms ease-out both")
+      row flex-wrap="wrap" row-gap=22
+        for t in b.tiles key=t.id
+          link href=t.href display="flex" flex-direction="column" align-items="center" gap=8 box-sizing="border-box" width=`${100 / cols}%` padding="0 8px" color="ink" text-decoration="none" testId=`tile-${t.id}`
+            column position="relative" width="100%" max-width=124 aspect-ratio="1 / 1"
+              image `assets/art/tile-${t.id}.webp` alt="" aria-hidden=true width="100%" height="100%"
+              if t.dot
+                column position="absolute" right=-4 top=-4 width=24 height=24 box-sizing="border-box" border-radius=12 background-color="sun" border="3px solid wood-edge" animation=(still ? "none" : "glow 1.6s ease-in-out infinite alternate") aria-hidden=true
+            text t.title class=Label text-align="center" line-height=1.2
+
+component RealmMap
+  props
+    places: Place[]
+    filter: string
+    width: number
+  view
+    column position="relative" flex-shrink=0 width=width height=(width * 1.4) testId="map"
+      image "assets/art/map.webp" alt="Map of Aldermere" position="absolute" left=0 top=0 width="100%" height="100%"
+      for p in places key=p.id
+        if filter == "all" or (filter == "vaults" and p.kind == "vault") or (filter == "places" and p.kind == "place")
+          row position="absolute" left=`${p.x / 10}%` top=`${p.y / 14}%` translate="-50% -50%" align-items="center" gap=6 padding="3px 10px" white-space="nowrap" background-color=(p.kind == "vault" ? "vault" : "place") color=(p.kind == "vault" ? "place" : "map-ink") border=(p.kind == "vault" ? "1.5px solid map-ink" : "1.5px solid map-ink") box-shadow="0 2px 0 map-ink, 0 6px 10px -4px map-ink" font-size="0.75rem" font-weight=600 testId=`place-${p.id}`
+            text p.name
+            if p.marked
+              column width=10 height=10 border-radius=5 background-color="vault" border="1.5px solid map-ink" aria-hidden=true
+
+component QuestList
+  props
+    quests: Quest[]
+    done: number
+    cols: number
+    sorted: bool
+    toggleSort: action
+    toggle: action
+  view
+    column width="100%" max-width="45rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="34px 16px 32px" gap=14
+      row align-items="center" gap=12
+        text `${done}/${quests.length} Completed` flex=1 font-size="1.0625rem" font-weight=600 testId="quests-done"
+        button press=toggleSort appearance="none" display="flex" align-items="center" gap=10 height=44 padding="0 16px" border-radius=22 background-color="bar" border="2px solid pill-edge" color="ink" font-size="1rem" font-weight=800 aria-pressed=sorted testId="sort"
+          image "symbol:sort" aria-hidden=true
+          text (sorted ? "Most points" : "Sort")
+      row flex-wrap="wrap" margin="0 -5px" row-gap=10
+        for q in quests key=q.id
+          column box-sizing="border-box" width=`${100 / cols}%` padding="0 5px"
+            button press=toggle(q.id) appearance="none" display="flex" flex-direction="column" position="relative" width="100%" padding=0 overflow="hidden" background-color="quest" border="2px solid quest-edge" color="sun" text-align="center" box-shadow="0 8px 16px -8px bar" aria-pressed=q.done aria-label=`${q.title}, ${pts(q.points)}` testId=`quest-${q.id}`
+              image q.art alt="" aria-hidden=true width="100%" aspect-ratio="16 / 9" object-fit="cover" opacity=(q.done ? 0.45 : 1)
+              row align-items="baseline" justify-content="center" gap=2 padding="6px 0 8px" opacity=(q.done ? 0.5 : 1)
+                text "+" font-size="1.125rem" font-weight=800
+                text `${q.points}` class=Num font-size="1.875rem"
+                text "P" class=Num font-size="1rem"
+              if q.done
+                column position="absolute" left=0 right=0 top=0 aspect-ratio="16 / 9" align-items="center" justify-content="center" color="ink" font-size="2.25rem"
+                  image "symbol:checkmark" aria-hidden=true
+
+component RewardGrid
+  props
+    rewards: Reward[]
+    cols: number
+    redeem: action
+  view
+    row flex-wrap="wrap" width="100%" max-width="45rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="34px 10px 32px" row-gap=18
+      for r in rewards key=r.id
+        column box-sizing="border-box" width=`${100 / cols}%` padding="0 6px"
+          button press=redeem(r.id) appearance="none" display="flex" flex-direction="column" align-items="center" gap=10 width="100%" padding=0 border-width=0 background-color="transparent" color="ink" aria-label=`${r.title}, ${pts(r.cost)}${r.owned ? ", owned" : ""}` testId=`reward-${r.id}`
+            column class=Frame
+              image "assets/art/frame.webp" alt="" aria-hidden=true position="absolute" left=0 top=0 width="100%" height="100%"
+              image "assets/art/note.webp" alt="" aria-hidden=true position="absolute" left="34%" top="9%" width="32%" height="45.3%" opacity=(r.owned ? 1 : 0.85)
+              column position="absolute" left="16%" bottom="11%" width="68%" aspect-ratio="220 / 76" align-items="center" justify-content="center"
+                image "assets/art/price.webp" alt="" aria-hidden=true position="absolute" left=0 top=0 width="100%" height="100%"
+                if r.owned
+                  image "symbol:checkmark" position="relative" color="ink" font-size="1rem" aria-hidden=true
+                else
+                  row position="relative" align-items="baseline" gap=2 color="ink" text-shadow="0 1px 2px wood-edge"
+                    text `${r.cost}` class=Num font-size="1.375rem"
+                    text "P" class=Num font-size="0.8125rem"
+            text r.title font-size="0.9375rem" font-weight=500 text-align="center"
+
+component Timeline
+  props
+    captures: Capture[]
+  view
+    column testId="timeline"
+      for c in captures key=c.id
+        row gap=14
+          column position="relative" width=40 flex-shrink=0 align-items="center" overflow="hidden"
+            image "assets/art/braid.webp" alt="" aria-hidden=true position="absolute" left=9 top=14 width=22 height=600
+            image "assets/art/node.webp" alt="" aria-hidden=true position="relative" width=40 height=40
+          column flex=1 min-width=0 gap=8 padding-bottom=30
+            text c.time font-size="0.8125rem" font-weight=700 color="ink-2" padding-top=10
+            image c.art alt=c.place width="100%" aspect-ratio="16 / 9" object-fit="cover" border="1px solid ink-3"
+
+component Journey
+  props
+    b: Board
+    cols: number
+    rename: action
+  view
+    column testId="journey"
+      column align-items="center" gap=16 padding="48px 16px 34px"
+        column position="relative" width=152 height=152
+          image "assets/art/hero.webp" alt=`Portrait of ${b.hero}` width=152 height=152 box-sizing="border-box" border-radius=76 border="4px solid tab" object-fit="cover" box-shadow="0 10px 24px -8px bar"
+          button press=rename class=IconButton position="absolute" right=0 bottom=4 width=38 height=38 border-radius=19 background-color="bar" border="1.5px solid ink-3" font-size="1.0625rem" aria-label="Edit name" testId="rename"
+            image "symbol:pencil"
+        text b.hero class=Label font-size="1.25rem" testId="hero"
+      row flex-wrap="wrap" justify-content="center" gap=6 padding="18px 28px" background-color="band" aria-label="Badges earned" testId="badge-strip"
+        for g in b.badges key=g.id
+          image g.art alt="" aria-hidden=true width=34 height=38
+      row flex-wrap="wrap" width="100%" max-width="45rem" box-sizing="border-box" margin-left="auto" margin-right="auto" padding="30px 10px 36px" row-gap=18
+        for g in b.badges key=g.id
+          column box-sizing="border-box" width=`${100 / cols}%` padding="0 6px" align-items="center" gap=10 testId=`badge-${g.id}`
+            column class=Frame
+              image "assets/art/frame.webp" alt="" aria-hidden=true position="absolute" left=0 top=0 width="100%" height="100%"
+              column position="relative" flex=1 align-items="center" justify-content="center" gap=8 padding="0 12%"
+                image g.art alt="" aria-hidden=true width="56%" aspect-ratio="120 / 136"
+                column width="100%" height=5 background-color="track" overflow="hidden" role="progressbar" aria-label=g.detail aria-valuenow=round(g.progress * 100)
+                  column height="100%" width=`${round(g.progress * 100)}%` background-color="sun"
+            text g.title font-size="0.9375rem" font-weight=800 text-align="center" line-height=1.25 text-shadow="0 1px 3px bar"
+
+component StatCard
+  props
+    s: Stat
+    open: bool
+    expand: action
+  view
+    column class=Panel testId=`stat-${s.id}`
+      image "assets/art/card.webp" alt="" aria-hidden=true position="absolute" left=0 top=0 width="100%" height="100%" object-fit="cover"
+      image s.art alt="" aria-hidden=true position="absolute" left=0 top=0 width="100%" height=104 object-fit="cover"
+      column position="absolute" left=0 top=0 width="100%" height=106 background-image="linear-gradient(180deg, transparent 30%, var(--card) 100%), linear-gradient(90deg, transparent 45%, var(--card) 96%)"
+      column position="relative" padding="0 14px 14px" gap=12
+        row align-items="center" gap=12 min-height=92 padding="0 6px"
+          text s.title flex=1 class=Label
+          text s.value class=Num font-size="2.5rem" text-shadow="0 2px 3px card-shade" testId=`stat-value-${s.id}`
+        if s.known != ""
+          row flex-wrap="wrap" align-items="center" justify-content="space-between" gap=8 padding="12px 18px" background-image="linear-gradient(90deg, transparent 0%, var(--card-shade) 12%, var(--card-shade) 88%, transparent 100%)"
+            text "You Are Known for…" color="ink-2" font-size="0.9375rem"
+            text s.known color="sun" font-size="1.125rem" font-weight=800 text-align="right"
+        if open
+          column gap=0 padding="0 8px" testId=`stat-rows-${s.id}`
+            for r, i in s.rows key=r.label
+              row align-items="baseline" gap=12 padding="10px 0" border-top=(i == 0 ? "none" : "1px solid card-edge")
+                text r.label flex=1 font-size="0.9375rem" font-weight=600
+                text r.value class=Num font-size="1.125rem"
+        button press=expand(s.id) appearance="none" class=Well height=34 aria-expanded=open aria-label=`${open ? "Hide" : "Show"} details for ${s.title}` testId=`expand-${s.id}`
+          Chevron(up=open)

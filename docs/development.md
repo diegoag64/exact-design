@@ -60,6 +60,7 @@ Commands run from the repository root after `bun run setup`.
 | --- | --- |
 | `bun run dev` | Start the studio on port 5173 and the helper on 5175 |
 | `bun run demo` | Start Ember on port 5174 and print its setup link |
+| `bun run demo:waymark` | Start Waymark on port 5176 and print its setup link |
 | `bun run test` | Test models, persistence, source editing, and preview services |
 | `bun run test:ui` | Run Exact behavior tests |
 | `bun run test:preview` | Run browser regressions in isolated app copies |
@@ -68,6 +69,7 @@ Commands run from the repository root after `bun run setup`.
 | `bun run profile:canvas` | Benchmark canvas pan and zoom with many live previews |
 | `bun run icons` | Generate the Contract icon component from vendored SVGs |
 | `bun tools/demo.mjs test web` | Run Ember behavior tests |
+| `bun tools/demo.mjs --app waymark test web` | Run Waymark behavior tests |
 
 `test:ui` and `verify` copy current tracked and untracked source into `.exact/verification/run-*/workspace`. They start private helper and fixture servers on OS-assigned ports, then substitute those origins only in the copied app and tests. Each run has separate build output. The copied generated launcher uses the pinned SDK and retains its Bun version check. Direct SDK commands, including `bun tools/run.mjs test web`, still use fixed ports and are not isolated. The preview tests create temporary copies under `.exact` and use separate ports. Tests that compile Contract require the SDK toolchain even when run through `bun run test`.
 
@@ -100,6 +102,7 @@ The root launchers set `EXACT_FEEDBACK=0`. Generated SDK instructions describe a
 | `tools/event-stream.ts`, `tools/shared-runtime.ts` | Shared connections and the pinned runtime adapter |
 | `studio/design-history.ts`, `studio/draft-review.ts` | Persistent timeline and draft review model |
 | `examples/ember/` | Interactive demo app |
+| `examples/waymark/` | Art-directed demo app: a game companion |
 | `fixtures/ember/` | Notebook app used by browser regressions |
 
 The [studio design system](studio-design-system.md) describes UI ownership and interaction rules in detail.
