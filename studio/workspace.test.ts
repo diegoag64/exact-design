@@ -81,20 +81,20 @@ test('tidy up stacks one row per screen using displayed content heights',()=>{
   expect(diaryRow[0].y).toBe(todayRow[0].y+2400+80);expect(todayRow.map(v=>v.x)).toEqual([0,470,1318]);
   e.undo();expect(e.document.screens.length).toBe(3);
 });
-test('settling tidy passes merge into one undo step until another edit',()=>{
+test('tidy records one layout choice while later measurements stay out of undo and storage',()=>{
   const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
   e.addScreens([{name:'Today',route:'/'},{name:'Diary',route:'/diary'}],'Core',true);
   const depth=e.past.length,phone=e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/')!;
-  // Already tidy: no undo step, so the next real pass must not merge into an older edit.
-  expect(e.arrange(true)).toBe(false);expect(e.past.length).toBe(depth);
-  e.contentSizes.set(phone.id,{source:'http://127.0.0.1:5174/',width:phone.width,viewportHeight:phone.height,height:2000});
-  expect(e.arrange(true)).toBe(false);expect(e.past.length).toBe(depth+1);
-  e.contentSizes.set(phone.id,{source:'http://127.0.0.1:5174/',width:phone.width,viewportHeight:phone.height,height:3000});
-  expect(e.arrange(true)).toBe(true);expect(e.past.length).toBe(depth+1);
-  const diary=e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/diary')!;
-  expect(diary.y).toBe(phone.y+3000+80);
-  e.undo();expect(e.past.length).toBe(depth);
-  e.select(phone.id);e.property('name','Today again');expect(e.arrange(true)).toBe(false);
+  e.arrange();expect(e.past.length).toBe(depth+1);
+  const saved=JSON.stringify(e.document);
+  for(const height of [2000,3000]){
+    e.contentSizes.set(phone.id,{source:'http://127.0.0.1:5174/',width:phone.width,viewportHeight:phone.height,height});
+    e.arrange(true);expect(e.past.length).toBe(depth+1);
+    expect(JSON.stringify(e.document)).toBe(saved);
+    const diary=e.frames.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/diary')!;
+    expect(diary.y).toBe(phone.y+height+80);
+  }
+  e.undo();expect(e.document.arranged).toBeUndefined();expect(e.past.length).toBe(depth);
 });
 test('project setup connects, adds missing routes once, replaces the untouched starter, and undoes in one step',()=>{
   const e=new WorkspaceEditor();expect(e.isPristine()).toBe(true);

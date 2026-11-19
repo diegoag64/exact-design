@@ -32,7 +32,7 @@ If a preview is blank, use `127.0.0.1` for the editor URL and restart the app wi
 - Drag a frame title to move it. Hold Option or Alt to bypass snapping.
 - Drag the lower-right handle to resize a frame, or enter dimensions in the inspector.
 - Click **+** beside Viewport to add a linked size or device set.
-- Click **Tidy up** beside Screens to arrange one row per screen.
+- Click **Tidy up** beside Screens to arrange one row per screen. Arranged rows stay separated as content loads, including after reload. Moving a frame or changing its X or Y returns to free placement.
 - Click the zoom percentage to fit all screens.
 - Hover a screen or viewport in the sidebar and click its eye to hide it. A hidden screen hides all of its viewports. Hidden rows stay dimmed with a crossed-out eye; click it to show them again. Showing a viewport inside a hidden screen shows only that viewport.
 
@@ -40,7 +40,9 @@ Linked viewports share screen content. To create independent content, duplicate 
 
 For local previews, use **Auto** beside Height to expand frames to their rendered content. Enter a height to test a fixed device viewport. Modal routes keep the device height. Auto height does not load unrendered items in infinite feeds or virtualized lists.
 
-Use **Preview** to interact with the app. Local previews share supported app data and root state, while navigation and scroll remain separate for each frame.
+Connected Exact lists show a sample of the first five repeated rows on the canvas. Select a viewport and use **List preview** to choose 5, 10, 20, or **All loaded rows**. The choice is saved per viewport. Samples clip vertical row groups inside Exact lists; horizontal carousels, grids, and ordinary page content keep their layout. Rows outside the sample remain in the app's data. Sampling does not create fixtures or load missing rows.
+
+Use **Preview** to scroll and interact with the full app at the viewport's device height, without the canvas sample. Local previews share supported app data and root state, while navigation and scroll remain separate for each frame.
 
 ## Preview on the iOS Simulator
 

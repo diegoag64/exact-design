@@ -34,3 +34,38 @@ test('many cold previews load app data and recover through reloads and server re
     expect(bridge.connections.size).toBe(1);expect(errors).toEqual([]);
   }finally{await page.context().close();await suite.browser.close();bridge.server.stop(true);app.stop(true);host.stop(true);}
 },30000);
+
+test('canvas list samples bound late rows and pagination without removing source nodes; Preview stays scrollable',async()=>{
+  const source=await Bun.file(new URL('../tools/full-page-client.js',import.meta.url)).text();
+  const app=Bun.serve({hostname:'127.0.0.1',port:0,fetch:req=>new URL(req.url).pathname==='/full.js'?new Response(source,{headers:{'content-type':'text/javascript'}}):new Response(`<!doctype html><style>
+    html,body,#exact-root{height:100%;margin:0}main{height:100%;display:flex;flex-direction:column}header{height:60px;flex-shrink:0}.list{flex:1;min-height:0;overflow-y:auto}.rows{display:flex;flex-direction:column}.song{height:80px;flex-shrink:0}.tail{height:40px;flex-shrink:0}
+    </style><div id="exact-root"><main><header>Feed</header><div class="list" data-exact-list><section><div class="rows" data-site="1">${Array.from({length:20},(_,i)=>`<a class="song" data-site="2" data-key="${i}">Song ${i}</a>`).join('')}<div class="tail" data-site="3">More</div></div></section></div></main></div>
+    <script type="module">import {fullPage} from '/full.js';window.sizes=[];window.scrolls=0;window.intersections=0;window.first=document.querySelector('.song');fullPage(p=>{window.sizes.push(p);return true});
+    document.querySelector('.list').addEventListener('scroll',()=>window.scrolls++);
+    const io=new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting))window.intersections++});io.observe(document.querySelector('.tail'));
+    window.appendRows=()=>{for(let i=20;i<40;i++){const el=document.createElement('a');el.className='song';el.dataset.site='2';el.dataset.key=i;el.textContent='Song '+i;document.querySelector('.rows').insertBefore(el,document.querySelector('.tail'));}};
+    </script>`,{headers:{'content-type':'text/html'}})});
+  const suite=await suiteBrowser(),page=await suite.newPage({viewport:{width:390,height:500}});
+  try{
+    await page.goto(app.url+'?__ed_canvas=1&__ed_full=1&__ed_height=500&__ed_rows=5');
+    await page.waitForFunction(()=>document.querySelector('[data-ed-list-sample]')?.clientHeight===400);
+    expect(await page.evaluate(()=>window.sizes.at(-1).height)).toBe(500);
+    await page.evaluate(()=>{window.appendRows();document.querySelector('.list').dispatchEvent(new Event('scroll'));});
+    await page.waitForFunction(()=>document.querySelectorAll('.song').length===40&&document.querySelector('[data-ed-list-sample]')?.clientHeight===400);
+    expect(await page.evaluate(()=>({count:document.querySelectorAll('.song').length,same:window.first===document.querySelector('.song'),scrolls:window.scrolls,intersections:window.intersections}))).toEqual({count:40,same:true,scrolls:0,intersections:0});
+    // A late row resize must update the sample, not expose the next row.
+    await page.evaluate(()=>document.querySelector('.song').style.height='120px');
+    await page.waitForFunction(()=>document.querySelector('[data-ed-list-sample]')?.clientHeight===440);
+    await page.goto(app.url+'?__ed_canvas=1&__ed_full=1&__ed_height=500&__ed_rows=10');
+    await page.waitForFunction(()=>document.querySelector('[data-ed-list-sample]')?.clientHeight===800);
+    await page.goto(app.url+'?__ed_canvas=1&__ed_full=1&__ed_height=500&__ed_rows=0');
+    await page.waitForFunction(()=>window.sizes?.at(-1)?.height===1700);
+    expect(await page.locator('[data-ed-list-sample]').count()).toBe(0);
+    await page.goto(app.url+'?__ed_canvas=0&__ed_full=0&__ed_height=500&__ed_rows=5');
+    await page.waitForFunction(()=>window.sizes?.length>0);
+    expect(await page.locator('[data-ed-list-sample]').count()).toBe(0);
+    await page.evaluate(()=>{document.querySelector('.list').scrollTop=100;});
+    await page.waitForFunction(()=>window.scrolls>0);
+    expect(await page.evaluate(()=>document.querySelector('.list').scrollTop)).toBe(100);
+  }finally{await page.context().close();await suite.browser.close();app.stop(true);}
+},30000);
