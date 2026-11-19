@@ -128,6 +128,31 @@ test('studio icons, context menus and canvas gestures share the desktop interact
     expect(await viewEye.getAttribute('aria-label')).toBe('Hide viewport');
     await screenEye.click();await frame.waitFor({state:'detached'});
     await page.getByRole('button',{name:'Undo',exact:true}).click();await frame.waitFor();
+    // Tidy up's layout menu works from the keyboard and marks the chosen layout.
+    const options=page.getByTestId('layout-options'),layoutMenu=page.getByRole('menu',{name:'Tidy up layout'});
+    const radios=()=>page.locator('#layout-menu [role="menuitemradio"]').evaluateAll(items=>items.map(el=>[el.getAttribute('data-testid'),el.getAttribute('aria-checked')]));
+    const active=()=>page.evaluate(()=>document.activeElement?.getAttribute('data-testid'));
+    expect(await options.getAttribute('aria-label')).toBe('Tidy up layout');
+    await options.focus();await page.keyboard.press('Enter');await layoutMenu.waitFor();
+    await page.waitForFunction(()=>document.activeElement?.getAttribute('data-testid')==='layout-column');
+    expect(await radios()).toEqual([['layout-column','true'],['layout-collage','false']]);
+    await page.keyboard.press('ArrowDown');expect(await active()).toBe('layout-collage');
+    await page.keyboard.press('ArrowDown');expect(await active()).toBe('layout-column');
+    await page.keyboard.press('End');expect(await active()).toBe('layout-collage');
+    await page.keyboard.press('Enter');await layoutMenu.waitFor({state:'hidden'});
+    await page.waitForFunction(()=>document.querySelector('[data-testid="layout-collage"]')?.getAttribute('aria-checked')==='true');
+    expect(await radios()).toEqual([['layout-column','false'],['layout-collage','true']]);
+    expect(await page.getByTestId('tidy-up').getAttribute('data-tip')).toContain('collage');
+    expect(await options.getAttribute('data-tip')).toBe('Tidy up layout · Collage');
+    await options.focus();await page.keyboard.press('Enter');await layoutMenu.waitFor();
+    await page.keyboard.press('Escape');await layoutMenu.waitFor({state:'hidden'});expect(await active()).toBe('layout-options');
+    // The chosen layout survives a reload.
+    await page.reload({waitUntil:'load'});await options.waitFor();
+    await page.waitForFunction(()=>document.querySelector('[data-testid="tidy-up"]')?.getAttribute('data-tip')?.includes('collage'));
+    await options.click();await layoutMenu.waitFor();
+    expect(await radios()).toEqual([['layout-column','false'],['layout-collage','true']]);
+    await page.getByTestId('layout-column').click();await layoutMenu.waitFor({state:'hidden'});
+    await page.waitForFunction(()=>document.querySelector('[data-testid="tidy-up"]')?.getAttribute('data-tip')?.includes('single column'));
     expect(errors).toEqual([]);
   }finally{await page?.context().close();await suite?.browser.close();child.kill('SIGTERM');await child.exited;await rm(temp,{recursive:true,force:true});}
 },60000);

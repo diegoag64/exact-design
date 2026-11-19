@@ -107,8 +107,9 @@ export class WorkspaceEditor {
     });
   }
   addScreen(name: string, path: string, preset: string, linked: boolean) { this.addScreens([{name, route: path}], preset, linked); }
-  /** Add screens in one undo step: one row each, with a viewport per device in the chosen device or set. */
-  addScreens(items: NewScreen[], choice: string, linked: boolean) {
+  /** Add screens in one undo step: one row each, with a viewport per device in the chosen device or set.
+   *  Rows that `later` names (screens about to be hidden) go below the others, where Tidy up keeps hidden screens. */
+  addScreens(items: NewScreen[], choice: string, linked: boolean, later?: (row: {name: string; route: string}) => boolean) {
     const sizes = resolveDevices(choice), list = sizes.length ? sizes : [{name: 'Custom', width: 720, height: 520}];
     if(!items.length) throw new Error('There are no screens to add.');
     if(linked && !this.document.project.url) throw new Error('Connect a project first.');
@@ -122,9 +123,12 @@ export class WorkspaceEditor {
       if(route)seen.add(route); rows.push({name:item.name.trim().slice(0,120),route});
     }
     let y=Math.max(...this.frames.map(v=>v.y+v.height))+FRAME_GAP; let first='';
+    const placed=later?[...rows.filter(row=>!later(row)),...rows.filter(row=>later(row))]:rows;
     this.change(d=>{
-      for(const row of rows) {
-        const screenId=this.nextId(d,'screen'); d.screens.push({id:screenId,name:row.name,route:row.route,source:'',layers:[]});
+      // Screens join the library in the given order; their rows are laid out in placement order.
+      const ids=new Map(rows.map(row=>{const screenId=this.nextId(d,'screen');d.screens.push({id:screenId,name:row.name,route:row.route,source:'',layers:[]});return [row,screenId];}));
+      for(const row of placed) {
+        const screenId=ids.get(row)!;
         let x=0;
         for(const size of list) {
           const id=this.nextId(d,'view'); first||=id;
@@ -148,17 +152,18 @@ export class WorkspaceEditor {
   }
   /** Tidy up: one row per screen in library order, using each frame's displayed height so loaded content never overlaps.
    *  Settling passes, repeated while new frames report their heights, merge into the first pass's undo step; returns whether this one merged.
-   *  `collage` packs those rows into columns instead, so the whole workspace fits one wide view; a screen's frames stay side by side. */
+   *  `collage` packs those rows into columns instead, so the whole workspace fits one wide view; a screen's frames stay side by side.
+   *  In both layouts, screens with no visible frame keep a row each below the visible ones, so they leave no gap and showing one later never lands on another frame. */
   arrange(settle=false, collage=false): boolean {
     const frames=this.frames; if(!frames.length) return false;
     const x0=Math.min(...frames.map(v=>v.x)),y0=Math.min(...frames.map(v=>v.y));
     const rows=this.document.screens.map(screen=>frames.filter(v=>v.screenId===screen.id).sort((a,b)=>a.x-b.x||a.y-b.y)).filter(row=>row.length);
     const at=new Map<string,{x:number;y:number}>();
     const lay=(row: typeof frames,x: number,y: number)=>{for(const v of row){at.set(v.id,{x,y});x+=v.width+FRAME_GAP;}};
+    const shown=rows.filter(row=>row.some(v=>this.isShown(v.id))),rest=rows.filter(row=>!shown.includes(row));
+    const tall=(row: typeof frames)=>Math.max(...row.map(v=>v.height));
     if(collage) {
-      // Hidden screens keep a row each below the collage, so showing one later never lands on another frame.
-      const shown=rows.filter(row=>row.some(v=>this.isShown(v.id))),rest=rows.filter(row=>!shown.includes(row));
-      const span=(row: typeof frames)=>row.reduce((w,v)=>w+v.width,0)+FRAME_GAP*(row.length-1),tall=(row: typeof frames)=>Math.max(...row.map(v=>v.height));
+      const span=(row: typeof frames)=>row.reduce((w,v)=>w+v.width,0)+FRAME_GAP*(row.length-1);
       const width=Math.max(0,...shown.map(span)),gutter=FRAME_GAP*2;
       // Each row goes to the shortest column; the column count whose outline is nearest a wide screen's wins.
       const pack=(count: number)=>{const heights=Array.from({length:count},()=>0);const cells=shown.map(row=>{const c=heights.indexOf(Math.min(...heights)),y=heights[c];heights[c]+=tall(row)+gutter;return {row,c,y};});return {cells,height:Math.max(0,...heights)-gutter,width:count*width+(count-1)*gutter};};
@@ -167,7 +172,7 @@ export class WorkspaceEditor {
       for(const cell of best?.cells??[]) lay(cell.row,x0+cell.c*(width+gutter),y0+cell.y);
       let y=y0+(best?best.height+FRAME_GAP:0); for(const row of rest){lay(row,x0,y);y+=tall(row)+FRAME_GAP;}
     } else {
-      let y=y0; for(const row of rows){lay(row,x0,y);y+=Math.max(...row.map(v=>v.height))+FRAME_GAP;}
+      let y=y0; for(const row of [...shown,...rest]){lay(row,x0,y);y+=tall(row)+FRAME_GAP;}
     }
     const place=(d:Workspace)=>{for(const v of d.views){const p=at.get(v.id);if(p){v.x=Math.round(p.x);v.y=Math.round(p.y);}}};
     if(settle&&this.settling){const next=structuredClone(this.document);place(next);this.document=next;this.future=[];return true;}
@@ -190,9 +195,10 @@ export class WorkspaceEditor {
     this.batch(()=>{
       if(this.document.project.url!==projectUrl(url)) this.connectProject(name||'Project',url);
       const have=new Set(this.document.screens.map(s=>s.route)),missing=routes.filter(r=>!hasRouteParameters(r.route)&&!have.has(screenRoute(r.route)));
-      if(missing.length) this.addScreens(missing,choice,true);
+      const wanted=new Set(show.map(entry=>entry.trim().toLowerCase()).filter(Boolean)),listed=(s:{name:string;route:string})=>wanted.has(s.name.toLowerCase())||wanted.has(s.route);
+      const filtering=wanted.size>0&&[...this.document.screens,...missing.map(r=>({name:r.name.trim(),route:screenRoute(r.route)}))].some(s=>s.route&&listed(s));
+      if(missing.length) this.addScreens(missing,choice,true,filtering?row=>!listed(row):undefined);
       if(pristine&&missing.length) this.change(d=>{d.views=d.views.filter(v=>v.screenId!==starter);d.screens=d.screens.filter(s=>s.id!==starter);});
-      const wanted=new Set(show.map(entry=>entry.trim().toLowerCase()).filter(Boolean)),listed=(s:Screen)=>wanted.has(s.name.toLowerCase())||wanted.has(s.route);
       if(wanted.size&&this.document.screens.some(s=>s.route&&listed(s))) this.change(d=>{
         for(const s of d.screens) {
           if(!s.route) continue;

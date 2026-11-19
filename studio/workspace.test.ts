@@ -94,6 +94,63 @@ test('a collage tidy packs screens into columns and keeps the frames of a screen
   expect(wide/high).toBeGreaterThan(1);expect(wide/high).toBeLessThan(2.6);
   e.undo();expect(new Set(e.document.views.map(v=>v.x)).size).toBe(3);
 });
+// Rows of a tidied workspace, as displayed: each screen's frames, its first frame's position, and whether any two frames overlap.
+const tidied=(e:WorkspaceEditor)=>{
+  const frames=e.frames,rows=e.document.screens.map(s=>frames.filter(v=>v.screenId===s.id).sort((a,b)=>a.x-b.x)).filter(r=>r.length);
+  const boxes=frames.map(v=>({l:v.x,t:v.y,r:v.x+v.width,b:v.y+v.height}));
+  return {rows,overlap:boxes.some((a,i)=>boxes.some((b,j)=>i<j&&a.l<b.r&&b.l<a.r&&a.t<b.b&&b.t<a.b)),columns:new Set(rows.map(r=>r[0].x)).size};
+};
+const sideBySide=(rows:ReturnType<typeof tidied>['rows'])=>{for(const row of rows){expect(new Set(row.map(v=>v.y)).size).toBe(1);for(let i=1;i<row.length;i++)expect(row[i].x).toBe(row[i-1].x+row[i-1].width+80);}};
+test('switching between single column and collage keeps viewports together with uneven content heights, and each switch undoes in one step',()=>{
+  const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
+  e.addScreens(Array.from({length:6},(_,i)=>({name:`S${i}`,route:`/s${i}`})),'Core',true);
+  // Uneven loaded heights: a long feed, a medium page, and the rest at their device height.
+  const phone=(route:string)=>e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route===route)!;
+  for(const [route,height] of [['/s1',3200],['/s4',1500]] as const){const v=phone(route);e.contentSizes.set(v.id,{source:`http://127.0.0.1:5174${route}`,width:v.width,viewportHeight:v.height,height});}
+  const start=JSON.stringify(e.document.views),depth=e.past.length;
+  e.arrange(false,true);
+  const collage=tidied(e);expect(collage.overlap).toBe(false);expect(collage.columns).toBeGreaterThan(1);sideBySide(collage.rows);
+  const collageViews=JSON.stringify(e.document.views);
+  e.arrange(false,false);
+  const column=tidied(e);expect(column.overlap).toBe(false);expect(column.columns).toBe(1);sideBySide(column.rows);
+  // Each row starts below the tallest displayed frame of the row above it.
+  for(let i=1;i<column.rows.length;i++)expect(column.rows[i][0].y).toBe(column.rows[i-1][0].y+Math.max(...column.rows[i-1].map(v=>v.height))+80);
+  expect(e.past.length).toBe(depth+2);
+  e.undo();expect(JSON.stringify(e.document.views)).toBe(collageViews);
+  e.undo();expect(JSON.stringify(e.document.views)).toBe(start);
+  e.redo();expect(JSON.stringify(e.document.views)).toBe(collageViews);
+  e.redo();expect(tidied(e).columns).toBe(1);
+  // Tidying again in the same layout changes nothing and adds no undo step.
+  e.arrange(false,false);expect(e.past.length).toBe(depth+2);
+});
+test('a collage settles to late content heights in one undo step without overlaps',()=>{
+  const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
+  e.addScreens(Array.from({length:6},(_,i)=>({name:`S${i}`,route:`/s${i}`})),'Core',true);
+  const depth=e.past.length,v=e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/s0')!;
+  expect(e.arrange(true,true)).toBe(false);expect(e.past.length).toBe(depth+1);
+  e.contentSizes.set(v.id,{source:'http://127.0.0.1:5174/s0',width:v.width,viewportHeight:v.height,height:4000});
+  expect(e.arrange(true,true)).toBe(true);expect(e.past.length).toBe(depth+1);
+  const settled=tidied(e);expect(settled.overlap).toBe(false);expect(settled.columns).toBeGreaterThan(1);sideBySide(settled.rows);
+  e.undo();expect(e.past.length).toBe(depth);
+});
+test('both layouts keep hidden screens below the visible rows, without a gap',()=>{
+  for(const collage of [false,true]) {
+    const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
+    e.addScreens([{name:'Today',route:'/'},{name:'Diary',route:'/diary'},{name:'Profile',route:'/profile'}],'Core',true);
+    const screen=(route:string)=>e.document.screens.find(s=>s.route===route)!;
+    e.setHidden(screen('/diary').id,true);
+    // A screen with one hidden viewport stays in place; its hidden frame keeps its slot in the row.
+    const profilePhone=e.document.views.find(v=>v.screenId===screen('/profile').id&&v.name==='Phone')!;e.setHidden(profilePhone.id,true);
+    e.arrange(false,collage);
+    const {rows,overlap}=tidied(e);expect(overlap).toBe(false);sideBySide(rows);
+    const row=(route:string)=>rows.find(r=>r[0].screenId===screen(route).id)!,bottom=(r:typeof rows[number])=>r[0].y+Math.max(...r.map(v=>v.height));
+    const visible=rows.filter(r=>r[0].screenId!==screen('/diary').id);
+    expect(row('/diary')[0].y).toBe(Math.max(...visible.map(bottom))+80);
+    expect(row('/diary')[0].x).toBe(Math.min(...rows.map(r=>r[0].x)));
+    if(!collage)expect(row('/profile')[0].y).toBe(bottom(row('/'))+80);
+    expect(row('/profile').length).toBe(3);
+  }
+});
 test('settling tidy passes merge into one undo step until another edit',()=>{
   const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
   e.addScreens([{name:'Today',route:'/'},{name:'Diary',route:'/diary'}],'Core',true);
@@ -123,6 +180,18 @@ test('project setup connects, adds missing routes once, replaces the untouched s
   expect(e.document.screens.map(s=>s.name)).toEqual(['Home','Today','Diary']);
 });
 
+test('project setup lays the screens it hides below the visible ones, so the tidy that follows adds no undo step',()=>{
+  const e=new WorkspaceEditor();
+  const routes=[{name:'Today',route:'/'},{name:'Welcome',route:'/welcome'},{name:'Diary',route:'/diary'},{name:'Profile',route:'/profile'}];
+  e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core',['Welcome','/profile']);
+  expect(e.document.screens.map(s=>s.name)).toEqual(['Today','Welcome','Diary','Profile']);
+  const top=(name:string)=>e.document.views.find(v=>v.screenId===e.document.screens.find(s=>s.name===name)!.id)!.y;
+  expect(top('Welcome')).toBeLessThan(top('Profile'));expect(top('Profile')).toBeLessThan(top('Today'));expect(top('Today')).toBeLessThan(top('Diary'));
+  expect(e.isShown(e.active)).toBe(true);
+  const before=JSON.stringify(e.document.views);
+  expect(e.arrange(true)).toBe(false);expect(e.past.length).toBe(1);expect(JSON.stringify(e.document.views)).toBe(before);
+  e.undo();expect(e.isPristine()).toBe(true);
+});
 test('project setup with a show list adds every route but leaves only the listed screens visible, in one undo step',()=>{
   const e=new WorkspaceEditor();
   const routes=[{name:'Today',route:'/'},{name:'Welcome',route:'/welcome'},{name:'Diary',route:'/diary'},{name:'Profile',route:'/profile'}];

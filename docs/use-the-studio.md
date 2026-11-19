@@ -22,7 +22,7 @@ For a connection that also adds the screens, open a setup link:
 http://127.0.0.1:5173/?connect=http://127.0.0.1:5174&name=Ember&viewports=Core
 ```
 
-Replace the app URL and name with your own. Set `viewports` to a device preset or a set: `Core`, `Apple%20devices`, or `Every%20size`. To load fewer previews at first, add `show` with a comma-separated list of screen names or routes, such as `&show=Today,/welcome`. The link still adds every screen, but only the listed ones start visible; show the others from the Screens panel. Each browser applies a link once. If setup fails, start the app and click **Retry**.
+Replace the app URL and name with your own. Set `viewports` to a device preset or a set: `Core`, `Apple%20devices`, or `Every%20size`. To load fewer previews at first, add `show` with a comma-separated list of screen names or routes, such as `&show=Today,/welcome`. The link still adds every screen, but only the listed ones start visible, with the hidden ones placed below them; show the others from the Screens panel. Each browser applies a link once. If setup fails, start the app and click **Retry**.
 
 If a preview is blank, use `127.0.0.1` for the editor URL and restart the app with `EXACT_TOOL_PORT` matching the editor port. Keep the app server running.
 
@@ -32,7 +32,8 @@ If a preview is blank, use `127.0.0.1` for the editor URL and restart the app wi
 - Drag a frame title to move it. Hold Option or Alt to bypass snapping.
 - Drag the lower-right handle to resize a frame, or enter dimensions in the inspector.
 - Click **+** beside Viewport to add a linked size or device set.
-- Click **Tidy up** beside Screens to arrange one row per screen. For a workspace that fits one view, such as a demo screenshot, add `layout=collage` to the studio's address (`http://127.0.0.1:5173/?layout=collage`). Tidy up then packs the screens into columns and keeps each screen's viewports side by side. The option applies while it is in the address.
+- Click **Tidy up** beside Screens to arrange the canvas. Click the arrow beside it to choose a layout: **Single column** stacks one row per screen, and **Collage** packs those rows into columns so the workspace fits one view, such as for a demo screenshot. Choosing a layout tidies the canvas in it at once, and the arrow's menu marks the current one. Both layouts keep each screen's viewports side by side, use loaded content heights so frames never overlap, and place hidden screens below the visible ones. The studio remembers the layout for later tidies and for the frames that settle while a bulk add or setup link loads. **Undo** restores the previous arrangement and keeps the chosen layout.
+- To start a page in the collage, add `layout=collage` to the studio's address (`http://127.0.0.1:5173/?layout=collage`), for example on a setup link. The address selects the collage each time the page loads, until you choose a layout from the menu.
 - Click the zoom percentage to fit all screens.
 - Hover a screen or viewport in the sidebar and click its eye to hide it. A hidden screen hides all of its viewports. Hidden rows stay dimmed with a crossed-out eye; click it to show them again. Showing a viewport inside a hidden screen shows only that viewport.
 
