@@ -6,6 +6,9 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Added
 
+- A collage arrangement for demos: add `layout=collage` to the studio's address, and **Tidy up** and setup links pack screens into columns so the workspace fits one view. Each screen's viewports stay side by side.
+- Waymark, a second demo app: the companion app for an invented adventure game, with painted backdrops, a scrolling realm map, quests, rewards, badges and statistics. Start it with `bun run demo:waymark`. `bun tools/demo.mjs --app <name>` selects a demo, and Ember stays the default.
+- **Lumen**, a finance example app: a personal finance app built with Exact, with Home, Activity, Cards, Budgets and Goals tabs, Send money, Add to a goal, Payment and Account sheets, and a Welcome screen. Its panels use Liquid Glass on iOS 26. Start it with `bun run demo:lumen` and open the printed setup link. Native previews recognize it.
 - **Plan view** in the bottom toolbar (⇧P). Canvas previews become line plans: surfaces as outlines with their corners, text as bars that follow each wrapped line, icons and inline SVGs as their outlines, and photos as crossed boxes. Progress bars and rings keep a light tint so their values stay readable. Lines stay one pixel wide at every zoom. The plan uses paper and graphite in light mode and a blueprint in dark mode, following the screens' theme, and the setting is remembered. Selection, spacing labels and app editing work as usual.
 - Plan view options, in the arrow beside the plan view button. **Layout boxes** (⇧B) outlines the rows, columns and other containers the app never paints. **Readable text** (⇧T) shows the app's own words in place of the bars. Both are remembered.
 - An **Appearance** menu beside the zoom controls sets light or dark for the studio and, separately, for your app in canvas previews. Each can match the system, and both are remembered. Plan view follows the screens' choice.
@@ -25,6 +28,8 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 - **Reduce preview effects** beside the zoom controls. Canvas previews omit backdrop blur at every zoom and skip CSS animations, which keeps the GPU nearly idle while the canvas is still. Full-screen Preview is unchanged, and the setting is remembered.
 
 ### Changed
+
+- Compress Waymark artwork to WebP at its original dimensions, with lossless ornaments and transparency. Art regeneration includes the compression step.
 
 - Upgrade the pinned Exact SDK from `114bb88f` to `32f79aa8`. Migrate theme files and the local editing protocol from Tamber to Forma, including compiler validation and preview fixtures. The SDK now uses Rust 1.99.1 and includes web transform-layer promotion, navigation fixes, and native rendering updates. Connected apps must use the Forma editing API.
 

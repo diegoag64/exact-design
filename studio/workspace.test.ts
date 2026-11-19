@@ -81,7 +81,21 @@ test('tidy up stacks one row per screen using displayed content heights',()=>{
   expect(diaryRow[0].y).toBe(todayRow[0].y+2400+80);expect(todayRow.map(v=>v.x)).toEqual([0,470,1318]);
   e.undo();expect(e.document.screens.length).toBe(3);
 });
+test('a collage tidy packs screens into columns and keeps the frames of a screen side by side',()=>{
+  const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
+  e.addScreens(Array.from({length:8},(_,i)=>({name:`S${i}`,route:`/s${i}`})),'Core',true);
+  e.arrange(false,true);
+  const rows=e.document.screens.map(s=>e.document.views.filter(v=>v.screenId===s.id)).filter(r=>r.length);
+  for(const row of rows.filter(r=>r.length>1)){expect(new Set(row.map(v=>v.y)).size).toBe(1);expect(row[1].x).toBe(row[0].x+row[0].width+80);}
+  const columns=new Set(rows.map(r=>r[0].x));expect(columns.size).toBeGreaterThan(1);
+  const boxes=e.document.views.map(v=>({l:v.x,t:v.y,r:v.x+v.width,b:v.y+v.height}));
+  expect(boxes.some((a,i)=>boxes.some((b,j)=>i<j&&a.l<b.r&&b.l<a.r&&a.t<b.b&&b.t<a.b))).toBe(false);
+  const wide=Math.max(...boxes.map(b=>b.r))-Math.min(...boxes.map(b=>b.l)),high=Math.max(...boxes.map(b=>b.b))-Math.min(...boxes.map(b=>b.t));
+  expect(wide/high).toBeGreaterThan(1);expect(wide/high).toBeLessThan(2.6);
+  e.undo();expect(new Set(e.document.views.map(v=>v.x)).size).toBe(3);
+});
 test('tidy records one layout choice while later measurements stay out of undo and storage',()=>{
+
   const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
   e.addScreens([{name:'Today',route:'/'},{name:'Diary',route:'/diary'}],'Core',true);
   const depth=e.past.length,phone=e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/')!;

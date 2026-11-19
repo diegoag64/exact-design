@@ -34,6 +34,8 @@ This repository has no hosted CI. You run the checks and report the results in y
 | Browser input, preview, or app editing | `bun run test:preview` |
 | Studio UI or layout | `bun run verify` and `bun run build` |
 | Ember demo behavior | `bun tools/demo.mjs test web` |
+| Waymark demo behavior | `bun tools/demo.mjs --app waymark test web` |
+| Lumen example behavior | `bun tools/demo.mjs --app lumen test web` |
 | Documentation only | Check links and command names, then `git diff --check` |
 
 `test:ui` and `verify` use temporary copies and private ports, so your editor can stay running. See [docs/development.md](docs/development.md) for commands, ports, and the source layout.

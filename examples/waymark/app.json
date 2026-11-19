@@ -1,0 +1,11 @@
+{
+  "name": "Waymark",
+  "app": {
+    "id": "dev.exactdesign.waymark",
+    "name": "Waymark"
+  },
+  "userInterfaceStyle": "dark",
+  "host": {
+    "web": {}
+  }
+}

@@ -4,7 +4,7 @@ import { snapMove, FRAME_GAP } from './snapping';
 import { Editor, initial, validate, exportContract, resolveLayer, type Layer } from './model';
 export type Screen = { id: string; name: string; source: string; route: string; layers: Layer[]; hidden?: boolean };
 export type View = { id: string; screenId: string; name: string; x: number; y: number; width: number; height: number; heightMode?: 'content'|'fixed'; listRows?: number; hidden?: boolean };
-export type Workspace = { version: 2; name: string; arranged?: boolean; project: Project; screens: Screen[]; views: View[] };
+export type Workspace = { version: 2; name: string; arranged?: boolean; arrangedCollage?: boolean; project: Project; screens: Screen[]; views: View[] };
 import { presets, deviceSets, resolveDevices } from './devices';
 export { presets } from './devices';
 export type NewScreen = { name: string; route: string };
@@ -16,6 +16,7 @@ export function loadWorkspace(value: unknown): Workspace {
   }
   const d = structuredClone(value) as Workspace;
   if (!d || d.version !== 2 || typeof d.name !== 'string' || !Array.isArray(d.screens) || !Array.isArray(d.views) || !d.views.length || !d.screens.length || d.views.length > 200 || d.screens.length > 100) throw new Error('Invalid workspace');
+  if(d.arrangedCollage!==undefined&&typeof d.arrangedCollage!=='boolean')throw new Error('Invalid collage layout');
   if(d.arranged!==undefined&&typeof d.arranged!=='boolean')throw new Error('Invalid workspace layout');
   d.project ??= {name:'',url:''};
   if(typeof d.project.name !== 'string' || typeof d.project.url !== 'string' || (d.project.url && (!d.project.name.trim() || projectUrl(d.project.url)!==d.project.url))) throw new Error('Invalid project');
@@ -49,19 +50,30 @@ export class WorkspaceEditor {
     if(this.document.arranged)this.placeRows(frames);
     return frames;
   }
-  private placeRows(frames: View[]){
-    const x0=Math.min(...frames.map(v=>v.x));let y=Math.min(...frames.map(v=>v.y));
-    for(const screen of this.document.screens){
-      const row=frames.filter(v=>v.screenId===screen.id).sort((a,b)=>a.x-b.x||a.y-b.y);if(!row.length)continue;
-      let x=x0;for(const v of row){v.x=x;v.y=y;x+=v.width+FRAME_GAP;}
-      y+=Math.max(...row.map(v=>v.height))+FRAME_GAP;
+  private placeRows(frames: View[], collage=!!this.document.arrangedCollage){
+    const x0=Math.min(...frames.map(v=>v.x)),y0=Math.min(...frames.map(v=>v.y));
+    const rows=this.document.screens.map(screen=>frames.filter(v=>v.screenId===screen.id).sort((a,b)=>a.x-b.x||a.y-b.y)).filter(row=>row.length);
+    const lay=(row: typeof frames,x: number,y: number)=>{for(const v of row){v.x=Math.round(x);v.y=Math.round(y);x+=v.width+FRAME_GAP;}};
+    if(collage) {
+      // Hidden screens keep a row each below the collage, so showing one later never lands on another frame.
+      const shown=rows.filter(row=>row.some(v=>this.isShown(v.id))),rest=rows.filter(row=>!shown.includes(row));
+      const span=(row: typeof frames)=>row.reduce((w,v)=>w+v.width,0)+FRAME_GAP*(row.length-1),tall=(row: typeof frames)=>Math.max(...row.map(v=>v.height));
+      const width=Math.max(0,...shown.map(span)),gutter=FRAME_GAP*2;
+      // Each row goes to the shortest column; the column count whose outline is nearest a wide screen's wins.
+      const pack=(count: number)=>{const heights=Array.from({length:count},()=>0);const cells=shown.map(row=>{const c=heights.indexOf(Math.min(...heights)),y=heights[c];heights[c]+=tall(row)+gutter;return {row,c,y};});return {cells,height:Math.max(0,...heights)-gutter,width:count*width+(count-1)*gutter};};
+      const packs=Array.from({length:shown.length},(_,i)=>pack(i+1)),target=16/10;
+      const best=packs.sort((a,b)=>Math.abs(Math.log(a.width/Math.max(1,a.height)/target))-Math.abs(Math.log(b.width/Math.max(1,b.height)/target)))[0];
+      for(const cell of best?.cells??[]) lay(cell.row,x0+cell.c*(width+gutter),y0+cell.y);
+      let y=y0+(best?best.height+FRAME_GAP:0); for(const row of rest){lay(row,x0,y);y+=tall(row)+FRAME_GAP;}
+    } else {
+      let y=y0; for(const row of rows){lay(row,x0,y);y+=Math.max(...row.map(v=>v.height))+FRAME_GAP;}
     }
   }
   private manualLayout(d:Workspace){
     if(!d.arranged)return;
     const frames=this.frames;
     for(const v of d.views){const frame=frames.find(f=>f.id===v.id)!;v.x=frame.x;v.y=frame.y;}
-    delete d.arranged;
+    delete d.arranged;delete d.arrangedCollage;
   }
 
   /** Frames drawn on the canvas: a viewport is shown when neither it nor its screen is hidden. */
@@ -167,11 +179,12 @@ export class WorkspaceEditor {
     this.active=first;this.selected=first;
   }
   /** Tidy is one undoable layout choice. Later measurements only change displayed geometry. */
-  arrange(_settle=false): boolean {
-    if(this.document.arranged)return false;
-    const frames=this.frames;this.placeRows(frames);
-    this.change(d=>{d.arranged=true;for(const v of d.views){const frame=frames.find(f=>f.id===v.id)!;v.x=frame.x;v.y=frame.y;}});
+  arrange(_settle=false, collage=false): boolean {
+    if(this.document.arranged&&!!this.document.arrangedCollage===collage)return false;
+    const frames=this.frames;this.placeRows(frames,collage);
+    this.change(d=>{d.arranged=true;d.arrangedCollage=collage;for(const v of d.views){const frame=frames.find(f=>f.id===v.id)!;v.x=frame.x;v.y=frame.y;}});
     return false;
+
   }
   /** True for the untouched starter workspace, which a project setup may replace. */
   isPristine() {

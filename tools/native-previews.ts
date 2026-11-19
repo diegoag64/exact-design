@@ -133,7 +133,7 @@ export class NativePreviews {
   async project(project:string){if(!localPreview(project)||new URL(project).origin!==project)throw new Error('Choose a local http project origin.');const cached=this.mappings.get(project);if(cached&&cached.until>Date.now())return this.app(cached.dir);
     const unknown='No unique registered native app matches this project. Set EXACT_DESIGN_NATIVE_APPS to its app directory.';
     let m:any;try{m=await manifest(project,this.options.fetch);}catch(e){throw new Error(`${unknown} ${brief(e)}`);}
-    const dirs=[...new Set(await Promise.all((this.options.apps??[join(root,'examples/ember'),...(process.env.EXACT_DESIGN_NATIVE_APPS??'').split(delimiter).filter(Boolean).map(p=>resolve(root,p))]).map(p=>realpath(p).catch(()=>p))))];
+    const dirs=[...new Set(await Promise.all((this.options.apps??[join(root,'examples/ember'),join(root,'examples/lumen'),...(process.env.EXACT_DESIGN_NATIVE_APPS??'').split(delimiter).filter(Boolean).map(p=>resolve(root,p))]).map(p=>realpath(p).catch(()=>p))))];
     const matches=[];for(const dir of dirs){try{const a=JSON.parse(await readFile(join(dir,'app.json'),'utf8'));if(a.name===m.name&&normalized(a.protocol_handlers)===normalized(m.protocol_handlers))matches.push(dir);}catch{}}
     if(matches.length!==1)throw new Error(unknown);this.mappings.set(project,{dir:matches[0],until:Date.now()+5000});return this.app(matches[0]);
   }

@@ -32,7 +32,7 @@ If a preview is blank, use `127.0.0.1` for the editor URL and restart the app wi
 - Drag a frame title to move it. Hold Option or Alt to bypass snapping.
 - Drag the lower-right handle to resize a frame, or enter dimensions in the inspector.
 - Click **+** beside Viewport to add a linked size or device set.
-- Click **Tidy up** beside Screens to arrange one row per screen. Arranged rows stay separated as content loads, including after reload. Moving a frame or changing its X or Y returns to free placement.
+- Click **Tidy up** beside Screens to arrange one row per screen. Arranged rows stay separated as content loads, including after reload. Moving a frame or changing its X or Y returns to free placement. To pack screen rows into columns, add `layout=collage` to the studio's address (`http://127.0.0.1:5173/?layout=collage`) and click **Tidy up**. Each screen's viewports stay side by side. The arranged workspace remembers the layout while later content loads.
 - Click the zoom percentage to fit all screens.
 - Hover a screen or viewport in the sidebar and click its eye to hide it. A hidden screen hides all of its viewports. Hidden rows stay dimmed with a crossed-out eye; click it to show them again. Showing a viewport inside a hidden screen shows only that viewport.
 

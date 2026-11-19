@@ -9,6 +9,8 @@
   "scripts": {
     "setup": "bun tools/setup.mjs",
     "demo": "bun tools/demo.mjs",
+    "demo:waymark": "bun tools/demo.mjs --app waymark",
+    "demo:lumen": "bun tools/demo.mjs --app lumen",
     "dev": "bun tools/run.mjs web --port 5173",
     "build": "bun tools/run.mjs web-build --out dist",
     "test": "bun tools/platform.mjs && bun test tools/verify-isolated.test.ts studio/render.test.ts studio/draft-review.test.ts studio/model.test.ts studio/workspace.test.ts studio/persistence.test.ts studio/snapping.test.ts studio/spacing.test.ts studio/plan.test.ts studio/number-fields.test.ts studio/project.test.ts studio/previews.test.ts studio/event-stream.test.ts studio/shared-runtime.test.ts studio/discovery.test.ts studio/design-session.test.ts studio/design-drafts.test.ts studio/layout-source.test.ts studio/element-bridge.test.ts studio/design-history.test.ts studio/source-properties.test.ts studio/native-previews.test.ts studio/expo-sessions.test.ts",

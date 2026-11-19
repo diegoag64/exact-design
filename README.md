@@ -35,6 +35,8 @@ bun run demo
 
 Open the setup link printed in the terminal to add Ember's screens at phone, tablet, and desktop sizes.
 
+`bun run demo:lumen` starts Lumen, a personal finance app, on port 5177 and prints its setup link.
+
 Select a viewport, click **Edit app**, and change a property. Click **Review** to inspect the draft, then **Apply changes** to write it to source.
 
 ![The energy card selected across Ember's viewports, with the Layers tree and layout inspector open](docs/images/studio-inspector.png)
@@ -47,6 +49,8 @@ Select a viewport, click **Edit app**, and change a property. Click **Review** t
 | [Development](docs/development.md) | Commands, test requirements, and source layout |
 | [Studio design system](docs/studio-design-system.md) | Shared controls, tokens, icons, and interactions |
 | [Ember](examples/ember/README.md) | The demo app and its screens |
+| [Waymark](examples/waymark/README.md) | A second, art-directed demo: a game companion app |
+| [Lumen](examples/lumen/README.md) | A finance app with Liquid Glass panels |
 | [Contributing](CONTRIBUTING.md) | Report issues, run checks, and open pull requests |
 
 [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
@@ -59,4 +63,4 @@ Native capture techniques draw on [Expo Explore](https://github.com/expo/explore
 
 ## License
 
-Exact Design is released under the [MIT License](LICENSE). Vendored icons keep their own licenses: [Lucide](studio/assets/lucide/LICENSE) in the studio and [Phosphor](examples/ember/assets/icons/LICENSE) in Ember.
+Exact Design is released under the [MIT License](LICENSE). Vendored icons keep their own licenses: [Lucide](studio/assets/lucide/LICENSE) in the studio and [Phosphor](examples/ember/assets/icons/LICENSE) in Ember and [Lumen](examples/lumen/assets/icons/LICENSE). Waymark's typeface, Almendra, is under the [SIL Open Font License](examples/waymark/assets/fonts/OFL.txt).
