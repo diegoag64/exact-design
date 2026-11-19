@@ -1,14 +1,16 @@
 // Only the browser test launcher starts this app-shaped fixture.
-// Labelled groups nested `levels` deep around two leaves. The page rebuilds them with this same function.
-function deepChain(levels:number){let html='<span data-site="300" style="display:block;height:20px">Leaf A</span><span data-site="301" style="display:block;height:20px">Leaf B</span>';for(let i=levels;i>=1;i--)html='<div data-site="'+(199+i)+'" aria-label="Level '+i+'" style="padding:2px">'+html+'</div>';return html;}
+// Labelled groups nested `levels` deep around two leaves. `lead` inserts a sibling first, which shifts every tree path below it.
+// `renumber` moves every level to the next site, as a rebuild can, so each level takes its child's old site.
+// The page rebuilds them with this same function.
+function deepChain(levels:number,lead:boolean,renumber:boolean){let html='<span data-site="300" style="display:block;height:20px">Leaf A</span><span data-site="301" style="display:block;height:20px">Leaf B</span>';for(let i=levels;i>=1;i--)html='<div data-site="'+(199+i+(renumber?1:0))+'" aria-label="Level '+i+'" style="padding:2px">'+html+'</div>';return (lead?'<span data-site="198" style="display:block;height:20px">Lead</span>':'')+html;}
 export function startDiscoveryFixture(port=5176) {
   let mode='normal',short=false;
   let visits=0,markedVisits=0;
-  let inspecting=false,version=0,color='#ffffff',seq=0,deep=12;let events:any[]=[];
+  let inspecting=false,version=0,color='#ffffff',seq=0,deep=12,lead=false,renumber=false;let events:any[]=[];
   const files=()=>({'app.contract':'fixture-'+version});
   return Bun.serve({hostname:'127.0.0.1',port,fetch:async req=>{
     const url=new URL(req.url);
-    if(url.pathname==='/mode' && req.method==='POST') {mode=(await req.json()).mode;short=false;inspecting=false;version=0;color='#ffffff';seq=0;deep=12;events=[];return Response.json({ok:true});}
+    if(url.pathname==='/mode' && req.method==='POST') {mode=(await req.json()).mode;short=false;inspecting=false;version=0;color='#ffffff';seq=0;deep=12;lead=false;renumber=false;events=[];return Response.json({ok:true});}
     if(mode==='full-height'){
       if(url.pathname==='/fixture/content'){if(req.method==='POST')short=(await req.json()).short===true;return Response.json({short});}
       const count=url.pathname==='/short'?2:12;
@@ -29,8 +31,8 @@ export function startDiscoveryFixture(port=5176) {
       if(url.pathname==='/fixture/assert-applied')return new Response(null,{status:visits===markedVisits&&version===1?200:409});
       if(url.pathname==='/fixture/assert-color'){const value=new URL(req.url).searchParams.get('value');return new Response(null,{status:color===value?200:409});}
       // elements-deep nests `deep` labelled levels around two leaves; fewer levels removes the deepest groups.
-      if(url.pathname==='/fixture/deep'){deep=Math.max(1,Math.min(12,Number((await req.json()).levels)||1));return Response.json({deep});}
-      if(url.pathname==='/fixture/status')return Response.json({inspecting,version,color,deep});
+      if(url.pathname==='/fixture/deep'){const body=await req.json();deep=Math.max(1,Math.min(12,Number(body.levels)||1));lead=body.lead===true;renumber=body.renumber===true;return Response.json({deep,lead,renumber});}
+      if(url.pathname==='/fixture/status')return Response.json({inspecting,version,color,deep,lead,renumber});
       if(url.pathname==='/fixture/select'){
         const {site}=await req.json(),button=site===2+version*40,gaps=mode==='elements-gaps'&&site===1;
         events.push({event:'selection',seq:++seq,build:'fixture-build',site,instance:[],source:{file:'app.contract',line:button?5:3,col:1},rows:gaps?[{name:'gap',editable:{rung:'template',file:'app.contract',at:{line:3,col:10},sha256:'fixture-'+version,row:'gap',text:'12'}}]:button?[{name:'background_color',editable:{rung:'template',file:'app.contract',at:{line:5,col:10},sha256:'fixture-'+version,row:'background-color',text:color}}]:[]});
@@ -39,9 +41,9 @@ export function startDiscoveryFixture(port=5176) {
       if(url.pathname==='/__dev/report')return Response.json({ok:true});
       if(url.pathname==='/__dev/inspect.js')return new Response(`export function gate(e){if(e.type!=='pointerup')return;const el=document.elementsFromPoint(e.clientX,e.clientY).find(n=>n.closest?.('[data-site]'))?.closest('[data-site]');if(el)fetch('/fixture/select',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({site:Number(el.dataset.site)})});}`,{headers:{'content-type':'text/javascript'}});
       const chain=deepChain.toString();
-      const layers=mode==='elements-long'?Array.from({length:40},(_,i)=>`<span data-site="${100+i}" style="display:block;height:28px">Layer ${i+1}</span>`).join(''):mode==='elements-deep'?`<div data-site="199" aria-label="Deep">${deepChain(deep)}</div>`:'';
+      const layers=mode==='elements-long'?Array.from({length:40},(_,i)=>`<span data-site="${100+i}" style="display:block;height:28px">Layer ${i+1}</span>`).join(''):mode==='elements-deep'?`<div data-site="199" aria-label="Deep">${deepChain(deep,lead,renumber)}</div>`:'';
       visits++;
-      return new Response(`<!doctype html><head><title>Element fixture</title></head><body><div id="exact-root"><main data-site="0"><section data-site="1" aria-label="Header"${mode==='elements-gaps'?' style="display:flex;flex-direction:column;align-items:flex-start;gap:12px"':''}><button data-site="${2+version*40}" aria-label="Save" style="margin:40px;padding:20px"><span data-site="3">Save</span></button>${mode==='elements-gaps'?'<p data-site="4" style="margin:0;height:40px;width:200px">Two</p><p data-site="5" style="margin:0;height:40px;width:200px">Three</p>':''}</section>${layers}</main></div><script>window.exact={plan:'fixture-plan-${version}',instanceOf:()=>[]};fetch('/__dev/report',{method:'POST',body:JSON.stringify({kind:'register',id:'fixture-build'})});setInterval(async()=>{const s=await(await fetch('/fixture/status')).json();window.exact.plan='fixture-plan-'+s.version;document.querySelector('button[data-site]').dataset.site=String(2+s.version*40);document.querySelector('button[data-site]').style.background=s.color;let banner=document.getElementById('exact-inspect');const deep=document.querySelector('[data-site="199"]');if(deep&&deep.dataset.levels!==String(s.deep)){deep.dataset.levels=String(s.deep);deep.innerHTML=${chain}(s.deep);}if(s.inspecting&&!banner){banner=document.createElement('div');banner.id='exact-inspect';document.body.append(banner);}if(!s.inspecting)banner?.remove();},150);</script></body>`,{headers:{'content-type':'text/html'}});
+      return new Response(`<!doctype html><head><title>Element fixture</title></head><body><div id="exact-root"><main data-site="0"><section data-site="1" aria-label="Header"${mode==='elements-gaps'?' style="display:flex;flex-direction:column;align-items:flex-start;gap:12px"':''}><button data-site="${2+version*40}" aria-label="Save" style="margin:40px;padding:20px"><span data-site="3">Save</span></button>${mode==='elements-gaps'?'<p data-site="4" style="margin:0;height:40px;width:200px">Two</p><p data-site="5" style="margin:0;height:40px;width:200px">Three</p>':''}</section>${layers}</main></div><script>window.exact={plan:'fixture-plan-${version}',instanceOf:()=>[]};fetch('/__dev/report',{method:'POST',body:JSON.stringify({kind:'register',id:'fixture-build'})});setInterval(async()=>{const s=await(await fetch('/fixture/status')).json();window.exact.plan='fixture-plan-'+s.version+(s.renumber?'-renumbered':'');document.querySelector('button[data-site]').dataset.site=String(2+s.version*40);document.querySelector('button[data-site]').style.background=s.color;let banner=document.getElementById('exact-inspect');const deep=document.querySelector('[data-site="199"]');if(deep&&deep.dataset.levels!==s.deep+':'+s.lead+':'+s.renumber){deep.dataset.levels=s.deep+':'+s.lead+':'+s.renumber;deep.innerHTML=${chain}(s.deep,s.lead,s.renumber);}if(s.inspecting&&!banner){banner=document.createElement('div');banner.id='exact-inspect';document.body.append(banner);}if(!s.inspecting)banner?.remove();},150);</script></body>`,{headers:{'content-type':'text/html'}});
     }
     if(url.pathname==='/routes.json') {
       if(mode==='invalid') return new Response('<html>not a manifest</html>');

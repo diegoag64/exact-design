@@ -771,10 +771,41 @@ test "focus a deeply nested layer group and navigate back out"
   expect state elementTree.length == 13
   expect text "layer-focus-current" == "Level 6"
   expect state focusedLayerDepth == 7
+  expect focused "layer-focus-back"
+  tap "fold-element-10"
+  expect tree missing "element-11"
   request POST "http://127.0.0.1:5176/fixture/deep" {"levels":12}
   clock +1500 real
   clock data
   expect state elementTree.length == 19
+  expect text "layer-focus-current" == "Level 10"
+  expect tree has "element-14"
+  expect tree has "element-17"
+  tap "layer-focus-all"
+  clock data
+  expect focused "element-14"
+  expect tree has "element-11"
+  tap "focus-element-14"
+  clock data
+  request POST "http://127.0.0.1:5176/fixture/deep" {"levels":12,"lead":true}
+  clock +1500 real
+  clock data
+  expect state elementTree.length == 20
+  expect text "layer-focus-current" == "Level 10"
+  expect state focusedLayerId == "root/0:main/1:div/1:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div"
+  expect focused "layer-focus-back"
+  request POST "http://127.0.0.1:5176/fixture/deep" {"levels":12}
+  clock +1500 real
+  clock data
+  expect state elementTree.length == 19
+  expect text "layer-focus-current" == "Level 10"
+  request POST "http://127.0.0.1:5176/fixture/deep" {"levels":12,"renumber":true}
+  clock +1500 real
+  clock data
+  expect text "layer-focus-current" == "Deep"
+  request POST "http://127.0.0.1:5176/fixture/deep" {"levels":12}
+  clock +1500 real
+  clock data
   expect text "layer-focus-current" == "Level 10"
   request POST "http://127.0.0.1:5176/fixture/select" {"site":202}
   clock +1000 real
@@ -787,11 +818,15 @@ test "focus a deeply nested layer group and navigate back out"
   expect text "selected-element-name" == "Header"
   expect tree missing "layer-focus"
   expect tree has "element-17"
+  request POST "http://127.0.0.1:5176/fixture/select" {"site":202}
+  clock +1000 real
+  clock data
+  expect text "selected-element-name" == "Level 3"
   tap "element-17" contextmenu
+  tap "menu-focus-layer"
   clock +500 real
   clock data
   expect text "selected-element-name" == "Leaf A"
-  tap "menu-focus-layer"
   clock data
   expect text "layer-focus-current" == "Level 12"
   expect tree has "element-17"

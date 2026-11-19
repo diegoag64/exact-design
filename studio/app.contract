@@ -557,6 +557,8 @@ component Studio
         collapsedElements = collapsedElements.filter(id => not r.crumbs.map(c => c.id).includes(id))
         match first(r.tree.filter(e => e.selected))
           case some(selected)
+            if selected.id != menuLayer
+              menuLayer = ""
             // A selection outside the focused group widens the focus to the group that holds both.
             if focusedLayerId != "" and selected.id != focusedLayerId and not selected.ancestors.includes(focusedLayerId)
               match first(sortBy(focusedLayerPath.filter(a => a.id == selected.id or selected.ancestors.includes(a.id)), a => a.depth, "desc"))
@@ -572,30 +574,41 @@ component Studio
         hand = hand
   task revealLayerPanel when editing and leftOpen
     after(1, revealSelectedLayer)
-  // Layers focus keeps the source identities of the focused group and its ancestors, plus their tree ids.
-  // The tree shows the deepest of them still rendered, so a group that disappears falls back to the nearest
-  // surviving ancestor, and the full tree returns when none survive. Screen roots are never a focus.
+  // Layers focus keeps the source identities of the focused group and its ancestors, and each identity paired
+  // with its tree id, kind and label. The tree shows the deepest of them still rendered, so a group that disappears
+  // falls back to the nearest surviving ancestor, and the full tree returns when none survive. Sites belong to a
+  // compiled plan, which can give a new sibling an old site and path: after a rebuild only a layer whose identity,
+  // tree id, kind and label all match keeps the focus. Screen roots are never a focus.
   state layerFocus = [""]
-  state layerFocusIds = [""]
-  derive focusedLayer = first(sortBy(elementTree.filter(e => e.ancestors.length > 0 and layerFocus.includes(e.identity)), e => e.depth * 2 + (layerFocusIds.includes(e.id) ? 1 : 0), "desc"))
+  state layerFocusPairs = [""]
+  state layerFocusPlan = ""
+  derive layerTreePlan = match designChanged { case some(r) => r.spacingPlan, case none => "" }
+  derive focusedLayer = first(sortBy(elementTree.filter(e => e.ancestors.length > 0 and (layerTreePlan == layerFocusPlan ? layerFocus.includes(e.identity) : layerFocusPairs.includes(`${e.identity} ${e.id} ${e.kind} ${e.label}`))), e => e.depth * 2 + (layerFocusPairs.includes(`${e.identity} ${e.id} ${e.kind} ${e.label}`) ? 1 : 0), "desc"))
   derive focusedLayerId = match focusedLayer { case some(e) => e.id, case none => "" }
   derive focusedLayerDepth = match focusedLayer { case some(e) => e.depth, case none => 0 }
   derive focusedLayerAncestors = match focusedLayer { case some(e) => e.ancestors, case none => [""] }
   derive focusedLayerPath = elementTree.filter(a => a.ancestors.length > 0 and focusedLayerAncestors.includes(a.id))
   derive focusedLayerParent = first(sortBy(focusedLayerPath, a => a.depth, "desc"))
-  derive layerGroupTarget = match first(elementTree.filter(e => e.selected)) { case some(e) => e.hasChildren and e.ancestors.length > 0 ? e.id : (e.ancestors.length > 1 ? e.ancestors.slice(0, 1).join("") : ""), case none => "" }
+  // A tree row's context menu names its own layer, so the menu never acts on a selection still being replaced.
+  state menuLayer = ""
+  action openLayerMenu(id: string)
+    menuLayer = id
+    selectElement(id)
+  derive layerMenuSubject = first(elementTree.filter(e => menuLayer == "" ? e.selected : e.id == menuLayer))
+  derive layerGroupTarget = match layerMenuSubject { case some(e) => e.hasChildren and e.ancestors.length > 0 ? e.id : (e.ancestors.length > 1 ? e.ancestors.slice(0, 1).join("") : ""), case none => "" }
   // Callers expand the rows they reveal, because an action's writes land together when it ends.
   action focusLayer(id: string)
     match first(elementTree.filter(e => e.id == id and e.ancestors.length > 0))
       case some(e)
         layerFocus = elementTree.filter(a => a.id == e.id or e.ancestors.includes(a.id)).map(a => a.identity)
-        layerFocusIds = [e.id].concat(e.ancestors)
+        layerFocusPairs = elementTree.filter(a => a.id == e.id or e.ancestors.includes(a.id)).map(a => `${a.identity} ${a.id} ${a.kind} ${a.label}`)
+        layerFocusPlan = layerTreePlan
         scrollIntoView(`layer-row-${e.id}`, block="nearest", inline="nearest", behavior="instant")
       case none
         clearLayerFocus()
   action clearLayerFocus
     layerFocus = [""]
-    layerFocusIds = [""]
+    layerFocusPairs = [""]
   // Drilling in from a row moves keyboard focus to Back, since the row's own focus button goes away.
   action enterLayerGroup(id: string)
     collapsedElements = collapsedElements.filter(c => c != id)
@@ -626,10 +639,10 @@ component Studio
       if not leftOpen
         toggleLeft()
       focusLayer(layerGroupTarget)
-      match first(elementTree.filter(e => e.selected))
-        case some(selected)
-          collapsedElements = collapsedElements.filter(c => c != layerGroupTarget and not selected.ancestors.includes(c))
-          scrollIntoView(`layer-row-${selected.id}`, block="nearest", inline="nearest", behavior="instant")
+      match layerMenuSubject
+        case some(subject)
+          collapsedElements = collapsedElements.filter(c => c != layerGroupTarget and not subject.ancestors.includes(c))
+          scrollIntoView(`layer-row-${subject.id}`, block="nearest", inline="nearest", behavior="instant")
         case none
           hand = hand
   action toggleElement(id: string)
@@ -1129,6 +1142,7 @@ component Studio
         case none
           resetView()
   action canvasMenu(e: PointerEvent)
+    menuLayer = ""
     if not editing
       send changed = edit("hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom, time.epochAtZero + performanceNow())
   action resetView
@@ -1233,7 +1247,7 @@ component Studio
         MenuDivider()
         if editing
           MenuItem(label="Select parent", icon="corner-up-left", shortcut="", disabled=selectingElement, destructive=false, menu="studio-menu", testId="menu-parent", press=selectParent)
-          MenuItem(label="Focus in layers", icon="focus", shortcut="", disabled=(selectingElement or layerGroupTarget == ""), destructive=false, menu="studio-menu", testId="menu-focus-layer", press=focusSelectedGroup)
+          MenuItem(label="Focus in layers", icon="focus", shortcut="", disabled=((menuLayer == "" and selectingElement) or layerGroupTarget == ""), destructive=false, menu="studio-menu", testId="menu-focus-layer", press=focusSelectedGroup)
           MenuItem(label="Finish editing", icon="check", shortcut="Esc", disabled=designWriting, destructive=false, menu="studio-menu", testId="menu-finish", press=finishEditing)
         else
           if doc.source != ""
@@ -1270,7 +1284,8 @@ component Studio
                     row height=40 flex-shrink=0 box-sizing="border-box" align-items="center" gap=8 padding="0 12px 0 16px"
                       SectionHeading(label="Layers")
                       text `${elementTree.length}` font="type.caption" color="ink.muted" font-variant-numeric="tabular-nums" data-tip="Rendered elements in this viewport"
-                    for group in elementTree.filter(e => e.id == focusedLayerId) key=group.id
+                    // The path stays mounted while the resolved group changes, so a fallback keeps keyboard focus on it.
+                    if focusedLayerId != ""
                       nav aria-label="Focused layer path" testId="layer-focus" display="flex" flex-shrink=0 align-items="center" gap=2 height=28 box-sizing="border-box" padding="0 12px 4px 8px" min-width=0
                         button press=focusLayerParent class=SmallTool id="layer-focus-back" aria-label=(match focusedLayerParent { case some(p) => `Back to ${p.label}`, case none => "Back to all layers" }) data-tip=(match focusedLayerParent { case some(p) => `Back to ${p.label} · Show the group that holds this one`, case none => "Back to all layers" }) testId="layer-focus-back"
                           Icon(name="arrow-left", size=14, angle=0)
@@ -1279,22 +1294,23 @@ component Studio
                         if focusedLayerPath.length > 1
                           column color="ink.muted" flex-shrink=0 aria-hidden=true
                             Icon(name="chevron-right", size=10, angle=0)
-                          for hidden in sortBy(focusedLayerPath, a => a.depth, "desc").slice(1, 2) key=hidden.id
+                          for hidden in sortBy(focusedLayerPath, a => a.depth, "desc").slice(1, 2) key="grandparent"
                             button press=leaveLayerGroup(hidden.id) hover=hoverElement(hidden.id) class=Crumb flex-shrink=0 aria-label=`Back to ${hidden.label}` data-tip=`Back to ${hidden.label}${focusedLayerPath.length > 2 ? ` · ${focusedLayerPath.length - 2} more above it` : ""}` testId="layer-focus-more"
                               Icon(name="ellipsis", size=14, angle=0)
-                        for parent in sortBy(focusedLayerPath, a => a.depth, "desc").slice(0, 1) key=parent.id
+                        for parent in sortBy(focusedLayerPath, a => a.depth, "desc").slice(0, 1) key="parent"
                           column color="ink.muted" flex-shrink=0 aria-hidden=true
                             Icon(name="chevron-right", size=10, angle=0)
                           button press=leaveLayerGroup(parent.id) hover=hoverElement(parent.id) class=Crumb flex-shrink=3 aria-label=`Back to ${parent.label}` data-tip=`Back to ${parent.label}` testId="layer-focus-parent"
                             text parent.label min-width=0 overflow="hidden" text-overflow="ellipsis"
                         column color="ink.muted" flex-shrink=0 aria-hidden=true
                           Icon(name="chevron-right", size=10, angle=0)
-                        text group.label aria-current="location" hover=hoverElement(group.id) data-tip=group.label font="type.body" font-weight=500 color="ink.primary" padding="0 4px" min-width=0 flex-shrink=1 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" testId="layer-focus-current"
+                        for group in elementTree.filter(e => e.id == focusedLayerId) key="current"
+                          text group.label aria-current="location" hover=hoverElement(group.id) data-tip=group.label font="type.body" font-weight=500 color="ink.primary" padding="0 4px" min-width=0 flex-shrink=1 overflow="hidden" white-space="nowrap" text-overflow="ellipsis" testId="layer-focus-current"
                     scroll flex=1 min-height=0 testId="element-tree"
                       column padding="0 8px 12px" gap=1
                         for element, i in elementTree key=element.id
-                          if (focusedLayerId == "" or element.id == focusedLayerId or element.ancestors.includes(focusedLayerId)) and element.ancestors.filter(id => collapsedElements.includes(id)).length == 0
-                            row class=TreeRow contextmenu=selectElement(element.id) contextPopover="studio-menu" id=`layer-row-${element.id}` hover=hoverElement(element.id) height=28 flex-shrink=0 align-items="center" padding-left=(4 + min(element.depth - focusedLayerDepth, 8) * 12) padding-right=2 background-color=(element.selected ? "surface.selected" : "transparent")
+                          if (focusedLayerId == "" or element.id == focusedLayerId or element.ancestors.includes(focusedLayerId)) and element.ancestors.filter(id => collapsedElements.includes(id) and not focusedLayerAncestors.includes(id)).length == 0
+                            row class=TreeRow contextmenu=openLayerMenu(element.id) contextPopover="studio-menu" id=`layer-row-${element.id}` hover=hoverElement(element.id) height=28 flex-shrink=0 align-items="center" padding-left=(4 + min(element.depth - focusedLayerDepth, 8) * 12) padding-right=2 background-color=(element.selected ? "surface.selected" : "transparent")
                               if element.hasChildren
                                 button press=toggleElement(element.id) class=SmallTool width=16 height=28 padding=0 color="ink.muted" aria-label=`Toggle ${element.label}` aria-expanded=(not collapsedElements.includes(element.id)) data-tip=(collapsedElements.includes(element.id) ? "Expand" : "Collapse") testId=`fold-element-${i}`
                                   Icon(name="chevron-right", size=12, angle=(collapsedElements.includes(element.id) ? 0 : 90))
@@ -1305,7 +1321,7 @@ component Studio
                                   ElementIcon(kind=element.kind)
                                 text element.label font="type.body" font-weight=(element.selected ? 500 : 400) text-align="left" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
                               if element.hasChildren and element.ancestors.length > 0 and element.id != focusedLayerId
-                                RowAction(icon="focus", label=`Focus ${element.label}`, hint="Focus group · Show only this layer and what it holds", revealed=(hoveredElement == element.id), testId=`focus-element-${i}`, press=enterLayerGroup(element.id))
+                                RowAction(icon="focus", label=`Focus ${element.label}`, hint=`Focus ${element.label} · Show only this group and the layers it holds`, revealed=(hoveredElement == element.id), testId=`focus-element-${i}`, press=enterLayerGroup(element.id))
                   else
                     row height=40 flex-shrink=0 box-sizing="border-box" align-items="center" gap=4 padding="0 12px 0 16px"
                       SectionHeading(label="Screens")
