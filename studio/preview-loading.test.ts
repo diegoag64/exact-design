@@ -61,6 +61,11 @@ test('canvas list samples bound late rows and pagination without removing source
     await page.goto(app.url+'?__ed_canvas=1&__ed_full=1&__ed_height=500&__ed_rows=0');
     await page.waitForFunction(()=>window.sizes?.at(-1)?.height===1700);
     expect(await page.locator('[data-ed-list-sample]').count()).toBe(0);
+    // Bottom padding must not expose a sliver of the next row when it exceeds the row gap.
+    await page.goto(app.url+'?__ed_canvas=1&__ed_full=1&__ed_height=500&__ed_rows=5');
+    await page.evaluate(()=>{const rows=document.querySelector('.rows');rows.style.paddingBottom='24px';rows.style.gap='8px';});
+    await page.waitForFunction(()=>document.querySelector('[data-ed-list-sample]')?.clientHeight===432);
+    expect(await page.evaluate(()=>document.querySelector('[data-ed-list-sample]').getBoundingClientRect().bottom<=document.querySelectorAll('.song')[5].getBoundingClientRect().top)).toBe(true);
     await page.goto(app.url+'?__ed_canvas=0&__ed_full=0&__ed_height=500&__ed_rows=5');
     await page.waitForFunction(()=>window.sizes?.length>0);
     expect(await page.locator('[data-ed-list-sample]').count()).toBe(0);

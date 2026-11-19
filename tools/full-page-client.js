@@ -23,7 +23,7 @@ export function fullPage(report){
         if(boxes.some((b,i)=>!b.width||!b.height||(i>0&&b.top<boxes[i-1].bottom-1)))continue;
         const box=parent.getBoundingClientRect(),css=getComputedStyle(parent);
         if(!box.width||css.display==='contents')continue;
-        const height=Math.ceil(boxes[rows-1].bottom-box.top+(parseFloat(css.paddingBottom)||0)+(parseFloat(css.borderBottomWidth)||0));
+        const height=Math.ceil(boxes[rows-1].bottom-box.top+(parseFloat(css.borderBottomWidth)||0));
         const id=String(bounded.size);bounded.add(parent);
         if(parent.dataset.edListSample!==id)parent.dataset.edListSample=id;
         rules.push(`#exact-root [data-ed-list-sample="${id}"]{max-height:${height}px!important;min-height:0!important;overflow:clip!important;box-sizing:border-box!important}[data-ed-list-sample="${id}"]>*{flex-shrink:0!important}`);
