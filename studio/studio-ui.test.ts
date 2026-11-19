@@ -163,6 +163,13 @@ test('studio icons, context menus and canvas gestures share the desktop interact
       expect(await select.getAttribute('aria-pressed')).toBe('true');await selectedFill(select);
       expect(await reduce.getAttribute('aria-pressed')).toBe('true');await selectedFill(reduce);
       await selectedFill(layer);
+      // A selected viewport row's press lands on its nested button, which paints the pressed shade itself.
+      const view=page.locator('[data-testid="view-view-1"]');await view.click();
+      await page.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="view-view-1"]')!.parentElement!).backgroundColor!=='rgba(0, 0, 0, 0)');
+      await rest();const viewBox=await view.boundingBox();await page.mouse.move(viewBox.x+20,viewBox.y+viewBox.height/2);await page.mouse.down();
+      await page.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="view-view-1"]')!).backgroundColor!=='rgba(0, 0, 0, 0)');
+      expect(bluish((await look(view)).bg)).toBe(true);expect((await look(view)).color).not.toBe('rgba(0, 0, 0, 0)');
+      await page.mouse.move(5,995);await page.mouse.up();await rest();
       await page.getByRole('button',{name:'Appearance',exact:true}).click();
       const system=page.locator('[data-testid="theme-studio-system"]');await system.waitFor();
       expect(await system.getAttribute('aria-pressed')).toBe('true');

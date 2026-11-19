@@ -94,7 +94,7 @@ Every control that can be selected or active shows rest, hover, pressed and keyb
 
 A selected control takes a selected class, such as `ToolSelected`, `ToolAction`, `SmallToolSelected`, `TreeRowSelected`, `SegmentOn` or `ChipSelected`, chosen from the same condition as its `aria-pressed`. Do not paint the selected fill as the node's own `background-color` on a neutral class: a `:hover` row outranks the node's own fill and `:checked`, so the hover would replace it with grey.
 
-Exact applies `:hover` and `:focus-visible` without asking the runner, so their rows are literals, and a node's classes must agree on them. Hover therefore adds the `surface.hover-wash` inset shadow over the fill rather than replacing it: it darkens a light fill and lightens a dark one, and on the panel it matches `surface.hover`. `:active` may differ per class, so each selected class names its own pressed colour. While a control is focused, the focus ring replaces the hover wash.
+Exact applies `:hover` and `:focus-visible` without asking the runner, so their rows are literals, and a node's classes must agree on them. Hover therefore adds the `surface.hover-wash` inset shadow over the fill rather than replacing it: it darkens a light fill and lightens a dark one, and on the panel it matches `surface.hover`. `:active` may differ per class, so each selected class names its own pressed colour. Exact paints the press on the node that has the `press`, so a row whose press belongs to a nested button, such as a viewport or element row, gives that button its own `:active` shade. While a control is focused, the focus ring replaces the hover wash. The wash stays on while a control is pressed, so `studio/theme-contrast.test.ts` checks that text and icons keep their contrast over each selected and pressed fill with the wash on top.
 
 Segments are the exception: the wash would turn a raised white option grey. Their hover draws a `line.hover` edge and full ink, and leaves the fill and `shadow.raised` alone. Menu rows highlight with `surface.selected` on hover. The menu moves focus only by keyboard, so a focused row also carries the accent ring. A checked `MenuCheck` row shows its check mark, not a fill. A hidden item's `VisibilityButton` shows `eye-off` and stays visible; it has no selected fill.
 
@@ -218,7 +218,7 @@ Workspace events retain document snapshots. Source events retain draft patches, 
 
 ## Verification
 
-- `bun run test`: source editing, persistence, selection, geometry, and proxy tests.
+- `bun run test`: source editing, persistence, selection, geometry, proxy, and theme contrast tests.
 - `bun run test:ui`: Exact behavior tests, including camera coordinates and context actions.
 - `bun run test:preview`: isolated real-browser tests. The studio regression covers icon tint and centering in both themes, the hover, pressed and focus states of selected controls in both themes, right-click targeting, keyboard focus, edge placement, Space and middle dragging, and typing. The real-app regressions cover menus and navigation across inspected iframe boundaries, literal text editing, independent padding and corners, linked values, checked source writes, timeline persistence, property additions, explicit responsive overrides, and stable controls during background polling.
 - `bun run verify`: the required Exact layout and behavior audit.

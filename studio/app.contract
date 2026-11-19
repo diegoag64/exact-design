@@ -1209,7 +1209,9 @@ component Studio
                                   Icon(name="chevron-right", size=12, angle=(collapsedElements.includes(element.id) ? 0 : 90))
                               else
                                 column width=16 flex-shrink=0
-                              button press=selectElement(element.id) testId=`element-${i}` aria-label=(element.label == layerKind(element.kind) ? element.label : `${layerKind(element.kind)}: ${element.label}`) data-tip=element.label aria-pressed=element.selected display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 8px 0 4px" border-width=0 background-color="transparent" color=(element.selected ? "ink.selected" : "ink.primary")
+                              button press=selectElement(element.id) testId=`element-${i}` aria-label=(element.label == layerKind(element.kind) ? element.label : `${layerKind(element.kind)}: ${element.label}`) data-tip=element.label aria-pressed=element.selected display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 8px 0 4px" border-width=0 border-radius="radius.control" background-color="transparent" color=(element.selected ? "ink.selected" : "ink.primary")
+                                :active
+                                  background-color=(element.selected ? "surface.selected-pressed" : "surface.pressed")
                                 column color=(element.selected ? "ink.selected" : "ink.muted") flex-shrink=0
                                   ElementIcon(kind=element.kind)
                                 text element.label font="type.body" font-weight=(element.selected ? 500 : 400) text-align="left" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
@@ -1234,7 +1236,9 @@ component Studio
                           if not collapsed.includes(group.id)
                             for v in group.views key=v.id
                               row class=(doc.active == v.id and doc.frameSelected ? TreeRowSelected : TreeRow) hover=hoverRow(v.id) contextmenu=command("select", v.id) contextPopover="studio-menu" height=28 flex-shrink=0 align-items="center" padding-right=2
-                                button press=openView(v.id, v.hidden, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 4px 0 30px" border-width=0 background-color="transparent" color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : (v.hidden ? "ink.muted" : "ink.primary"))
+                                button press=openView(v.id, v.hidden, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 4px 0 30px" border-width=0 border-radius="radius.control" background-color="transparent" color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : (v.hidden ? "ink.muted" : "ink.primary"))
+                                  :active
+                                    background-color=(doc.active == v.id and doc.frameSelected ? "surface.selected-pressed" : "surface.pressed")
                                   column color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.muted") flex-shrink=0
                                     Icon(name=deviceIcon(v.name), size=14, angle=0)
                                   text v.name font="type.body" flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"

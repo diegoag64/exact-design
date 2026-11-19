@@ -12,7 +12,7 @@ theme
   surface.action = #0877c9 scheme=fixed
   surface.action-pressed = #055a99 scheme=fixed
   surface.selected = light-dark(#e5f4ff, #164b70)
-  surface.selected-pressed = light-dark(#c2e2fb, #2a6fa3)
+  surface.selected-pressed = light-dark(#cfe8fc, #1f5f8e)
   surface.notice = light-dark(#f2f9ff, #1f3242)
   surface.scrim = #00000059 scheme=fixed
   surface.diff-add = light-dark(#e7f7ec, #1c3324)
