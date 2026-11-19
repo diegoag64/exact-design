@@ -1460,8 +1460,8 @@ component Studio
                     if v.route != "" and (missingRoutes.includes(v.route) or linkState == "mismatch")
                       column position="absolute" inset=0 align-items="center" justify-content="center" gap=12 padding=32 box-sizing="border-box" background-color="surface.panel" border="1px dashed line.strong" color="ink.secondary" text-align="center" testId=`unavailable-${v.id}`
                         Icon(name="circle-alert", size=28, angle=0)
-                        text (linkState == "mismatch" ? `${doc.projectName} isn’t running at ${hostOf(doc.projectUrl)}` : `${doc.projectName} has no ${v.route} route`) font-size=20 font-weight=600 color="ink.primary"
-                        text (linkState == "mismatch" ? "Another app answers at this address. This screen will load when its own app is back." : "Remove this screen from the Screens panel, or add the route back to your app.") font-size=15 max-width=420
+                        text (linkState == "mismatch" ? `${doc.projectName} isn’t running at ${hostOf(doc.projectUrl)}` : `${doc.projectName} has no ${v.route} route`) font-size="1.25rem" font-weight=600 color="ink.primary"
+                        text (linkState == "mismatch" ? "Another app answers at this address. This screen will load when its own app is back." : "Remove this screen from the Screens panel, or add the route back to your app.") font-size="0.9375rem" max-width="26.25rem"
                     else
                       ScreenView(source=v.previewSource, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
                 canvas pointer-events=(editing and not hand ? "none" : "auto") surface=design(scene.drawing, doc.selected, zoom, (hand ? cameraX + dx * zoom : cameraX), (hand ? cameraY + dy * zoom : cameraY), (hand ? 0 : dragX), (hand ? 0 : dragY), doc.resizing, snapping) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up cursor=(hand ? (dragging ? "grabbing" : "grab") : (dragging ? (doc.resizing ? "nwse-resize" : "move") : "default")) touch-action="none" testId="canvas" aria-label="Design canvas"
@@ -2132,7 +2132,7 @@ component Studio
                     if doc.route != "" and (missingRoutes.includes(doc.route) or linkState == "mismatch")
                       column position="absolute" inset=0 align-items="center" justify-content="center" gap=12 padding=32 box-sizing="border-box" background-color="surface.panel" color="ink.secondary" text-align="center" testId="preview-unavailable"
                         Icon(name="circle-alert", size=28, angle=0)
-                        text (linkState == "mismatch" ? `${doc.projectName} isn’t running at ${hostOf(doc.projectUrl)}` : `${doc.projectName} has no ${doc.route} route`) font-size=20 font-weight=600 color="ink.primary"
+                        text (linkState == "mismatch" ? `${doc.projectName} isn’t running at ${hostOf(doc.projectUrl)}` : `${doc.projectName} has no ${doc.route} route`) font-size="1.25rem" font-weight=600 color="ink.primary"
                     else
                       ScreenView(source=doc.previewSource, layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick)
         if entry.name == "project" or entry.name == "addScreen"
