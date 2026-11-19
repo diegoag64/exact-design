@@ -1230,7 +1230,9 @@ component Studio
                           row class=TreeRow hover=hoverRow(group.id) height=28 flex-shrink=0 align-items="center" padding="0 2px 0 4px"
                             button press=toggleGroup(group.id) testId=`fold-group-${group.id}` class=SmallTool width=16 height=28 padding=0 color="ink.muted" aria-label=`Toggle ${group.name}` aria-expanded=(not collapsed.includes(group.id)) data-tip=(collapsed.includes(group.id) ? "Show viewports" : "Hide viewports")
                               Icon(name="chevron-right", size=12, angle=(collapsed.includes(group.id) ? 0 : 90))
-                            button press=focusScreen(group.id) testId=`group-${group.id}` aria-label=group.name data-tip=(group.hidden ? "Hidden screen · Show it to see it on the canvas" : "Go to screen · Pan the canvas to this screen") display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 4px" border-width=0 background-color="transparent" color=(group.hidden ? "ink.secondary" : "ink.primary")
+                            button press=focusScreen(group.id) testId=`group-${group.id}` aria-label=group.name data-tip=(group.hidden ? "Hidden screen · Show it to see it on the canvas" : "Go to screen · Pan the canvas to this screen") display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 4px" border-width=0 border-radius="radius.control" background-color="transparent" color=(group.hidden ? "ink.secondary" : "ink.primary")
+                              :active
+                                background-color="surface.field"
                               :hover
                                 background-color="transparent"
                               column color="ink.muted" flex-shrink=0

@@ -133,8 +133,8 @@ test('studio icons, context menus and canvas gestures share the desktop interact
     // Selected controls keep their own fill while hovered, settle on their pressed shade, and show
     // a focus ring that differs from hover. Pressed colours are app.forma's tokens.
     const pressedFill={
-      light:{action:'rgb(5, 90, 153)',selected:'rgb(207, 232, 252)',neutral:'rgb(229, 229, 229)'},
-      dark:{action:'rgb(5, 90, 153)',selected:'rgb(15, 58, 89)',neutral:'rgb(68, 68, 68)'},
+      light:{action:'rgb(5, 90, 153)',selected:'rgb(207, 232, 252)',neutral:'rgb(229, 229, 229)',row:'rgb(245, 245, 245)'},
+      dark:{action:'rgb(5, 90, 153)',selected:'rgb(15, 58, 89)',neutral:'rgb(68, 68, 68)',row:'rgb(56, 56, 56)'},
     };
     const look=(l:any)=>l.evaluate((el:Element)=>{const s=getComputedStyle(el);return {bg:s.backgroundColor,shadow:s.boxShadow,border:s.borderTopColor,color:s.color,opacity:s.opacity};});
     const bluish=(c:string)=>{const [r,,b]=c.match(/[\d.]+/g)!.map(Number);return b-r>=20;};
@@ -181,6 +181,8 @@ test('studio icons, context menus and canvas gestures share the desktop interact
       // image): the row's wash shows through it.
       await view.hover();await page.waitForFunction(el=>getComputedStyle(el).backgroundColor==='rgba(0, 0, 0, 0)',await view.elementHandle(),{timeout:3000});
       expect(await view.evaluate((el:Element)=>getComputedStyle(el).backgroundImage)).toBe('none');expect((await look(view.locator('xpath=..'))).shadow).toContain('100px inset');await rest();
+      // A screen's nested name button presses to the row fill instead of fading its text.
+      const group=page.locator('[data-testid="group-screen-1"]');expect((await press(group,fills.row,40)).opacity).toBe('1');
       // Menu rows press to a deeper shade of their hover highlight.
       await page.locator('[data-testid="plan-options"]').click();const boxes=page.locator('[data-testid="plan-boxes"]');await boxes.waitFor();
       await boxes.hover();const highlight=(await look(boxes)).bg;expect(highlight).not.toBe(fills.selected);
