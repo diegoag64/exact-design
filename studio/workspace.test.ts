@@ -123,15 +123,34 @@ test('switching between single column and collage keeps viewports together with 
   // Tidying again in the same layout changes nothing and adds no undo step.
   e.arrange(false,false);expect(e.past.length).toBe(depth+2);
 });
-test('a collage settles to late content heights in one undo step without overlaps',()=>{
+test('a collage settles to late content heights into the bulk add, so one undo removes both',()=>{
   const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
   e.addScreens(Array.from({length:6},(_,i)=>({name:`S${i}`,route:`/s${i}`})),'Core',true);
   const depth=e.past.length,v=e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/s0')!;
-  expect(e.arrange(true,true)).toBe(false);expect(e.past.length).toBe(depth+1);
+  expect(e.arrange(true,true)).toBe(true);expect(e.past.length).toBe(depth);
   e.contentSizes.set(v.id,{source:'http://127.0.0.1:5174/s0',width:v.width,viewportHeight:v.height,height:4000});
-  expect(e.arrange(true,true)).toBe(true);expect(e.past.length).toBe(depth+1);
+  expect(e.arrange(true,true)).toBe(true);expect(e.past.length).toBe(depth);
   const settled=tidied(e);expect(settled.overlap).toBe(false);expect(settled.columns).toBeGreaterThan(1);sideBySide(settled.rows);
-  e.undo();expect(e.past.length).toBe(depth);
+  const views=JSON.stringify(e.document.views);
+  e.undo();expect(e.document.screens.length).toBe(1);
+  e.redo();expect(JSON.stringify(e.document.views)).toBe(views);
+});
+test('choosing a layout settles late measurements into the choice, so one undo restores the previous layout',()=>{
+  const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
+  e.addScreens(Array.from({length:9},(_,i)=>({name:`S${i}`,route:`/s${i}`})),'Phone',true);
+  e.select(e.document.views[0].id);e.property('name','Start');
+  const column=JSON.stringify(e.document.views),depth=e.past.length;
+  e.arrange(false,true);expect(e.past.length).toBe(depth+1);
+  const v=e.document.views.find(v=>e.document.screens.find(s=>s.id===v.screenId)?.route==='/s3')!;
+  e.contentSizes.set(v.id,{source:'http://127.0.0.1:5174/s3',width:v.width,viewportHeight:v.height,height:4000});
+  expect(tidied(e).overlap).toBe(true);
+  expect(e.arrange(true,true)).toBe(true);expect(e.past.length).toBe(depth+1);
+  const settled=tidied(e);expect(settled.overlap).toBe(false);expect(settled.columns).toBeGreaterThan(1);
+  const views=JSON.stringify(e.document.views);
+  e.undo();expect(JSON.stringify(e.document.views)).toBe(column);
+  // After an undo, a late pass starts its own step instead of rewriting the restored layout.
+  e.redo();expect(JSON.stringify(e.document.views)).toBe(views);
+  e.undo();expect(e.arrange(true,true)).toBe(false);expect(e.past.length).toBe(depth+1);
 });
 test('both layouts keep hidden screens below the visible rows, without a gap',()=>{
   for(const collage of [false,true]) {
@@ -151,20 +170,23 @@ test('both layouts keep hidden screens below the visible rows, without a gap',()
     expect(row('/profile').length).toBe(3);
   }
 });
-test('settling tidy passes merge into one undo step until another edit',()=>{
+test('settling tidy passes merge into the step that started them until another edit',()=>{
   const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
   e.addScreens([{name:'Today',route:'/'},{name:'Diary',route:'/diary'}],'Core',true);
   const depth=e.past.length,phone=e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/')!;
-  // Already tidy: no undo step, so the next real pass must not merge into an older edit.
-  expect(e.arrange(true)).toBe(false);expect(e.past.length).toBe(depth);
+  expect(e.arrange(true)).toBe(true);expect(e.past.length).toBe(depth);
   e.contentSizes.set(phone.id,{source:'http://127.0.0.1:5174/',width:phone.width,viewportHeight:phone.height,height:2000});
-  expect(e.arrange(true)).toBe(false);expect(e.past.length).toBe(depth+1);
+  expect(e.arrange(true)).toBe(true);expect(e.past.length).toBe(depth);
   e.contentSizes.set(phone.id,{source:'http://127.0.0.1:5174/',width:phone.width,viewportHeight:phone.height,height:3000});
-  expect(e.arrange(true)).toBe(true);expect(e.past.length).toBe(depth+1);
+  expect(e.arrange(true)).toBe(true);expect(e.past.length).toBe(depth);
   const diary=e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/diary')!;
   expect(diary.y).toBe(phone.y+3000+80);
-  e.undo();expect(e.past.length).toBe(depth);
-  e.select(phone.id);e.property('name','Today again');expect(e.arrange(true)).toBe(false);
+  e.undo();expect(e.document.screens.length).toBe(1);e.redo();
+  // Another edit ends the window: the next pass is its own undo step and never rewrites that edit.
+  e.select(phone.id);e.property('name','Today again');const edited=e.past.length;
+  e.contentSizes.set(phone.id,{source:'http://127.0.0.1:5174/',width:phone.width,viewportHeight:phone.height,height:2400});
+  expect(e.arrange(true)).toBe(false);expect(e.past.length).toBe(edited+1);
+  e.undo();expect(e.document.screens.find(s=>s.route==='/')!.name).toBe('Today again');
 });
 test('project setup connects, adds missing routes once, replaces the untouched starter, and undoes in one step',()=>{
   const e=new WorkspaceEditor();expect(e.isPristine()).toBe(true);
@@ -180,7 +202,7 @@ test('project setup connects, adds missing routes once, replaces the untouched s
   expect(e.document.screens.map(s=>s.name)).toEqual(['Home','Today','Diary']);
 });
 
-test('project setup lays the screens it hides below the visible ones, so the tidy that follows adds no undo step',()=>{
+test('project setup lays the screens it hides below the visible ones, and the tidy that follows settles into its undo step',()=>{
   const e=new WorkspaceEditor();
   const routes=[{name:'Today',route:'/'},{name:'Welcome',route:'/welcome'},{name:'Diary',route:'/diary'},{name:'Profile',route:'/profile'}];
   e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core',['Welcome','/profile']);
@@ -189,7 +211,12 @@ test('project setup lays the screens it hides below the visible ones, so the tid
   expect(top('Welcome')).toBeLessThan(top('Profile'));expect(top('Profile')).toBeLessThan(top('Today'));expect(top('Today')).toBeLessThan(top('Diary'));
   expect(e.isShown(e.active)).toBe(true);
   const before=JSON.stringify(e.document.views);
-  expect(e.arrange(true)).toBe(false);expect(e.past.length).toBe(1);expect(JSON.stringify(e.document.views)).toBe(before);
+  expect(e.arrange(true)).toBe(true);expect(e.past.length).toBe(1);expect(JSON.stringify(e.document.views)).toBe(before);
+  e.undo();expect(e.isPristine()).toBe(true);
+  // A collage after setup settles into the setup's undo step too.
+  e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core',['Welcome','/diary','/profile']);
+  expect(e.arrange(true,true)).toBe(true);expect(e.past.length).toBe(1);
+  const collage=tidied(e);expect(collage.overlap).toBe(false);expect(collage.columns).toBeGreaterThan(1);
   e.undo();expect(e.isPristine()).toBe(true);
 });
 test('project setup with a show list adds every route but leaves only the listed screens visible, in one undo step',()=>{

@@ -40,7 +40,9 @@ export function loadWorkspace(value: unknown): Workspace {
   return structuredClone(d);
 }
 export class WorkspaceEditor {
-  document = createWorkspace(); active = 'view-1'; selected = ''; past: Workspace[] = []; future: Workspace[] = []; private settling = false;
+  document = createWorkspace(); active = 'view-1'; selected = ''; past: Workspace[] = []; future: Workspace[] = [];
+  /** True while the latest undo step started a settling window (a bulk add, setup or tidy): settling tidy passes merge into it. */
+  private settling = false;
   contentSizes=new Map<string,{source:string;width:number;viewportHeight:number;height:number}>();
   get frames(){return this.document.views.map(v=>{const screen=this.document.screens.find(s=>s.id===v.screenId)!,source=screenSource(screen,this.document.project),size=this.contentSizes.get(v.id);return source&&v.heightMode!=='fixed'&&size?.source===source&&size.width===v.width&&size.viewportHeight===v.height?{...v,height:size.height}:v;});}
   /** Frames drawn on the canvas: a viewport is shown when neither it nor its screen is hidden. */
@@ -72,8 +74,8 @@ export class WorkspaceEditor {
     return true;
   }
   reconcile() { if (!this.document.views.some(v => v.id === this.active)) this.active = this.document.views[0].id; if (!this.target) this.selected = ''; }
-  undo() { const d=this.past.pop(); if(d) { this.future.push(this.document); this.document=d; this.reconcile(); } }
-  redo() { const d=this.future.pop(); if(d) { this.past.push(this.document); this.document=d; this.reconcile(); } }
+  undo() { this.settling=false; const d=this.past.pop(); if(d) { this.future.push(this.document); this.document=d; this.reconcile(); } }
+  redo() { this.settling=false; const d=this.future.pop(); if(d) { this.past.push(this.document); this.document=d; this.reconcile(); } }
   select(id: string) { if(this.document.views.some(v=>v.id===id)) this.active=id; this.selected=id; }
   private id(prefix: string) { let i=1; const ids=[...this.document.views,...this.document.screens].map(n=>n.id); while(ids.includes(`${prefix}-${i}`)) i++; return `${prefix}-${i}`; }
   addView(preset: string, independent = false, duplicate = false) {
@@ -137,7 +139,7 @@ export class WorkspaceEditor {
         y+=Math.max(...list.map(size=>size.height))+FRAME_GAP;
       }
     });
-    this.active=first;this.selected=first;
+    this.active=first;this.selected=first;this.settling=true;
   }
   /** Add each device of a set to the active screen that it does not already show, in one undo step. */
   addViews(choice: string) {
@@ -148,10 +150,11 @@ export class WorkspaceEditor {
     if(this.document.views.length+fresh.length>200) throw new Error('This workspace is full.');
     let x=Math.max(...this.frames.map(v=>v.x+v.width))+FRAME_GAP; const y=this.view.y; let first='';
     this.change(d=>{for(const size of fresh){const id=this.nextId(d,'view');first||=id;d.views.push({id,screenId,name:size.name,x,y,width:size.width,height:size.height,heightMode:'content'});x+=size.width+FRAME_GAP;}});
-    this.active=first;this.selected=first;
+    this.active=first;this.selected=first;this.settling=true;
   }
   /** Tidy up: one row per screen in library order, using each frame's displayed height so loaded content never overlaps.
-   *  Settling passes, repeated while new frames report their heights, merge into the first pass's undo step; returns whether this one merged.
+   *  Settling passes, repeated while new frames report their heights, merge into the undo step that started them (the bulk add,
+   *  setup or tidy before them) until another edit; returns whether this one merged.
    *  `collage` packs those rows into columns instead, so the whole workspace fits one wide view; a screen's frames stay side by side.
    *  In both layouts, screens with no visible frame keep a row each below the visible ones, so they leave no gap and showing one later never lands on another frame. */
   arrange(settle=false, collage=false): boolean {
@@ -176,7 +179,7 @@ export class WorkspaceEditor {
     }
     const place=(d:Workspace)=>{for(const v of d.views){const p=at.get(v.id);if(p){v.x=Math.round(p.x);v.y=Math.round(p.y);}}};
     if(settle&&this.settling){const next=structuredClone(this.document);place(next);this.document=next;this.future=[];return true;}
-    this.settling=this.change(place)&&settle;return false;
+    this.settling=this.change(place);return false;
   }
   /** True for the untouched starter workspace, which a project setup may replace. */
   isPristine() {
@@ -191,7 +194,7 @@ export class WorkspaceEditor {
   /** Connect a project and add each of its routes the library lacks, replacing an untouched starter screen; one undo step.
    *  A non-empty `show` (screen names or routes) leaves only the matching project screens visible; with no match, visibility is unchanged. */
   setupProject(name: string, url: string, routes: NewScreen[], choice: string, show: string[] = []) {
-    const pristine=this.isPristine(),starter=this.document.screens[0]?.id;
+    const pristine=this.isPristine(),starter=this.document.screens[0]?.id,before=this.document;
     this.batch(()=>{
       if(this.document.project.url!==projectUrl(url)) this.connectProject(name||'Project',url);
       const have=new Set(this.document.screens.map(s=>s.route)),missing=routes.filter(r=>!hasRouteParameters(r.route)&&!have.has(screenRoute(r.route)));
@@ -210,6 +213,8 @@ export class WorkspaceEditor {
       if(!this.isShown(this.active)){const first=this.shownFrames[0]?.id;if(first){this.active=first;this.selected=first;}}
     });
     this.reconcile();
+    // The tidy that follows a setup settles into the setup's undo step, whichever layout it uses.
+    this.settling=this.document!==before;
     return this.document.screens.filter(s=>s.route).length;
   }
   private nextId(d: Workspace, prefix: string) { let i=1; const ids=[...d.views,...d.screens].map(n=>n.id); while(ids.includes(`${prefix}-${i}`)) i++; return `${prefix}-${i}`; }

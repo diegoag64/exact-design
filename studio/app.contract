@@ -735,12 +735,15 @@ component Studio
   state tidyLayoutChosen = false
   derive collage = tidyLayoutChosen ? tidyLayout == "collage" : (searchParam(top(nav), "layout") == "collage" or tidyLayout == "collage")
   derive layoutName = collage ? "Collage" : "Single column"
+  // An explicit tidy keeps settling as previews report new heights, like a bulk add, into the same undo step.
   action tidyUp
+    watchTidy()
     command("arrange", (collage ? "collage" : ""))
   // Choosing a layout tidies the canvas in it at once, as one undo step.
   action chooseLayout(layout: string)
     tidyLayout = layout
     tidyLayoutChosen = true
+    watchTidy()
     command("arrange", (layout == "collage" ? "collage" : ""))
   state projectName = ""
   state projectUrl = ""
@@ -838,6 +841,10 @@ component Studio
     tidySignature = ""
     tidyFit = true
     tidyFitted = ""
+  // Settle an explicit tidy on later measurements only, without refitting the camera.
+  action watchTidy
+    tidyWhenReady = true
+    tidySignature = previews.signature
   action finishTidy
     tidyWhenReady = false
   task stopTidy when tidyWhenReady
@@ -988,8 +995,11 @@ component Studio
       if not editing or op == "save"
         send changed = edit(op, key, "", 0, 0, time.epochAtZero + performanceNow())
   action prop(key: string, value: string)
+    if key == "x" or key == "y"
+      tidyWhenReady = false
     send changed = edit("property", key, value, 0, 0, time.epochAtZero + performanceNow())
   action down(e: PointerEvent)
+    tidyWhenReady = false
     cancelPan()
     fitWhenReady = false
     tidyFit = false

@@ -38,7 +38,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Fixed
 
-- Tidy up in a single column places hidden screens below the visible rows, as the collage does, instead of leaving gaps between visible screens. Setup links with `show` lay out the screens they hide the same way, so undo still removes the setup in one step. Undo or redo while new previews load no longer re-tidies the canvas.
+- Tidy up in a single column places hidden screens below the visible rows, as the collage does, instead of leaving gaps between visible screens. Setup links with `show` lay out the screens they hide the same way. The tidying that follows a setup link, bulk add, Tidy up or layout choice while previews load now joins that action's undo step, so one Undo removes it in either layout. Undo, redo, moving a frame, or clicking the canvas stops it from re-tidying.
 
 - Setup links fetch current screens when another app takes over the same local server URL, instead of reusing the previous app’s cached screens.
 

@@ -1010,10 +1010,12 @@ test "tidy up arranges screens in the layout chosen beside it"
   clock data
   expect state tidyLayout == "collage"
   expect state collage == true
+  expect state tidyWhenReady == true
   expect state doc.views.1.x >= 500
   expect state doc.views.2.x >= 1000
   tap "undo"
   clock data
+  expect state tidyWhenReady == false
   expect state doc.views.1.x == 0
   expect state tidyLayout == "collage"
   tap "redo"
@@ -1024,6 +1026,7 @@ test "tidy up arranges screens in the layout chosen beside it"
   expect state doc.views.1.x == 0
   tap "tidy-up"
   clock data
+  expect state tidyWhenReady == true
   expect state doc.views.1.x >= 500
   expect state doc.views.2.x >= 1000
   reload
