@@ -219,6 +219,19 @@ test('project setup lays the screens it hides below the visible ones, and the ti
   const collage=tidied(e);expect(collage.overlap).toBe(false);expect(collage.columns).toBeGreaterThan(1);
   e.undo();expect(e.isPristine()).toBe(true);
 });
+test('a second setup link that only changes visibility settles its reorder into the same undo step',()=>{
+  const e=new WorkspaceEditor();
+  const routes=[{name:'Today',route:'/'},{name:'Welcome',route:'/welcome'},{name:'Diary',route:'/diary'},{name:'Profile',route:'/profile'}];
+  e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core');
+  const views=JSON.stringify(e.document.views),depth=e.past.length;
+  // Every screen exists, so this setup adds nothing: it only hides all but a later screen.
+  e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core',['/profile']);
+  expect(e.past.length).toBe(depth+1);
+  for(const collage of [false,true]){expect(e.arrange(true,collage)).toBe(true);expect(e.past.length).toBe(depth+1);}
+  const profile=tidied(e).rows.find(r=>e.document.screens.find(s=>s.id===r[0].screenId)!.route==='/profile')!;
+  expect(profile[0].y).toBe(Math.min(...e.document.views.map(v=>v.y)));
+  e.undo();expect(e.document.screens.every(s=>!s.hidden)).toBe(true);expect(JSON.stringify(e.document.views)).toBe(views);
+});
 test('project setup with a show list adds every route but leaves only the listed screens visible, in one undo step',()=>{
   const e=new WorkspaceEditor();
   const routes=[{name:'Today',route:'/'},{name:'Welcome',route:'/welcome'},{name:'Diary',route:'/diary'},{name:'Profile',route:'/profile'}];
