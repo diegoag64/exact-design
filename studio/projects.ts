@@ -72,7 +72,8 @@ export function resolveConnection(records:ProjectRecord[],current:ProjectRecord|
   }
   // Nothing at the address says which app it is.
   if(intent==='connect'&&current){
-    if(!current.url||!current.identity)return {kind:'here',adopt:false};
+    // Renaming, or connecting an empty workspace, ties no saved work to an app it cannot confirm.
+    if(!current.url||current.url===address)return {kind:'here',adopt:false};
     if(decision==='adopt')return {kind:'here',adopt:false};
     return {kind:'choose',key:current.key,message:`Exact Design can’t confirm that the app at ${address} is ${label(current)}. Start it with its editing server, or choose how to continue.`};
   }
@@ -101,8 +102,12 @@ function parseRegistry(text:string):{projects:ProjectRecord[];last:string}{
   }).map((r:any)=>({key:r.key,name:r.name.slice(0,120),url:r.url,identity:r.identity}));
   return {projects,last:validKey(data.last)?data.last:''};
 }
-/** A key for drafts or a timeline saved for an origin other than the migrated workspace's. */
-const originKey=(origin:string)=>`${LEGACY_KEY}-${origin.replace(/^https?:\/\//,'').replace(/[^a-z\d]+/g,'-').replace(/^-|-$/g,'')}`.slice(0,50);
+/** A key for drafts or a timeline saved for an origin other than the migrated workspace's: a digest of the whole origin,
+ *  so distinct origins never share a project, and two tabs migrating at once derive the same key. */
+async function originKey(origin:string){
+  const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(origin)));
+  return `${LEGACY_KEY}-${[...digest.slice(0,8)].map(b=>b.toString(16).padStart(2,'0')).join('')}`;
+}
 
 /** The project list and every workspace this page has opened. Other tabs may add projects at any time, so the list is
  *  read again before each write and merged by key; nothing is ever removed from it here. */
@@ -243,10 +248,11 @@ export class ProjectStore {
       records.set(LEGACY_KEY,{key:LEGACY_KEY,name,url:legacyUrl,identity:''});
       files.set(projectFiles(LEGACY_KEY).workspace,workspaceText);
     }
-    const owner=(origin:string)=>{
+    const owner=async(origin:string)=>{
       if(origin===''||origin===legacyUrl){ensure(LEGACY_KEY,'Untitled','');return LEGACY_KEY;}
       let url='';try{url=projectUrl(origin);}catch{return '';}
-      const key=originKey(url);
+      if(url===legacyUrl){ensure(LEGACY_KEY,'Untitled','');return LEGACY_KEY;}
+      const key=await originKey(url);
       if(!validKey(key))return '';
       ensure(key,url.replace(/^https?:\/\//,''),url);return key;
     };
@@ -256,7 +262,7 @@ export class ProjectStore {
         if(data.version!==1||!data.drafts||typeof data.drafts!=='object')throw new Error('drafts');
         for(const [origin,state] of Object.entries(data.drafts)){
           if(typeof state!=='string'||!state)continue;
-          const key=owner(origin);if(!key){problems.push('design-drafts.json');continue;}
+          const key=await owner(origin);if(!key){problems.push('design-drafts.json');continue;}
           // Unverified: these drafts return only to an app that cannot say which it is at this origin, or after the person
           // confirms which app made them.
           drafts.set(key,{...drafts.get(key),[draftBucket('',new URL(origin).origin)]:state});
@@ -266,7 +272,7 @@ export class ProjectStore {
     if(historyText!==undefined){
       try{
         for(const entry of parseHistory(historyText)){
-          const key=owner(entry.project??'');if(!key){problems.push('design-history.json');continue;}
+          const key=await owner(entry.project??'');if(!key){problems.push('design-history.json');continue;}
           history.set(key,[...history.get(key)??[],entry]);
         }
       }catch{problems.push('design-history.json');}

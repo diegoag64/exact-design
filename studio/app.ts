@@ -148,11 +148,14 @@ async function connectTarget(storage:any,ws:ProjectWorkspace,intent:Intent,name:
   const record=target.record,before=JSON.stringify(target.editor.document);
   // A verified app keeps its workspace when it moves to another port; an adopted project takes the identity it was
   // confirmed as. Opening another project from this one's settings keeps that project's own name.
-  if(!(deferConnect&&resolution.kind==='here')&&(resolution.kind==='here'||record.url!==url||(identity&&record.identity!==identity))){
-    const label=resolution.kind==='open'&&intent==='connect'?record.name:name.trim()||record.name||live.name||'Project';
+  // The project being edited takes the submitted name; another project opened from its settings keeps its own.
+  const own=target===ws&&intent==='connect';
+  const label=resolution.kind==='open'&&intent==='connect'&&!own?record.name:name.trim()||record.name||live.name||'Project';
+  if(!(deferConnect&&resolution.kind==='here')&&(resolution.kind==='here'||record.url!==url||(identity&&record.identity!==identity)||(own&&label!==record.name))){
     target.editor.connectProject(label,url,identity);
   }
-  if(resolution.adopt&&identity)await target.drafts.adopt(storage.fs,draftBucket('',url),identity);
+  // Drafts saved while unverified belong to the address the project had before this request.
+  if(resolution.adopt&&identity)await target.drafts.adopt(storage.fs,draftBucket('',record.url||url),identity);
   return {target,live,url,created:false,before};
 }
 const sources: Sources = {

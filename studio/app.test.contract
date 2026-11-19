@@ -383,6 +383,10 @@ test "project screens share a server and group their viewports"
   type "project-url" "http://127.0.0.1:6000"
   tap "save-project"
   clock data
+  expect tree has "choice-adopt"
+  expect state doc.views.1.source == "http://127.0.0.1:5174/note"
+  tap "choice-adopt"
+  clock data
   clock settle
   expect state doc.views.1.source == "http://127.0.0.1:6000/note"
   expect state doc.views.2.source == "http://127.0.0.1:6000/note"
@@ -572,6 +576,8 @@ test "discovery errors retry and keep manual entry available"
   tap "menu-project-settings"
   type "project-url" "http://127.0.0.1:5177"
   tap "save-project"
+  clock data
+  tap "choice-adopt"
   clock data
   tap "add-screen"
   clock data

@@ -151,6 +151,9 @@ test('manual connect opens another app in its own workspace, follows a moved app
   expect(workspaceOf(d,a.project).screens[1]).toMatchObject({route:'/'});
   expect((await call('document',[a.project,1])).views.at(-1).source).toBe('http://127.0.0.1:5300/');
 
+  // Renaming the shown project saves the new name.
+  expect((await connect(call,a.project,'Lumen Pro','http://127.0.0.1:5300')).project).toBe(a.project);
+  expect(workspaceOf(d,a.project).project).toEqual({name:'Lumen Pro',url:'http://127.0.0.1:5300',identity:LUMEN});
   // Nothing answers at the new address, so it cannot be confirmed as Tide: the person chooses.
   const unsure=await connect(call,b.project,'Tide','http://127.0.0.1:6000');
   expect(unsure.ok).toBe(false);expect(unsure.choice).toBe(b.project);expect(workspaceOf(d,b.project).project.url).toBe('http://127.0.0.1:5194');
@@ -178,7 +181,7 @@ test('saved single-workspace data migrates into projects without losing screens,
   const [one,two]=[new ProjectStore(),new ProjectStore()];
   await Promise.all([one.load(d.fs),two.load(d.fs)]);
   expect(one.records).toEqual(two.records);
-  const other='p-legacy-127-0-0-1-5176';
+  const other=one.records[1].key;expect(other).toMatch(/^p-legacy-[a-f\d]{16}$/);
   expect(one.records).toEqual([{key:LEGACY_KEY,name:'Ember',url:'http://127.0.0.1:5174',identity:''},{key:other,name:'127.0.0.1:5176',url:'http://127.0.0.1:5176',identity:''}]);
   expect(read(d,REGISTRY_FILE).last).toBe(LEGACY_KEY);
   const ws=await one.open(d.fs,LEGACY_KEY);
@@ -354,7 +357,11 @@ test('connection requests resolve by app identity, never by address alone',()=>{
   expect(resolveConnection(records,null,false,'http://127.0.0.1:5176',at('offline'),'setup','')).toEqual({kind:'open',key:'p-old',adopt:false});
   expect(resolveConnection(records,null,false,'http://127.0.0.1:5174',at('unverified'),'setup','').kind).toBe('choose');
   expect(resolveConnection(records,records[0],false,'http://127.0.0.1:6000',at('offline'),'connect','').kind).toBe('choose');
-  expect(resolveConnection(records,records[1],false,'http://127.0.0.1:6000',at('offline'),'connect','')).toEqual({kind:'here',adopt:false});
+  // Unverified saved work moves to an address that cannot be verified only by choice; renaming in place needs none.
+  expect(resolveConnection(records,records[1],false,'http://127.0.0.1:6000',at('offline'),'connect','').kind).toBe('choose');
+  expect(resolveConnection(records,records[1],false,'http://127.0.0.1:6000',at('offline'),'connect','adopt')).toEqual({kind:'here',adopt:false});
+  expect(resolveConnection(records,records[1],false,'http://127.0.0.1:5176',at('offline'),'connect','')).toEqual({kind:'here',adopt:false});
+  expect(resolveConnection(records,records[0],false,'http://127.0.0.1:5174',at('verified',LUMEN),'connect','')).toEqual({kind:'open',key:'p-a',adopt:false});
   expect(resolveConnection(records,records[1],false,'http://127.0.0.1:6000',at('verified',TIDE),'connect','').kind).toBe('choose');
   expect(resolveConnection(records,records[0],false,'http://127.0.0.1:6000',at('verified',TIDE),'connect','')).toEqual({kind:'new'});
   expect(()=>resolveConnection(records,null,false,'javascript:alert(1)',at('offline'),'setup','')).toThrow();
@@ -376,4 +383,26 @@ test('requests a fresh page sends at once share one starter workspace',async()=>
   const docs=await Promise.all([call('document',['',1]),call('scene',['','',[],1]),call('document',['',2]),call('history',['']),call('savedDrafts',['p-none'])]);
   expect(new Set([docs[0].projectKey,docs[1].projectKey,docs[2].projectKey]).size).toBe(1);
   expect(read(d,REGISTRY_FILE).projects.length).toBe(1);
+});
+
+test('migrated drafts follow their project when its app is confirmed at a new port, and distinct origins stay apart',async()=>{
+  const {d}=legacyDisk(),call=await tab(d.storage);
+  helper.apps.set('http://127.0.0.1:5180',lumen);
+  await call('document',['',1]);
+  const asked=await connect(call,LEGACY_KEY,'Ember','http://127.0.0.1:5180');
+  expect(asked.choice).toBe(LEGACY_KEY);expect(workspaceOf(d,LEGACY_KEY).project.url).toBe('http://127.0.0.1:5174');
+  const adopted=await connect(call,LEGACY_KEY,'Ember','http://127.0.0.1:5180','adopt');
+  expect(adopted.project).toBe(LEGACY_KEY);
+  expect(workspaceOf(d,LEGACY_KEY).project).toEqual({name:'Ember',url:'http://127.0.0.1:5180',identity:LUMEN});
+  expect(read(d,projectFiles(LEGACY_KEY).drafts).drafts).toEqual({[LUMEN]:'ember-draft'});
+  const doc=await call('document',[LEGACY_KEY,1]);
+  await call('design',['open','','http://127.0.0.1:5180/',0,doc.views[0].id,LEGACY_KEY,clock++]);
+  expect(helper.design.at(-1)).toMatchObject({identity:LUMEN,draftState:'ember-draft'});
+  // Origins that differ only in punctuation migrate into separate projects.
+  const two=disk();
+  two.files.set(LEGACY_DRAFTS_FILE,JSON.stringify({version:1,drafts:{'http://my-app:5174':'one','http://my.app:5174':'two'}}));
+  const store=new ProjectStore();await store.load(two.fs);
+  expect(store.records.map(r=>r.url).sort()).toEqual(['http://my-app:5174','http://my.app:5174']);
+  expect(new Set(store.records.map(r=>r.key)).size).toBe(2);
+  for(const r of store.records)expect(Object.values(read(two,projectFiles(r.key).drafts).drafts)).toEqual([r.url==='http://my-app:5174'?'one':'two']);
 });

@@ -134,11 +134,11 @@ Every source a page asks (`document`, `edit`, `library`, `camera`, `history`, `s
 | Verified, a project has its identity | That project opens; a new address relinks its screens |
 | Verified, an unverified project is at the address | The person chooses: adopt that project, or a new workspace |
 | Verified, none | The untouched starter is used, or a new workspace opens |
-| Unverified or offline | An unverified project at the address reopens; a verified one there needs a choice |
+| Unverified or offline | An unverified project at the address reopens; a verified one there needs a choice. Moving a connected project to such an address needs a choice too; renaming does not |
 
 On `open`, `design` refuses a project screen unless the app at the address has the project's identity, and the helper checks it again against `hello` before restoring drafts. Apply re-reads `hello` and refuses if the folder changed. Unverified projects edit only an app that is also unverified, by address, as before.
 
-**Migration.** When `projects.json` is missing, `ProjectStore` reads `design.json`, `design-drafts.json` and `design-history.json`, copies the workspace unchanged to `projects/p-legacy/`, splits drafts and timeline entries by origin (other origins become `p-legacy-<host>-<port>` projects), and writes the index last. Outputs depend only on the inputs, so two tabs migrating at once write the same files. The original files are never changed or removed, and migrated projects stay unverified until the person confirms their app.
+**Migration.** When `projects.json` is missing, `ProjectStore` reads `design.json`, `design-drafts.json` and `design-history.json`, copies the workspace unchanged to `projects/p-legacy/`, splits drafts and timeline entries by origin (other origins become `p-legacy-<digest>` projects, keyed by a SHA-256 of the whole origin and named after it), and writes the index last. Outputs depend only on the inputs, so two tabs migrating at once write the same files. The original files are never changed or removed, and migrated projects stay unverified until the person confirms their app.
 
 ## Profile canvas navigation
 

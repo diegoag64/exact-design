@@ -40,7 +40,7 @@ The studio identifies an app by its folder, which Exact's local editing server r
 Two cases need your choice before the studio ties an app to saved work:
 
 - **Saved before identities.** Projects migrated from an earlier version don't know their app yet. When an app answers at their address, the notice asks: **Confirm** ties it to the project, and **Open separately** opens the app in a new workspace. A setup link to that address asks the same with **Use saved** and **New workspace**. Drafts saved before migration stay with the address until you confirm.
-- **An app that can't be identified.** A server without Exact's editing API, or one that isn't running, can't say which app it is. Changing a verified project to such an address asks whether to keep this project or start a new workspace. Editing stays paused until the project's own app answers there.
+- **An app that can't be identified.** A server without Exact's editing API, or one that isn't running, can't say which app it is. Changing a connected project to such an address asks whether to keep this project or start a new workspace. Editing stays paused until the project's own app answers there.
 
 When the app no longer lists a screen's route, the Screens panel marks that screen and the canvas shows why instead of the app's not-found page. Click **Remove** in the panel to delete those screens in one undo step, or add the route back to your app.
 
