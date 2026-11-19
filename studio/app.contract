@@ -2074,7 +2074,7 @@ component FileHeader
             column color="ink.muted" flex-shrink=0
               Icon(name="chevron-down", size=12, angle=0)
           if not compact
-            text subtitle font="type.caption" color="ink.muted" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
+            text subtitle font="type.caption" color="ink.secondary" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
       IconButton(icon="panel-left", label=(open ? "Hide screens" : "Show screens"), hint=(open ? "Hide screens panel" : "Show screens panel"), shortcut="", selected=false, disabled=false, testId="toggle-screens", press=toggle)
 
 component ActionBar

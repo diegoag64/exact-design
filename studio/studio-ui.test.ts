@@ -177,6 +177,14 @@ test('studio icons, context menus and canvas gestures share the desktop interact
       const view=page.locator('[data-testid="view-view-1"]');await view.click();
       await page.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="view-view-1"]')!.parentElement!).backgroundColor!=='rgba(0, 0, 0, 0)');
       await rest();expect((await press(view,fills.selected,20)).opacity).toBe('1');
+      // A nested row button adds no hover fill of its own: the row's wash shows through it.
+      await view.hover();await page.waitForFunction(el=>getComputedStyle(el).backgroundColor==='rgba(0, 0, 0, 0)',await view.elementHandle(),{timeout:3000});expect((await look(view.locator('xpath=..'))).shadow).toContain('100px inset');await rest();
+      // Menu rows press to a deeper shade of their hover highlight.
+      await page.locator('[data-testid="plan-options"]').click();const boxes=page.locator('[data-testid="plan-boxes"]');await boxes.waitFor();
+      await boxes.hover();const highlight=(await look(boxes)).bg;expect(highlight).not.toBe(fills.selected);
+      const box=await boxes.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
+      await page.waitForFunction(([el,bg]:[Element,string])=>getComputedStyle(el).backgroundColor===bg,[await boxes.elementHandle(),fills.selected],{timeout:3000});
+      await page.mouse.move(5,995);await page.mouse.up();await page.keyboard.press('Escape');await boxes.waitFor({state:'hidden'});await rest();
       await page.getByRole('button',{name:'Appearance',exact:true}).click();
       const system=page.locator('[data-testid="theme-studio-system"]');await system.waitFor();
       expect(await system.getAttribute('aria-pressed')).toBe('true');

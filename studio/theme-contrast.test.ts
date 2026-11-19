@@ -22,9 +22,9 @@ const contrast = (a: number[], b: number[]) => {
 };
 
 // Fill, ink, minimum ratio, and whether the hover wash covers the fill in that state. Selected
-// rows and buttons draw every glyph in ink.selected. Rows and
-// tool buttons keep the wash while pressed; a nested row button's own press fill covers its
-// row's wash, and menu rows highlight without one.
+// rows and buttons draw every glyph in ink.selected. Rows and tool buttons keep the wash while
+// pressed; a nested row button's own press fill covers its row's wash, and menu rows highlight
+// without one.
 const cases: [fill: string, ink: string, minimum: number, washed: boolean][] = [
   ['surface.selected', 'ink.selected', 4.5, true],
   ['surface.selected-pressed', 'ink.selected', 4.5, true],
@@ -33,11 +33,16 @@ const cases: [fill: string, ink: string, minimum: number, washed: boolean][] = [
   ['surface.action-pressed', 'ink.on-action', 3, true],
   ['surface.field', 'ink.primary', 4.5, true],
   ['surface.field', 'ink.secondary', 4.5, true],
-  ['surface.field', 'ink.muted', 3, true],
+  ['surface.field', 'ink.muted', 3, true], // icons only; text on a pressable row uses ink.secondary
   ['surface.field', 'ink.muted', 4.5, false],
   ['surface.pressed', 'ink.primary', 4.5, true],
+  // Menu rows: hover and keyboard focus, then pressed, with labels, shortcuts and destructive text.
   ['surface.selected', 'ink.primary', 4.5, false],
+  ['surface.selected', 'ink.secondary', 4.5, false],
   ['surface.selected', 'ink.danger', 4.5, false],
+  ['surface.selected-pressed', 'ink.primary', 4.5, false],
+  ['surface.selected-pressed', 'ink.secondary', 4.5, false],
+  ['surface.selected-pressed', 'ink.danger', 4.5, false],
 ];
 
 for (const scheme of ['light', 'dark'] as const) {
