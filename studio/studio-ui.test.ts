@@ -177,8 +177,10 @@ test('studio icons, context menus and canvas gestures share the desktop interact
       const view=page.locator('[data-testid="view-view-1"]');await view.click();
       await page.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="view-view-1"]')!.parentElement!).backgroundColor!=='rgba(0, 0, 0, 0)');
       await rest();expect((await press(view,fills.selected,20)).opacity).toBe('1');
-      // A nested row button adds no hover fill of its own: the row's wash shows through it.
-      await view.hover();await page.waitForFunction(el=>getComputedStyle(el).backgroundColor==='rgba(0, 0, 0, 0)',await view.elementHandle(),{timeout:3000});expect((await look(view.locator('xpath=..'))).shadow).toContain('100px inset');await rest();
+      // A nested row button adds no hover wash of its own (Exact's platform wash is a background
+      // image): the row's wash shows through it.
+      await view.hover();await page.waitForFunction(el=>getComputedStyle(el).backgroundColor==='rgba(0, 0, 0, 0)',await view.elementHandle(),{timeout:3000});
+      expect(await view.evaluate((el:Element)=>getComputedStyle(el).backgroundImage)).toBe('none');expect((await look(view.locator('xpath=..'))).shadow).toContain('100px inset');await rest();
       // Menu rows press to a deeper shade of their hover highlight.
       await page.locator('[data-testid="plan-options"]').click();const boxes=page.locator('[data-testid="plan-boxes"]');await boxes.waitFor();
       await boxes.hover();const highlight=(await look(boxes)).bg;expect(highlight).not.toBe(fills.selected);

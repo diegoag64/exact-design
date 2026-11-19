@@ -31,6 +31,9 @@ const cases: [fill: string, ink: string, minimum: number, washed: boolean][] = [
   ['surface.selected-pressed', 'ink.selected', 4.5, false],
   ['surface.action', 'ink.on-action', 3, true],
   ['surface.action-pressed', 'ink.on-action', 3, true],
+  // Hovered rows on the panel: text uses ink.secondary or stronger, ink.muted is for icons.
+  ['surface.panel', 'ink.secondary', 4.5, true],
+  ['surface.panel', 'ink.muted', 3, true],
   ['surface.field', 'ink.primary', 4.5, true],
   ['surface.field', 'ink.secondary', 4.5, true],
   ['surface.field', 'ink.muted', 3, true], // icons only; text on a pressable row uses ink.secondary
