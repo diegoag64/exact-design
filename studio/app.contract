@@ -1211,7 +1211,7 @@ component Studio
                                 column width=16 flex-shrink=0
                               button press=selectElement(element.id) testId=`element-${i}` aria-label=(element.label == layerKind(element.kind) ? element.label : `${layerKind(element.kind)}: ${element.label}`) data-tip=element.label aria-pressed=element.selected display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 8px 0 4px" border-width=0 border-radius="radius.control" background-color="transparent" color=(element.selected ? "ink.selected" : "ink.primary")
                                 :active
-                                  background-color=(element.selected ? "surface.selected-pressed" : "surface.pressed")
+                                  background-color=(element.selected ? "surface.selected-pressed" : "surface.field")
                                 column color=(element.selected ? "ink.selected" : "ink.muted") flex-shrink=0
                                   ElementIcon(kind=element.kind)
                                 text element.label font="type.body" font-weight=(element.selected ? 500 : 400) text-align="left" min-width=0 overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
@@ -1238,7 +1238,7 @@ component Studio
                               row class=(doc.active == v.id and doc.frameSelected ? TreeRowSelected : TreeRow) hover=hoverRow(v.id) contextmenu=command("select", v.id) contextPopover="studio-menu" height=28 flex-shrink=0 align-items="center" padding-right=2
                                 button press=openView(v.id, v.hidden, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 4px 0 30px" border-width=0 border-radius="radius.control" background-color="transparent" color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : (v.hidden ? "ink.muted" : "ink.primary"))
                                   :active
-                                    background-color=(doc.active == v.id and doc.frameSelected ? "surface.selected-pressed" : "surface.pressed")
+                                    background-color=(doc.active == v.id and doc.frameSelected ? "surface.selected-pressed" : "surface.field")
                                   column color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.muted") flex-shrink=0
                                     Icon(name=deviceIcon(v.name), size=14, angle=0)
                                   text v.name font="type.body" flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
@@ -1953,11 +1953,11 @@ component Studio
                               column gap=1 padding=4
                                 for screen, i in discovered.routes key=screen.route
                                   button press=chooseScreen(screen.name, screen.route) disabled=screen.added class=(screenPath == screen.route and screenName == screen.name ? TreeRowSelected : TreeRow) testId=`discovered-${i}` aria-label=`${screen.name}, ${screen.route}` display="flex" align-items="center" gap=10 height=40 flex-shrink=0 padding="0 8px" border-width=0 color=(screenPath == screen.route and screenName == screen.name ? "ink.selected" : "ink.primary") opacity=(screen.added ? 0.55 : 1)
-                                    column color="ink.muted" flex-shrink=0
+                                    column color=(screenPath == screen.route and screenName == screen.name ? "ink.selected" : "ink.muted") flex-shrink=0
                                       Icon(name=(screen.added ? "check" : "route"), size=14, angle=0)
                                     column flex=1 min-width=0 gap=0 align-items="flex-start"
                                       text screen.name font="type.body" font-weight=500
-                                      text screen.route font="type.mono" color="ink.secondary" text-align="left" width="100%" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" data-tip=screen.route
+                                      text screen.route font="type.mono" color=(screenPath == screen.route and screenName == screen.name ? "ink.selected" : "ink.secondary") text-align="left" width="100%" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" data-tip=screen.route
                                     if screen.added
                                       text "Added" font="type.caption" color="ink.secondary" padding="1px 6px" border-radius=8 background-color="surface.field"
                                     else

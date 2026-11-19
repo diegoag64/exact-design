@@ -37,7 +37,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Fixed
 
-- Selected and active controls keep their colour on hover. The active toolbar tool, selected icon buttons, selected layer and screen rows, timeline points and selected segments no longer turn the neutral grey under the pointer. Hover shades the selected colour instead, pressing shows a deeper shade, and a selected segment gains an edge. Keyboard focus on an active tool adds a light band inside the ring so it stays visible on the blue fill, and a keyboard-focused menu row has a ring that sets it apart from the row under the pointer.
+- Selected and active controls keep their colour on hover. The active toolbar tool, selected icon buttons, selected layer and screen rows, timeline points and selected segments no longer turn the neutral grey under the pointer. Hover shades the selected colour instead, pressing shows a deeper shade with readable text, and a selected segment gains an edge. Pressing a row or timeline point no longer fades its text. Keyboard focus on an active tool adds a light band inside the ring so it stays visible on the blue fill, and a keyboard-focused menu row has a ring that sets it apart from the row under the pointer.
 - Setup links fetch current screens when another app takes over the same local server URL, instead of reusing the previous app’s cached screens.
 
 - Grouped draft edits roll back on failure and undo both alignment axes even at the history limit. Number scrubbing preserves valid negative values, alignment follows reversed flows, and Fixed sizing accounts for padding and borders.

@@ -317,6 +317,9 @@ style Chip
   cursor="default"
   :hover
     box-shadow="inset 0 0 0 100px surface.hover-wash"
+  :active
+    background-color="surface.pressed"
+    color="ink.primary"
   :focus-visible
     box-shadow="inset 0 0 0 2px accent"
 
@@ -343,13 +346,14 @@ style ChipSelected
   :focus-visible
     box-shadow="inset 0 0 0 2px accent"
 
+// Rows press to the field surface, which keeps muted text legible under the hover wash.
 style TreeRow
   box-sizing="border-box"
   border-radius="radius.control"
   :hover
     box-shadow="inset 0 0 0 100px surface.hover-wash"
   :active
-    background-color="surface.pressed"
+    background-color="surface.field"
   :focus-visible
     box-shadow="inset 0 0 0 2px accent"
 
@@ -417,8 +421,10 @@ style MenuRow
   text-align="left"
   :hover
     background-color="surface.selected"
+  // A pressed row keeps the hover highlight: a deeper fill would dim the muted shortcut and
+  // destructive text, and the press closes the menu or toggles the check mark anyway.
   :active
-    background-color="surface.selected-pressed"
+    background-color="surface.selected"
   // The menu moves focus only by keyboard, so the ring tells the focused row from a hovered one.
   :focus-visible
     background-color="surface.selected"

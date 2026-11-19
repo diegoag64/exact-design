@@ -130,53 +130,60 @@ test('studio icons, context menus and canvas gestures share the desktop interact
     expect(await viewEye.getAttribute('aria-label')).toBe('Hide viewport');
     await screenEye.click();await frame.waitFor({state:'detached'});
     await page.getByRole('button',{name:'Undo',exact:true}).click();await frame.waitFor();
-    // Selected controls keep their own fill while hovered, take a pressed shade of it, and show
-    // a focus ring that differs from hover.
-    const look=(l:any)=>l.evaluate((el:Element)=>{const s=getComputedStyle(el);return {bg:s.backgroundColor,shadow:s.boxShadow,border:s.borderTopColor,color:s.color};});
+    // Selected controls keep their own fill while hovered, settle on their pressed shade, and show
+    // a focus ring that differs from hover. Pressed colours are app.forma's tokens.
+    const pressedFill={
+      light:{action:'rgb(5, 90, 153)',selected:'rgb(207, 232, 252)',neutral:'rgb(229, 229, 229)'},
+      dark:{action:'rgb(5, 90, 153)',selected:'rgb(15, 58, 89)',neutral:'rgb(68, 68, 68)'},
+    };
+    const look=(l:any)=>l.evaluate((el:Element)=>{const s=getComputedStyle(el);return {bg:s.backgroundColor,shadow:s.boxShadow,border:s.borderTopColor,color:s.color,opacity:s.opacity};});
     const bluish=(c:string)=>{const [r,,b]=c.match(/[\d.]+/g)!.map(Number);return b-r>=20;};
     const rest=async()=>{await page.evaluate(()=>(document.activeElement as HTMLElement|null)?.blur());await page.mouse.move(800,700);};
-    const states=async(target:any)=>{
-      await rest();const idle=await look(target);
-      await target.hover();const hover=await look(target);
-      const box=await target.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
-      await page.waitForFunction(([el,bg]:[Element,string])=>getComputedStyle(el).backgroundColor!==bg,[await target.elementHandle(),idle.bg]);
+    // Hold the pointer down until the press transition reaches its final fill.
+    const press=async(target:any,fill:string,x?:number)=>{
+      const box=await target.boundingBox();await page.mouse.move(box.x+(x??box.width/2),box.y+box.height/2);await page.mouse.down();
+      await page.waitForFunction(([el,bg]:[Element,string])=>getComputedStyle(el).backgroundColor===bg,[await target.elementHandle(),fill],{timeout:3000});
       const pressed=await look(target);
       // Release away from the control, so the press does not toggle it.
-      await page.mouse.move(5,995);await page.mouse.up();await rest();
+      await page.mouse.move(5,995);await page.mouse.up();await rest();return pressed;
+    };
+    const states=async(target:any,fill:string)=>{
+      await rest();const idle=await look(target);
+      await target.hover();const hover=await look(target);
+      const pressed=await press(target,fill);
       await page.keyboard.press('Shift');await target.focus();const focus=await look(target);
       expect(await target.evaluate((el:Element)=>el.matches(':focus-visible'))).toBe(true);
       await rest();return {idle,hover,pressed,focus};
     };
-    const selectedFill=async(target:any)=>{
-      const s=await states(target);
+    const selectedFill=async(target:any,fill:string)=>{
+      const s=await states(target,fill);
       expect(bluish(s.idle.bg)).toBe(true);
-      expect(s.hover.bg).toBe(s.idle.bg);expect(s.hover.shadow).toContain('100px inset');
-      expect(bluish(s.pressed.bg)).toBe(true);expect(s.pressed.bg).not.toBe(s.idle.bg);
+      // Hover keeps the fill and lays a translucent wash over it.
+      expect(s.hover.bg).toBe(s.idle.bg);expect(s.hover.shadow).toMatch(/^rgba\(\d+, \d+, \d+, 0\.0\d+\) 0px 0px 0px 100px inset$/);
+      expect(s.pressed.opacity).toBe('1');
       expect(s.focus.shadow).toContain('rgb(13, 153, 255)');expect(s.focus.shadow).not.toBe(s.hover.shadow);
     };
     const layer=page.getByRole('button',{name:'Heading',exact:true}),reduce=page.getByRole('button',{name:'Reduce preview effects',exact:true});
     if(await reduce.getAttribute('aria-pressed')!=='true')await reduce.click();
     for(const colorScheme of ['light','dark'] as const){
-      await page.emulateMedia({colorScheme});
+      await page.emulateMedia({colorScheme});const fills=pressedFill[colorScheme];
       await layer.click();await page.waitForFunction(()=>getComputedStyle(document.querySelector('button[aria-label="Heading"]')!).backgroundColor!=='rgba(0, 0, 0, 0)');
       const select=page.getByRole('button',{name:'Select',exact:true});
-      expect(await select.getAttribute('aria-pressed')).toBe('true');await selectedFill(select);
-      expect(await reduce.getAttribute('aria-pressed')).toBe('true');await selectedFill(reduce);
-      await selectedFill(layer);
-      // A selected viewport row's press lands on its nested button, which paints the pressed shade itself.
+      expect(await select.getAttribute('aria-pressed')).toBe('true');await selectedFill(select,fills.action);
+      expect(await reduce.getAttribute('aria-pressed')).toBe('true');await selectedFill(reduce,fills.selected);
+      await selectedFill(layer,fills.selected);
+      // A selected viewport row's press lands on its nested button, which paints the pressed
+      // shade itself instead of dimming its text.
       const view=page.locator('[data-testid="view-view-1"]');await view.click();
       await page.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="view-view-1"]')!.parentElement!).backgroundColor!=='rgba(0, 0, 0, 0)');
-      await rest();const viewBox=await view.boundingBox();await page.mouse.move(viewBox.x+20,viewBox.y+viewBox.height/2);await page.mouse.down();
-      await page.waitForFunction(()=>getComputedStyle(document.querySelector('[data-testid="view-view-1"]')!).backgroundColor!=='rgba(0, 0, 0, 0)');
-      expect(bluish((await look(view)).bg)).toBe(true);expect((await look(view)).color).not.toBe('rgba(0, 0, 0, 0)');
-      await page.mouse.move(5,995);await page.mouse.up();await rest();
+      await rest();expect((await press(view,fills.selected,20)).opacity).toBe('1');
       await page.getByRole('button',{name:'Appearance',exact:true}).click();
       const system=page.locator('[data-testid="theme-studio-system"]');await system.waitFor();
       expect(await system.getAttribute('aria-pressed')).toBe('true');
       // The raised option keeps its fill and shadow on hover and gains an edge instead.
-      const segment=await states(system);
+      const segment=await states(system,fills.neutral);
       expect(segment.hover.bg).toBe(segment.idle.bg);expect(segment.hover.shadow).toBe(segment.idle.shadow);
-      expect(segment.hover.border).not.toBe(segment.idle.border);expect(segment.pressed.bg).not.toBe(segment.idle.bg);
+      expect(segment.hover.border).not.toBe(segment.idle.border);
       expect(segment.focus.shadow).toContain('rgb(13, 153, 255)');
       await page.keyboard.press('Escape');await system.waitFor({state:'hidden'});
     }
