@@ -191,6 +191,8 @@ test('settling tidy passes merge into the step that started them until another e
   e.addScreens([{name:'Today',route:'/'},{name:'Diary',route:'/diary'}],'Core',true);
   const depth=e.past.length,phone=e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/')!;
   expect(e.arrange(true)).toBe(true);expect(e.past.length).toBe(depth);
+  // A click that moves nothing (a zero-length move on release) keeps the window's undo step.
+  e.hit(phone.x+10,phone.y-10);e.move(0,0);expect(e.past.length).toBe(depth);
   e.contentSizes.set(phone.id,{source:'http://127.0.0.1:5174/',width:phone.width,viewportHeight:phone.height,height:2000});
   expect(e.arrange(true)).toBe(true);expect(e.past.length).toBe(depth);
   e.contentSizes.set(phone.id,{source:'http://127.0.0.1:5174/',width:phone.width,viewportHeight:phone.height,height:3000});

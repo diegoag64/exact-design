@@ -86,9 +86,9 @@ const reply = (fit=false,error='') => {
   const d=snapshot();
   return {ok:error==='',error,fit,minX:d.minX,minY:d.minY,maxX:d.maxX,maxY:d.maxY};
 };
-async function logWorkspace(storage:any,before:string,kind:string,target:string,timestamp:number){
+async function logWorkspace(storage:any,before:string,kind:string,target:string,timestamp:number,named=''){
   const after=JSON.stringify(editor.document),changes=workspaceChanges(JSON.parse(before),editor.document);
-  if(changes.length)await history.append(storage.fs,{time:new Date(timestamp).toISOString(),kind:'workspace-'+kind,project:editor.document.project.url,label:kind==='property'?'Edit '+changes.map(c=>c.property).join(', '):kind==='move'?'Move / resize':kind==='arrange'?'Tidy up':kind==='variants'?'Add device set':kind==='add-all'?'Add all screens':kind==='setup'?'Set up project':kind.charAt(0).toUpperCase()+kind.slice(1),target,changes,beforeState:before,afterState:after});
+  if(changes.length)await history.append(storage.fs,{time:new Date(timestamp).toISOString(),kind:'workspace-'+kind,project:editor.document.project.url,label:named||(kind==='property'?'Edit '+changes.map(c=>c.property).join(', '):kind==='move'?'Move / resize':kind==='arrange'?'Tidy up':kind==='variants'?'Add device set':kind==='add-all'?'Add all screens':kind==='setup'?'Set up project':kind.charAt(0).toUpperCase()+kind.slice(1)),target,changes,beforeState:before,afterState:after});
 }
 const sources: Sources = {
   // Draft changes saved for a project outlive the editing session; the native drawer counts them while not editing.
@@ -249,8 +249,9 @@ const sources: Sources = {
     if(op === 'delete') editor.remove();
     if(op === 'hide' || op === 'show') editor.setHidden(key, op === 'hide');
     const saved=await persistence.save(storage.fs,op==='save');
-    // Settling passes share one undo step, but each pass that moves frames still appears in the timeline.
-    if(saved)try{await logWorkspace(storage,before,op,target,timestamp);}catch{status='Could not save the timeline. Your workspace is saved.';}
+    // Settling passes share one undo step, but each pass that moves frames still appears in the timeline, as an automatic tidy of every screen.
+    const settled=op==='arrange'&&key.endsWith('settle');
+    if(saved)try{await logWorkspace(storage,before,op,settled?'All screens':target,timestamp,settled?'Tidy up as previews load':'');}catch{status='Could not save the timeline. Your workspace is saved.';}
     if(op==='save'&&saved&&!status)status='Saved';
     return reply(['screen','duplicate','variant','variants'].includes(op)||(op==='arrange'&&!key.endsWith('settle'))||(op==='property'&&['source','route'].includes(key)));
   },

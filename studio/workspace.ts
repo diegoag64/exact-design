@@ -67,9 +67,10 @@ export class WorkspaceEditor {
   get layers() { return (this.source ? [] : this.screen.layers).map(n=>resolveLayer(n,this.view.width)); }
   /** Apply one undoable edit; returns false when it changed nothing and left no undo step. */
   change(work: (d: Workspace) => void): boolean {
-    this.settling = false;
     const next = structuredClone(this.document); work(next);
     if (JSON.stringify(next) === JSON.stringify(this.document)) return false;
+    // A real edit ends merging into a settling step; a no-op, such as a click that moves nothing, keeps it.
+    this.settling = false;
     this.past.push(this.document); if (this.past.length > 100) this.past.shift(); this.document = next; this.future = []; this.reconcile();
     return true;
   }
@@ -180,7 +181,8 @@ export class WorkspaceEditor {
     }
     const place=(d:Workspace)=>{for(const v of d.views){const p=at.get(v.id);if(p){v.x=Math.round(p.x);v.y=Math.round(p.y);}}};
     if(settle&&this.settling){const next=structuredClone(this.document);place(next);this.document=next;this.future=[];return true;}
-    this.settling=this.change(place);return false;
+    if(this.change(place))this.settling=true;
+    return false;
   }
   /** True for the untouched starter workspace, which a project setup may replace. */
   isPristine() {
