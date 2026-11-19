@@ -64,6 +64,8 @@ Import components and styles from `./ui.contract`; import `Icon` from `./icons.c
 | `Field` | Native text inputs and selects; Exact owns their focus behavior |
 | `TreeRow` | Layer row hover and keyboard focus treatment |
 | `VisibilityButton` | 24px eye toggle at the end of a tree row. It appears while the row is hovered or focused, and stays visible with `eye-off` while the item is hidden |
+| `RowAction` | 24px icon action at the end of a tree row, such as a layer's focus button. It appears while the row is hovered or the action has keyboard focus |
+| `Crumb` | Compact text button for a path item, such as the Layers focus path |
 | `InspectorValue` | Single compound-value field with an inline All/Both identifier |
 | `PanelSection` | Padding, vertical rhythm, and divider for inspector groups |
 | `Menu` | Popover surface, width, border, radius, and elevation |
@@ -147,6 +149,12 @@ The drawer's last section is **Expo Simulators**. Its header pairs Expo's mark (
 Canvas and tree rows share the `studio-menu` popover. Right-clicking a tree row first selects that row. Canvas hit testing uses the camera coordinates. App inspection offers parent selection, draft undo, finish editing, viewport navigation, and panel actions. Local screens additionally offer duplication, viewport variants, and deletion. Unsupported source restructuring commands are omitted.
 
 Exact owns placement, viewport-edge fitting, action dismissal, and click-away dismissal. The browser menu adapter focuses the first enabled item and supports Up/Down, Home/End, type-ahead, Enter, and Escape. Closing returns focus without scrolling the canvas. Menus preserve native editing behavior inside text fields.
+
+## Layers focus
+
+The Layers tree can focus one group (`layerFocus`, Contract state for the editing session). The tree shows that group and its descendants, indenting from the group, so the 8-level indent limit counts from the focus. Row test IDs keep their full-tree index. A `nav` named **Focused layer path** sits above the tree: a back arrow to the parent group, an **All layers** crumb drawn as the layers icon, an **…** crumb for the grandparent when more groups sit above, the parent, and the focused group marked `aria-current="location"`. The parent crumb shrinks before the focused group's name. Crumbs outline their element in the previews on hover, like rows. Screen roots are never a focus.
+
+Focus stores the source identities (site and repeated instance) of the group and its ancestors, with their tree ids as a tie-breaker. The view resolves the deepest one still rendered, so a group that disappears falls back to its nearest surviving ancestor and returns when it renders again, and an index shift in tree ids cannot focus another element. A selection outside the focus widens it to the closest group that contains both. Drilling in moves keyboard focus to the back arrow; going up focuses the row of the group it left. Starting or finishing editing clears the focus.
 
 ## Linked hover
 

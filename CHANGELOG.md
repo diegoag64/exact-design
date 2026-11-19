@@ -6,6 +6,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Added
 
+- Focus a group in the Layers tree. Hover a layer that holds others and click its focus button, or right-click an element on the canvas or in the tree and choose **Focus in layers**. The tree then shows only that group, indented from the group itself, so deep nesting reads clearly again. A path above the tree goes back to the parent group or to all layers. Selection and preview highlights work as usual. Selecting an element outside the group widens the focus to a group that holds both, and if the group leaves the page, the tree shows its nearest remaining parent.
 - A collage arrangement for demos: add `layout=collage` to the studio's address, and **Tidy up** and setup links pack screens into columns so the workspace fits one view. Each screen's viewports stay side by side.
 - Waymark, a second demo app: the companion app for an invented adventure game, with painted backdrops, a scrolling realm map, quests, rewards, badges and statistics. Start it with `bun run demo:waymark`. `bun tools/demo.mjs --app <name>` selects a demo, and Ember stays the default.
 - **Lumen**, a finance example app: a personal finance app built with Exact, with Home, Activity, Cards, Budgets and Goals tabs, Send money, Add to a goal, Payment and Account sheets, and a Welcome screen. Its panels use Liquid Glass on iOS 26. Start it with `bun run demo:lumen` and open the printed setup link. Native previews recognize it.

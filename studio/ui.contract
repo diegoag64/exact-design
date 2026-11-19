@@ -359,6 +359,42 @@ component VisibilityButton
     button press=press class=(hidden or revealed ? RevealTool : ConcealedTool) aria-label=(hidden ? `Show ${name}` : `Hide ${name}`) aria-pressed=hidden data-tip=(hidden ? `Show ${name}` : `Hide ${name}`) testId=testId
       Icon(name=(hidden ? "eye-off" : "eye"), size=14, angle=0)
 
+// Tree-row action: shown while its row is hovered, otherwise only on its own hover or keyboard focus.
+component RowAction
+  props
+    icon: string
+    label: string
+    hint: string
+    revealed: bool
+    testId: string
+    press: action
+  view
+    button press=press class=(revealed ? RevealTool : ConcealedTool) aria-label=label data-tip=(hint == "" ? label : hint) testId=testId
+      Icon(name=icon, size=14, angle=0)
+
+// Path item in a breadcrumb: a compact text button that shrinks before its neighbours.
+style Crumb
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  min-width=0
+  height=24
+  padding="0 4px"
+  border-width=0
+  border-radius="radius.control"
+  background-color="transparent"
+  color="ink.secondary"
+  font="type.body"
+  white-space="nowrap"
+  cursor="default"
+  :hover
+    background-color="surface.hover"
+    color="ink.primary"
+  :active
+    background-color="surface.pressed"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent"
+
 // 24px icon action for section titles and field rows.
 component SmallButton
   props

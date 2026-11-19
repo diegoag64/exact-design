@@ -256,7 +256,7 @@ export class DesignSession {
     const tree=frame?.nodes.map(n=>{
       const ancestors:string[]=[];let at=frame.nodes.find(p=>p.id===n.parent);
       while(at&&ancestors.length<100){ancestors.push(at.id);at=frame.nodes.find(p=>p.id===at!.parent);}
-      return {id:n.id,label:n.label,depth:n.depth,kind:n.kind??n.tag,ancestors,hasChildren:frame.nodes.some(p=>p.parent===n.id),selected:n.id===selected};
+      return {id:n.id,identity:n.identity??n.id,label:n.label,depth:n.depth,kind:n.kind??n.tag,ancestors,hasChildren:frame.nodes.some(p=>p.parent===n.id),selected:n.id===selected};
     })??[];
     const crumbs:typeof tree=[];let at=frame?.nodes.find(n=>n.id===selected);
     while(at&&crumbs.length<30){const entry=tree.find(n=>n.id===at!.id);if(entry)crumbs.unshift(entry);at=frame?.nodes.find(n=>n.id===at!.parent);}
