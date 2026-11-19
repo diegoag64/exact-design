@@ -23,11 +23,65 @@ style Tool
   color="ink.secondary"
   cursor="default"
   :hover
-    background-color="surface.hover"
+    box-shadow="inset 0 0 0 100px surface.hover-wash"
   :active
     background-color="surface.pressed"
   :focus-visible
-    box-shadow="inset 0 0 0 2px accent"
+    box-shadow="inset 0 0 0 2px accent, inset 0 0 0 3px surface.panel"
+  :disabled
+    opacity=0.35
+
+// Selected styles: choose the class from the same condition as aria-pressed. A :hover or
+// :focus-visible row is one literal for every class a node can take, and it outranks the
+// node's own fill and :checked. Hover therefore washes the fill beneath it instead of
+// replacing it, so a selected fill stays in its colour family; :active may differ per class.
+style ToolSelected
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex-shrink=0
+  width=32
+  height=32
+  padding=6
+  gap=8
+  border-width=0
+  border-radius="radius.control"
+  background-color="surface.selected"
+  color="ink.selected"
+  cursor="default"
+  :hover
+    box-shadow="inset 0 0 0 100px surface.hover-wash"
+  :active
+    background-color="surface.selected-pressed"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent, inset 0 0 0 3px surface.panel"
+  :disabled
+    opacity=0.35
+
+// The active floating-toolbar tool. The focus ring's panel band separates the accent ring
+// from the action fill, which it barely differs from.
+style ToolAction
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex-shrink=0
+  width=32
+  height=32
+  padding=6
+  gap=8
+  border-width=0
+  border-radius="radius.control"
+  background-color="surface.action"
+  color="ink.on-action"
+  cursor="default"
+  :hover
+    box-shadow="inset 0 0 0 100px surface.hover-wash"
+  :active
+    background-color="surface.action-pressed"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent, inset 0 0 0 3px surface.panel"
   :disabled
     opacity=0.35
 
@@ -47,11 +101,34 @@ style SmallTool
   color="ink.secondary"
   cursor="default"
   :hover
-    background-color="surface.hover"
+    box-shadow="inset 0 0 0 100px surface.hover-wash"
   :active
     background-color="surface.pressed"
   :focus-visible
-    box-shadow="inset 0 0 0 2px accent"
+    box-shadow="inset 0 0 0 2px accent, inset 0 0 0 3px surface.panel"
+  :disabled
+    opacity=0.35
+
+style SmallToolSelected
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex-shrink=0
+  width=24
+  height=24
+  padding=4
+  border-width=0
+  border-radius="radius.control"
+  background-color="surface.selected"
+  color="ink.selected"
+  cursor="default"
+  :hover
+    box-shadow="inset 0 0 0 100px surface.hover-wash"
+  :active
+    background-color="surface.selected-pressed"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent, inset 0 0 0 3px surface.panel"
   :disabled
     opacity=0.35
 
@@ -154,7 +231,8 @@ style SecondaryButton
   :disabled
     opacity=0.4
 
-// Segmented control track and its options. aria-pressed drives :checked.
+// Segmented control track and its options. A selected option is SegmentOn, chosen from
+// the same condition as its aria-pressed.
 style Segmented
   display="flex"
   align-items="center"
@@ -175,28 +253,118 @@ style Segment
   gap=6
   height=24
   padding="0 6px"
-  border-width=0
+  border="1px solid transparent"
   border-radius=4
   background-color="transparent"
   color="ink.secondary"
   font="type.caption"
   cursor="default"
   :hover
-    background-color="surface.hover"
+    border-color="line.hover"
+    color="ink.primary"
+  :active
+    background-color="surface.pressed"
   :focus-visible
     box-shadow="inset 0 0 0 2px accent"
-  :checked
-    background-color="surface.raised"
-    color="ink.primary"
-    box-shadow="shadow.raised"
   :disabled
     opacity=0.35
 
+// Hover draws an edge and full ink without touching the fill, so the raised option keeps
+// its look.
+style SegmentOn
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex=1
+  min-width=0
+  gap=6
+  height=24
+  padding="0 6px"
+  border="1px solid transparent"
+  border-radius=4
+  background-color="surface.raised"
+  color="ink.primary"
+  box-shadow="shadow.raised"
+  font="type.caption"
+  cursor="default"
+  :hover
+    border-color="line.hover"
+    color="ink.primary"
+  :active
+    background-color="surface.pressed"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent"
+  :disabled
+    opacity=0.35
+
+// Timeline point: a pill on the field surface.
+style Chip
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex-shrink=0
+  gap=6
+  min-width=44
+  height=30
+  padding="0 10px"
+  border="1px solid line.subtle"
+  border-radius=15
+  background-color="surface.field"
+  color="ink.secondary"
+  font="type.caption"
+  cursor="default"
+  :hover
+    box-shadow="inset 0 0 0 100px surface.hover-wash"
+  :active
+    background-color="surface.pressed"
+    color="ink.primary"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent"
+
+style ChipSelected
+  box-sizing="border-box"
+  display="flex"
+  align-items="center"
+  justify-content="center"
+  flex-shrink=0
+  gap=6
+  min-width=44
+  height=30
+  padding="0 10px"
+  border="1px solid line.subtle"
+  border-radius=15
+  background-color="surface.selected"
+  color="ink.selected"
+  font="type.caption"
+  cursor="default"
+  :hover
+    box-shadow="inset 0 0 0 100px surface.hover-wash"
+  :active
+    background-color="surface.selected-pressed"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent"
+
+// Rows press to the field surface, which keeps muted text legible under the hover wash.
 style TreeRow
   box-sizing="border-box"
   border-radius="radius.control"
   :hover
-    background-color="surface.hover"
+    box-shadow="inset 0 0 0 100px surface.hover-wash"
+  :active
+    background-color="surface.field"
+  :focus-visible
+    box-shadow="inset 0 0 0 2px accent"
+
+style TreeRowSelected
+  box-sizing="border-box"
+  border-radius="radius.control"
+  background-color="surface.selected"
+  :hover
+    box-shadow="inset 0 0 0 100px surface.hover-wash"
+  :active
+    background-color="surface.selected-pressed"
   :focus-visible
     box-shadow="inset 0 0 0 2px accent"
 
@@ -253,8 +421,12 @@ style MenuRow
   text-align="left"
   :hover
     background-color="surface.selected"
+  :active
+    background-color="surface.selected-pressed"
+  // The menu moves focus only by keyboard, so the ring tells the focused row from a hovered one.
   :focus-visible
     background-color="surface.selected"
+    box-shadow="inset 0 0 0 2px accent"
   :disabled
     opacity=0.35
 
@@ -280,10 +452,10 @@ component IconButton
     testId: string
     press: action
   view
-    button press=press class=Tool aria-label=label data-tip=(hint == "" ? label : hint) aria-keyshortcuts=shortcut aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.selected" : "transparent") color=(selected ? "ink.selected" : "ink.secondary")
+    button press=press class=(selected ? ToolSelected : Tool) aria-label=label data-tip=(hint == "" ? label : hint) aria-keyshortcuts=shortcut aria-pressed=selected disabled=disabled testId=testId
       Icon(name=icon, size=16, angle=0)
 
-// Floating toolbar tool: the active tool is filled with the accent, as in Figma.
+// Floating toolbar tool: the active tool is filled with the action colour, as in Figma.
 component ToolbarButton
   props
     icon: string
@@ -295,7 +467,7 @@ component ToolbarButton
     testId: string
     press: action
   view
-    button press=press class=Tool aria-label=label data-tip=(hint == "" ? label : hint) aria-keyshortcuts=shortcut aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.action" : "transparent") color=(selected ? "ink.on-action" : "ink.primary")
+    button press=press class=(selected ? ToolAction : Tool) aria-label=label data-tip=(hint == "" ? label : hint) aria-keyshortcuts=shortcut aria-pressed=selected disabled=disabled testId=testId color=(selected ? "ink.on-action" : "ink.primary")
       Icon(name=icon, size=16, angle=0)
 
 // Tree-row visibility toggle: shown while its row is hovered or the item is hidden,
@@ -317,7 +489,7 @@ style RevealTool
   opacity=1
   :hover
     opacity=1
-    background-color="surface.hover"
+    box-shadow="inset 0 0 0 100px surface.hover-wash"
   :active
     background-color="surface.pressed"
   :focus-visible
@@ -341,7 +513,7 @@ style ConcealedTool
   opacity=0
   :hover
     opacity=1
-    background-color="surface.hover"
+    box-shadow="inset 0 0 0 100px surface.hover-wash"
   :active
     background-color="surface.pressed"
   :focus-visible
@@ -370,7 +542,7 @@ component SmallButton
     testId: string
     press: action
   view
-    button press=press class=SmallTool aria-label=label data-tip=(hint == "" ? label : hint) aria-pressed=selected disabled=disabled testId=testId background-color=(selected ? "surface.selected" : "transparent") color=(selected ? "ink.selected" : "ink.secondary")
+    button press=press class=(selected ? SmallToolSelected : SmallTool) aria-label=label data-tip=(hint == "" ? label : hint) aria-pressed=selected disabled=disabled testId=testId
       Icon(name=icon, size=14, angle=0)
 
 component SectionHeading
@@ -436,7 +608,7 @@ component MenuItem
         column width=16 flex-shrink=0
       text label flex=1 font="type.body"
       if shortcut != ""
-        text shortcut color="ink.muted" font="type.caption" aria-hidden=true
+        text shortcut color="ink.secondary" font="type.caption" aria-hidden=true
 
 component MenuDivider
   view
@@ -458,7 +630,7 @@ component MenuCheck
         column width=16 flex-shrink=0
       text label flex=1 font="type.body"
       if shortcut != ""
-        text shortcut color="ink.muted" font="type.caption" aria-hidden=true
+        text shortcut color="ink.secondary" font="type.caption" aria-hidden=true
 
 component Divider
   view
