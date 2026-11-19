@@ -94,6 +94,21 @@ test('a collage tidy packs screens into columns and keeps the frames of a screen
   expect(wide/high).toBeGreaterThan(1);expect(wide/high).toBeLessThan(2.6);
   e.undo();expect(new Set(e.document.views.map(v=>v.x)).size).toBe(3);
 });
+test('collage stays separated as content grows and restores its layout after reload',()=>{
+  const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
+  e.addScreens(Array.from({length:8},(_,i)=>({name:`S${i}`,route:`/s${i}`})),'Core',true);
+  e.arrange(false,true);
+  const saved=JSON.stringify(e.document),depth=e.past.length;
+  const phone=e.document.views.find(v=>v.name==='Phone'&&e.document.screens.find(s=>s.id===v.screenId)?.route==='/s0')!;
+  e.contentSizes.set(phone.id,{source:'http://127.0.0.1:5174/s0',width:phone.width,viewportHeight:phone.height,height:3200});
+  const frames=e.frames,boxes=frames.map(v=>({l:v.x,t:v.y,r:v.x+v.width,b:v.y+v.height}));
+  expect(boxes.some((a,i)=>boxes.some((b,j)=>i<j&&a.l<b.r&&b.l<a.r&&a.t<b.b&&b.t<a.b))).toBe(false);
+  expect(JSON.stringify(e.document)).toBe(saved);expect(e.past.length).toBe(depth);
+  const restored=new WorkspaceEditor();restored.document=loadWorkspace(JSON.parse(saved));restored.contentSizes=e.contentSizes;
+  expect(restored.frames).toEqual(frames);expect(restored.document.arrangedCollage).toBe(true);
+  e.arrange(false,false);expect(e.document.arrangedCollage).toBe(false);
+  e.undo();expect(e.document.arrangedCollage).toBe(true);expect(e.frames).toEqual(frames);
+});
 test('tidy records one layout choice while later measurements stay out of undo and storage',()=>{
 
   const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
