@@ -31,7 +31,7 @@ test('plan view draws previews as line plans, regions measure from the canvas an
     suite=await suiteBrowser();page=await suite.newPage({viewport:{width:1440,height:1000},colorScheme:'light'});page.on('pageerror',(e:Error)=>errors.push(e.stack || e.message));
     await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:'http://127.0.0.1:'+editorPort});
     await page.goto('http://127.0.0.1:'+editorPort,{waitUntil:'load'});
-    await page.getByRole('button',{name:'Project connection',exact:true}).click();
+    await page.getByRole('button',{name:'Projects',exact:true}).click();await page.getByRole('menuitem',{name:'Project settings…',exact:true}).click();
     await page.getByRole('textbox',{name:'Project name',exact:true}).fill('Ember');await page.getByRole('textbox',{name:'Project URL',exact:true}).fill('http://127.0.0.1:'+appPort);await page.getByRole('button',{name:'Connect',exact:true}).click();
     await page.getByRole('button',{name:'Add screen',exact:true}).click();await page.getByRole('textbox',{name:'Screen name',exact:true}).fill('Library');await page.getByRole('textbox',{name:'Route',exact:true}).fill('/');await page.getByRole('button',{name:'Add screen',exact:true}).last().click();
     const iframe=page.locator('iframe[title="Live app preview"]').last();await iframe.waitFor();

@@ -113,7 +113,7 @@ test('project setup connects, adds missing routes once, replaces the untouched s
   const e=new WorkspaceEditor();expect(e.isPristine()).toBe(true);
   const routes=[{name:'Today',route:'/'},{name:'Diary',route:'/diary'},{name:'Note',route:'/note/:id'}];
   expect(e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core')).toBe(2);
-  expect(e.document.project).toEqual({name:'Ember',url:'http://127.0.0.1:5174'});
+  expect(e.document.project).toEqual({name:'Ember',url:'http://127.0.0.1:5174',identity:''});
   expect(e.document.screens.map(s=>s.name)).toEqual(['Today','Diary']);expect(e.document.views.length).toBe(6);
   expect(e.document.views.some(v=>v.id===e.active)).toBe(true);
   e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core');expect(e.document.views.length).toBe(6);expect(e.past.length).toBe(1);
@@ -129,15 +129,18 @@ test('project setup with a show list adds every route but leaves only the listed
   expect(e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core',['today',' /welcome ',''])).toBe(4);
   expect(e.document.screens.filter(s=>!s.hidden).map(s=>s.name)).toEqual(['Today','Welcome']);
   expect(e.shownFrames.length).toBe(6);expect(e.isShown(e.active)).toBe(true);expect(e.past.length).toBe(1);
-  // Running it again with a new list re-applies visibility to existing screens, including a screen whose viewports were all hidden.
+  // Running it again keeps the person's visibility for screens already in the library; the list applies to new screens.
   for(const v of e.document.views.filter(v=>v.screenId===e.document.screens[2].id)) v.hidden=true;
+  e.setHidden(e.document.screens[0].id,true);
+  const before=JSON.stringify(e.document),steps=e.past.length;
   e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core',['Diary']);
-  expect(e.document.screens.filter(s=>!s.hidden).map(s=>s.name)).toEqual(['Diary']);
-  expect(e.shownFrames.length).toBe(3);expect(e.isShown(e.active)).toBe(true);
+  expect(JSON.stringify(e.document)).toBe(before);expect(e.past.length).toBe(steps);
+  e.setupProject('Ember','http://127.0.0.1:5174',[...routes,{name:'Notes',route:'/notes'},{name:'Help',route:'/help'}],'Core',['Notes']);
+  expect(e.document.screens.filter(s=>!s.hidden).map(s=>s.name)).toEqual(['Welcome','Notes']);
   // A list that matches nothing leaves visibility alone, so the canvas never starts empty.
-  e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core',['Nope']);
-  expect(e.shownFrames.length).toBe(3);
-  e.undo();e.undo();expect(e.isPristine()).toBe(true);
+  e.setupProject('Ember','http://127.0.0.1:5174',[...routes,{name:'Notes',route:'/notes'},{name:'Help',route:'/help'},{name:'More',route:'/more'}],'Core',['Nope']);
+  expect(e.document.screens.find(s=>s.name==='More')?.hidden).toBeUndefined();
+  e.undo();e.undo();e.undo();e.undo();expect(e.isPristine()).toBe(true);
 });
 
 test('hiding screens and viewports removes them from the canvas, hit testing and snapping, and undoes',()=>{

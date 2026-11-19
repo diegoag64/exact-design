@@ -6,6 +6,8 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Added
 
+- Projects. Each app you connect has its own workspace, with its own screens, layout, camera, drafts and timeline. The project menu under the project name lists them: choose one to switch, **Project settings…** to change the shown project's connection, or **Connect another app…** to open another app in its own workspace. Each tab's address names its project, so two tabs can edit two apps side by side.
+- Screens whose routes the app no longer lists are flagged in the Screens panel and show why on the canvas instead of the app's not-found page. **Remove** deletes them in one undo step.
 - A collage arrangement for demos: add `layout=collage` to the studio's address, and **Tidy up** and setup links pack screens into columns so the workspace fits one view. Each screen's viewports stay side by side.
 - Waymark, a second demo app: the companion app for an invented adventure game, with painted backdrops, a scrolling realm map, quests, rewards, badges and statistics. Start it with `bun run demo:waymark`. `bun tools/demo.mjs --app <name>` selects a demo, and Ember stays the default.
 - **Lumen**, a finance example app: a personal finance app built with Exact, with Home, Activity, Cards, Budgets and Goals tabs, Send money, Add to a goal, Payment and Account sheets, and a Welcome screen. Its panels use Liquid Glass on iOS 26. Start it with `bun run demo:lumen` and open the printed setup link. Native previews recognize it.
@@ -29,6 +31,10 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Changed
 
+- Apps are identified by their folder, read from Exact's local editing API, not by their address. An app that moves to another port keeps its workspace. When a different app answers at a project's address, the project's screens pause, editing is refused, and the running app can open in its own workspace. Work saved before identities were checked, or an address that cannot be verified, waits for you to confirm or start a new workspace before an app is tied to it.
+
+- Saved data moves from one workspace per studio into one folder per project. On first launch, `design.json`, `design-drafts.json` and `design-history.json` migrate into projects with their screens, layout, selection, drafts and timeline; the original files are left unchanged.
+
 - Compress Waymark artwork to WebP at its original dimensions, with lossless ornaments and transparency. Art regeneration includes the compression step.
 
 - Upgrade the pinned Exact SDK from `114bb88f` to `32f79aa8`. Migrate theme files and the local editing protocol from Tamber to Forma, including compiler validation and preview fixtures. The SDK now uses Rust 1.99.1 and includes web transform-layer promotion, navigation fixes, and native rendering updates. Connected apps must use the Forma editing API.
@@ -37,6 +43,8 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Fixed
 
+- Opening a setup link for another app no longer adds its screens to the current app's workspace, and reopening the first app's link no longer leaves the other app's screens as "Not Found" frames.
+- Two studio tabs on different projects no longer overwrite each other's workspace, drafts or timeline.
 - Setup links fetch current screens when another app takes over the same local server URL, instead of reusing the previous app’s cached screens.
 
 - Grouped draft edits roll back on failure and undo both alignment axes even at the history limit. Number scrubbing preserves valid negative values, alignment follows reversed flows, and Fixed sizing accounts for padding and borders.

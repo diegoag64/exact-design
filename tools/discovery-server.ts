@@ -2,6 +2,7 @@ import {previewScreens} from './preview-screens';
 import { projectUrl } from '../studio/project';
 import { parseRoutes } from '../studio/discovery';
 import { designRequest,designEvents } from './design-session';
+import { identifyApp } from './project-identity';
 
 const MAX_BYTES = 1024 * 1024;
 function localOrigin(origin: string): boolean {
@@ -60,7 +61,7 @@ export function startDiscoveryServer(port=5175) {
         for(const [key,value]of Object.entries(headers))response.headers.set(key,value);
         return response;
       }
-      if(!['/discover','/design','/previews','/native','/expo','/expo/setup'].includes(url.pathname)) return new Response(null,{status:404,headers});
+      if(!['/discover','/identify','/design','/previews','/native','/expo','/expo/setup'].includes(url.pathname)) return new Response(null,{status:404,headers});
       if(req.method==='OPTIONS') return new Response(null,{status:204,headers});
       if(req.method!=='POST' || !req.headers.get('content-type')?.startsWith('application/json')) return new Response(null,{status:405,headers});
       try {
@@ -74,6 +75,7 @@ export function startDiscoveryServer(port=5175) {
           catch(e) {return Response.json({ok:false,error:e instanceof Error?e.message:'Could not update the app.'},{headers});}
         }
         if(typeof body?.url!=='string') throw new Error('Choose a project server first.');
+        if(url.pathname==='/identify')return Response.json(await identifyApp(body.url),{headers});
         const routes=await readRoutes(body.url);
         return Response.json({routes,error:''},{headers});
       } catch(e) {

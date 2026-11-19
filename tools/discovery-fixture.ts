@@ -1,12 +1,15 @@
 // Only the browser test launcher starts this app-shaped fixture.
 export function startDiscoveryFixture(port=5176) {
   let mode='normal',short=false;
+  // An app identity for the routes modes: the folder its editing API names, and its manifest name. Empty answers no
+  // editing API, as a server that cannot say which app it is.
+  let app='',appName='';
   let visits=0,markedVisits=0;
   let inspecting=false,version=0,color='#ffffff',seq=0;let events:any[]=[];
   const files=()=>({'app.contract':'fixture-'+version});
   return Bun.serve({hostname:'127.0.0.1',port,fetch:async req=>{
     const url=new URL(req.url);
-    if(url.pathname==='/mode' && req.method==='POST') {mode=(await req.json()).mode;short=false;inspecting=false;version=0;color='#ffffff';seq=0;events=[];return Response.json({ok:true});}
+    if(url.pathname==='/mode' && req.method==='POST') {const body=await req.json();mode=body.mode;app=typeof body.app==='string'?body.app:'';appName=typeof body.name==='string'?body.name:'';short=false;inspecting=false;version=0;color='#ffffff';seq=0;events=[];return Response.json({ok:true});}
     if(mode==='full-height'){
       if(url.pathname==='/fixture/content'){if(req.method==='POST')short=(await req.json()).short===true;return Response.json({short});}
       const count=url.pathname==='/short'?2:12;
@@ -38,6 +41,9 @@ export function startDiscoveryFixture(port=5176) {
       visits++;
       return new Response(`<!doctype html><head><title>Element fixture</title></head><body><div id="exact-root"><main data-site="0"><section data-site="1" aria-label="Header"${mode==='elements-gaps'?' style="display:flex;flex-direction:column;align-items:flex-start;gap:12px"':''}><button data-site="${2+version*40}" aria-label="Save" style="margin:40px;padding:20px"><span data-site="3">Save</span></button>${mode==='elements-gaps'?'<p data-site="4" style="margin:0;height:40px;width:200px">Two</p><p data-site="5" style="margin:0;height:40px;width:200px">Three</p>':''}</section>${layers}</main></div><script>window.exact={plan:'fixture-plan-${version}',instanceOf:()=>[]};fetch('/__dev/report',{method:'POST',body:JSON.stringify({kind:'register',id:'fixture-build'})});setInterval(async()=>{const s=await(await fetch('/fixture/status')).json();window.exact.plan='fixture-plan-'+s.version;document.querySelector('button[data-site]').dataset.site=String(2+s.version*40);document.querySelector('button[data-site]').style.background=s.color;let banner=document.getElementById('exact-inspect');if(s.inspecting&&!banner){banner=document.createElement('div');banner.id='exact-inspect';document.body.append(banner);}if(!s.inspecting)banner?.remove();},150);</script></body>`,{headers:{'content-type':'text/html'}});
     }
+    if(app&&url.pathname==='/__forma/token')return Response.json({token:'identity-fixture'});
+    if(app&&url.pathname==='/__forma'&&req.method==='POST')return Response.json({ok:{protocol:'forma/1.18',format:1,files:{},local:true,app}});
+    if(appName&&url.pathname==='/manifest.json')return Response.json({name:appName});
     if(url.pathname==='/routes.json') {
       if(mode==='invalid') return new Response('<html>not a manifest</html>');
       if(mode==='empty') return Response.json({routes:[]});

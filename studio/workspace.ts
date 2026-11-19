@@ -1,4 +1,4 @@
-import { projectUrl, screenRoute, screenSource, type Project } from './project';
+import { projectUrl, screenRoute, screenSource, validIdentity, type Project } from './project';
 import { hasRouteParameters } from './discovery';
 import { snapMove, FRAME_GAP } from './snapping';
 import { Editor, initial, validate, exportContract, resolveLayer, type Layer } from './model';
@@ -8,7 +8,7 @@ export type Workspace = { version: 2; name: string; project: Project; screens: S
 import { presets, deviceSets, resolveDevices } from './devices';
 export { presets } from './devices';
 export type NewScreen = { name: string; route: string };
-export const createWorkspace = (): Workspace => ({ version: 2, name: 'Untitled', project: {name: '', url: ''}, screens: [{ id: 'screen-1', name: 'Home', source: '', route: '', layers: initial().layers.map(n => n.kind === 'button' ? n : {...n, widthMode: 'fill', right: 720 - n.x - n.width, fontSize: n.id === 'title' ? 28 : n.id === 'card-title' ? 18 : n.fontSize, height: n.id === 'card-title' ? 44 : n.id === 'card-copy' ? 48 : n.height}) }], views: [{ id: 'view-1', screenId: 'screen-1', name: 'Custom', x: 0, y: 0, width: 720, height: 520 }] });
+export const createWorkspace = (): Workspace => ({ version: 2, name: 'Untitled', project: {name: '', url: '', identity: ''}, screens: [{ id: 'screen-1', name: 'Home', source: '', route: '', layers: initial().layers.map(n => n.kind === 'button' ? n : {...n, widthMode: 'fill', right: 720 - n.x - n.width, fontSize: n.id === 'title' ? 28 : n.id === 'card-title' ? 18 : n.fontSize, height: n.id === 'card-title' ? 44 : n.id === 'card-copy' ? 48 : n.height}) }], views: [{ id: 'view-1', screenId: 'screen-1', name: 'Custom', x: 0, y: 0, width: 720, height: 520 }] });
 export function loadWorkspace(value: unknown): Workspace {
   if ((value as {version?: number})?.version === 1) {
     const old = validate(value), next = createWorkspace();
@@ -18,6 +18,9 @@ export function loadWorkspace(value: unknown): Workspace {
   if (!d || d.version !== 2 || typeof d.name !== 'string' || !Array.isArray(d.screens) || !Array.isArray(d.views) || !d.views.length || !d.screens.length || d.views.length > 200 || d.screens.length > 100) throw new Error('Invalid workspace');
   d.project ??= {name:'',url:''};
   if(typeof d.project.name !== 'string' || typeof d.project.url !== 'string' || (d.project.url && (!d.project.name.trim() || projectUrl(d.project.url)!==d.project.url))) throw new Error('Invalid project');
+  // Workspaces saved before identities have none: they stay unverified until the person confirms their app.
+  d.project.identity ??= '';
+  if(!validIdentity(d.project.identity) || (d.project.identity && !d.project.url)) throw new Error('Invalid project identity');
   const ids = new Set<string>();
   for (const s of d.screens) {
     if (!s || typeof s.id !== 'string' || !s.id || ids.has(s.id) || typeof s.name !== 'string') throw new Error('Invalid screen');
@@ -88,11 +91,14 @@ export class WorkspaceEditor {
     });
     this.active=id; this.selected=id;
   }
-  connectProject(name: string, value: string) {
+  /** Connect this workspace to an app at `value`. `identity` is the verified app identity the caller resolved, or '' to keep
+   *  the current one: callers decide whether an app may join this workspace (see ProjectStore.resolve). */
+  connectProject(name: string, value: string, identity = '') {
     if(!name.trim()) throw new Error('Give your project a name.');
     const url=projectUrl(value);
+    if(!validIdentity(identity)) throw new Error('Invalid project identity');
     this.change(d=>{
-      d.project={name:name.trim().slice(0,120),url};
+      d.project={name:name.trim().slice(0,120),url,identity:identity||d.project.identity||''};
       for(const screen of d.screens) {
         if(!screen.route && (screen.source===url || screen.source.startsWith(url+'/'))) {
           screen.route=screen.source.slice(url.length)||'/'; screen.source='';
@@ -103,7 +109,7 @@ export class WorkspaceEditor {
   disconnectProject() {
     this.change(d=>{
       for(const screen of d.screens) if(screen.route) {screen.source=screenSource(screen,d.project);screen.route='';}
-      d.project={name:'',url:''};
+      d.project={name:'',url:'',identity:''};
     });
   }
   addScreen(name: string, path: string, preset: string, linked: boolean) { this.addScreens([{name, route: path}], preset, linked); }
@@ -184,18 +190,21 @@ export class WorkspaceEditor {
     try { work(); } finally { if(this.document!==before&&this.past.length>depth){ this.past.length=depth; this.past.push(before); } }
   }
   /** Connect a project and add each of its routes the library lacks, replacing an untouched starter screen; one undo step.
-   *  A non-empty `show` (screen names or routes) leaves only the matching project screens visible; with no match, visibility is unchanged. */
-  setupProject(name: string, url: string, routes: NewScreen[], choice: string, show: string[] = []) {
+   *  A non-empty `show` (screen names or routes) leaves only the matching added screens visible; with no match, visibility is unchanged. */
+  setupProject(name: string, url: string, routes: NewScreen[], choice: string, show: string[] = [], identity = '') {
     const pristine=this.isPristine(),starter=this.document.screens[0]?.id;
     this.batch(()=>{
-      if(this.document.project.url!==projectUrl(url)) this.connectProject(name||'Project',url);
+      if(this.document.project.url!==projectUrl(url)||(identity&&this.document.project.identity!==identity)) this.connectProject(name||this.document.project.name||'Project',url,identity);
       const have=new Set(this.document.screens.map(s=>s.route)),missing=routes.filter(r=>!hasRouteParameters(r.route)&&!have.has(screenRoute(r.route)));
+      const existing=new Set(this.document.screens.map(s=>s.id));
       if(missing.length) this.addScreens(missing,choice,true);
       if(pristine&&missing.length) this.change(d=>{d.views=d.views.filter(v=>v.screenId!==starter);d.screens=d.screens.filter(s=>s.id!==starter);});
+      // `show` sets the visibility of the screens this setup adds; screens already in the library keep the person's choice.
+      const added=(s:Screen)=>!!s.route&&!existing.has(s.id);
       const wanted=new Set(show.map(entry=>entry.trim().toLowerCase()).filter(Boolean)),listed=(s:Screen)=>wanted.has(s.name.toLowerCase())||wanted.has(s.route);
-      if(wanted.size&&this.document.screens.some(s=>s.route&&listed(s))) this.change(d=>{
+      if(wanted.size&&this.document.screens.some(s=>added(s)&&listed(s))) this.change(d=>{
         for(const s of d.screens) {
-          if(!s.route) continue;
+          if(!added(s)) continue;
           if(!listed(s)) {s.hidden=true;continue;}
           delete s.hidden;
           if(d.views.every(v=>v.screenId!==s.id||v.hidden)) for(const v of d.views) if(v.screenId===s.id) delete v.hidden;

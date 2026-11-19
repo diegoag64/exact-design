@@ -9,6 +9,7 @@ import {ElementBridge,bridgeFor,liveFrames,type ElementNode} from './element-bri
 import {spacingProperties,spacingRows,spacingShorthand,expandSpacing} from '../studio/spacing';
 import {emptySpacing} from '../studio/spacing';
 import {PreviewChannel} from './preview-channel';
+import {folderIdentity} from './project-identity';
 import {DesignDraft,applyDesignDraft,bindingTargets,bindingKey,previewValue,type DesignBinding,type DesignPatch} from './design-drafts';
 
 const properties=new Set([...Object.keys(propertyCatalog),'color','background-color','font-size','font-weight','line-height','letter-spacing','border-radius','opacity','font-family','text-content']);
@@ -345,6 +346,9 @@ export class DesignSession {
     this.busy=true;
     try{
       await this.poll();
+      // The same server, epoch and folder that opened the session: a restarted or replaced app never receives this draft.
+      const hello=await this.call({method:'hello'});
+      if(this.app&&hello.app!==this.app)throw new Error('A different app is running at this address. The draft was not applied.');
       if(this.drafts.conflict(this.files))throw new Error('The source changed. The draft was not applied.');
       if(this.draftError)throw new Error(this.draftError);
       const patches=this.drafts.snapshot();let expected:any;
@@ -429,6 +433,10 @@ export async function designRequest(body:any) {
     if(typeof token!=='string'||!token) throw new Error('No local editing session is available.');
     const session=new DesignSession(origin,token);session.bridge=bridgeFor(origin);session.preferredFrame=typeof body.row==='string'?body.row:'';
     await session.start();
+    // Source writes stay with the project that owns the screen: the app answering at this address must be the one the
+    // studio recorded for it. An app that names no folder has no identity, and matches only a project without one.
+    const live=session.app?await folderIdentity(session.app):'';
+    if(live!==(typeof body.identity==='string'?body.identity:'')){await session.close().catch(()=>{});throw new Error('A different app is running at this address. Open its own project to edit it.');}
     try{if(typeof body.draftState==='string'&&body.draftState)session.drafts.restore(body.draftState);}
     catch(error){await session.close();throw error;}
     const id=crypto.randomUUID();

@@ -87,7 +87,9 @@ The root launchers set `EXACT_FEEDBACK=0`. Generated SDK instructions describe a
 | --- | --- |
 | `studio/app.contract`, `studio/app.ts` | Editor UI, actions, and data sources |
 | `studio/model.ts`, `studio/workspace.ts` | Document edits, Contract export, screens, and viewports |
+| `studio/projects.ts` | Project list, per-project storage, migration of earlier saves, and connection resolution |
 | `studio/persistence.ts`, `studio/draft-storage.ts` | Workspace saves and per-project drafts |
+| `tools/project-identity.ts` | App identity from the editing API's app folder |
 | `studio/render.ts` | Canvas labels and selection handles |
 | `studio/ui.contract`, `studio/app.forma` | Shared controls and theme tokens |
 | `studio/modules/web/` | Browser input, focus, and preview runtime lifecycle |
@@ -109,6 +111,37 @@ The root launchers set `EXACT_FEEDBACK=0`. Generated SDK instructions describe a
 | `fixtures/ember/` | Notebook app used by browser regressions |
 
 The [studio design system](studio-design-system.md) describes UI ownership and interaction rules in detail.
+
+## Projects and saved data
+
+The studio keeps one workspace per project in the browser's storage for its origin (`app:/data`):
+
+| Path | Contents |
+| --- | --- |
+| `projects.json` | An index: each project's key, name, address and identity, and the project opened last |
+| `projects/<key>/workspace.json` | Screens, viewports, selection, and the camera when the project was last left |
+| `projects/<key>/drafts.json` | Unapplied design drafts, one per app identity (`origin:<address>` for an app without one) |
+| `projects/<key>/history.json` | The project's timeline |
+
+A key (`p-` and up to 48 lowercase letters, digits or hyphens) names a workspace, not an app; keys reach file paths, so `validKey` checks every one. A project's folder is what makes it exist, and its `workspace.json` is the source of its name, address and identity: the index is rebuilt from the folders whenever a page reads it, so two tabs that add projects at once do not lose either. Each tab writes only the projects it changes, and re-reads drafts and timelines before appending. Two tabs on the same project still save last-writer-wins, as before.
+
+Every source a page asks (`document`, `edit`, `library`, `camera`, `history`, `savedDrafts`, and `design` on `open`) names its project key, so a reply that arrives after the tab switched lands in its own project. An editing session stays bound to the project and draft bucket it opened with. The Contract keeps the tab's project in its address (`/?project=<key>`) and the camera in its persisted `px`, `py` and `zoom`; `cameraProject` records which project that camera belongs to.
+
+**Identity.** `POST /identify` on the helper (`tools/project-identity.ts`) asks the app's local editing API for its token and `hello`. A local `hello` names the app's folder; the identity is `app-` and the first 24 hex digits of the SHA-256 of that folder's real path, so a symlink or another port gives the same identity and another folder or checkout a different one. It never reads `exact.json`, which starts a dev loop's native producers. Results are `verified`, `unverified` (the server answers but names no folder) or `offline`. `resolveConnection` in `studio/projects.ts` maps a request to a project:
+
+| Live app | Outcome |
+| --- | --- |
+| Verified, a project has its identity | That project opens; a new address relinks its screens |
+| Verified, an unverified project is at the address | The person chooses: adopt that project, or a new workspace |
+| Verified, another app's project is at the address | The person confirms a new workspace or cancels; the other project never changes |
+| Verified, none | A new workspace opens; setup links and new connections never reuse the current workspace, so two tabs cannot set up two apps in one starter |
+| Unverified or offline | Saved work at the address reopens only by choice. Moving a connected project to such an address needs a choice too; renaming does not |
+
+From Project settings, only the untouched starter connects without a question: an unconnected workspace that holds screens (one that was disconnected, say) asks first, and a verified project asked to point at another verified app offers that app a new workspace instead. Setup re-reads the identity after reading the routes and stops if the app changed in between.
+
+On `open`, `design` refuses a project screen unless the app at the address has the project's identity, and the helper checks it again against `hello` before restoring drafts. Apply re-reads `hello` and refuses if the folder changed. Unverified projects edit only an app that is also unverified, by address, as before. While the app at a project's address is not its own (`mismatch`, `confirm`, `unconfirmed`), **Add all**, **Remove** and the discovered route list are unavailable, so another app's routes never change its screens. A page that returns to a project another tab saved since reloads it before acting, and untouched starter workspaces are hidden from other pages' project menus.
+
+**Migration.** When `projects.json` is missing, `ProjectStore` reads `design.json`, `design-drafts.json` and `design-history.json`, copies the workspace unchanged to `projects/p-legacy/`, splits drafts and timeline entries by origin (other origins become `p-legacy-<digest>` projects, keyed by a SHA-256 of the whole origin and named after it), and writes the index last. Outputs depend only on the inputs, so two tabs migrating at once write the same files. The original files are never changed or removed, and migrated projects stay unverified until the person confirms their app.
 
 ## Profile canvas navigation
 

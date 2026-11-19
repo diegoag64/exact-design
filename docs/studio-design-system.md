@@ -16,7 +16,7 @@ The studio follows Figma's UI3 layout: two full-height panels around an unobstru
 | `studio/modules/web/canvas-navigation.js` | Browser gestures and validated iframe input |
 | `studio/app.contract` | Feature composition, selection, and camera state |
 
-The Exact Contract owns view state and actions. Browser hatches handle browser-specific input and focus. They invoke existing controls or dispatch canvas input; they do not maintain a second document or camera model.
+The Exact Contract owns view state and actions. Browser hatches handle browser-specific input and focus. They invoke existing controls or dispatch canvas input; they do not maintain a second document or camera model. The project a tab shows lives in its address (`/?project=<key>`), and each project's camera is saved with its workspace when the tab leaves it.
 
 ## Tokens and dimensions
 
@@ -60,6 +60,7 @@ Import components and styles from `./ui.contract`; import `Icon` from `./icons.c
 | `MenuItem` | Action, optional icon and shortcut hint, disabled/destructive state, closing menu target |
 | `MenuDivider` | Separation between groups of related actions |
 | `MenuCheck` | Setting in a menu: a check mark while on, `role="menuitemcheckbox"`, and the menu stays open |
+| `MenuChoice` | One of several choices in a menu, such as a project: a check mark on the current one, a muted second line, `role="menuitemradio"`; choosing closes the menu |
 | `Tool` | Custom button compositions using the standard hit area and interaction states |
 | `Field` | Native text inputs and selects; Exact owns their focus behavior |
 | `TreeRow` | Layer row hover and keyboard focus treatment |
@@ -141,6 +142,14 @@ A region is transient preview state, like Alt-hover distances. Repeat badges gro
 The drawer floats over the right edge of the canvas, like the other floating chrome, and leaves the canvas frames mounted and editable. The bottom toolbar's phone button, **Preview on iOS** under a project screen's route, and the canvas context menu toggle it; `nativeOpen`, the device and the appearance persist in the Contract. It follows the active screen. The drawer sizes the simulator's screen from the viewport height so the screenshot keeps its aspect ratio, and hides while a sidebar overlays the canvas. **Refresh** is the drawer's primary action. During a job, a step card floats over the screenshot area: each step shows a check, a spinner or a pending dot, the active step shows a timer and a progress bar that fills only while capturing, where the helper sends a real fraction, and slides otherwise, and reduced motion stops the spinner and sliding bar. The job's message, completion and errors appear in a line under the actions, not in a canvas toast. While the app editor holds unapplied drafts, a notice above the actions says the native build does not include them.
 
 The drawer's last section is **Expo Simulators**. Its header pairs Expo's mark (`ExpoMark` in `ui.contract`, a filled glyph on an inverted ink tile, so it reads as a brand rather than a tool icon) with the service name, the connected account, and a settings pencil. Before setup, a one-line explanation sits beside **Set up**. Once connected, **Test remotely** is a secondary button, so the local **Refresh** stays the drawer's one primary action. While a test runs, the section lists its steps inline, styled like the native step card. With a session running, one **Open in Simulator** link opens a helper page in a new tab that moves the session to the selected screen, shows the same steps, and then becomes the simulator. A status line with a green dot names the device, a muted line under it gives the idle limit the helper reports, and **Stop** sits at its end; a muted dot and "Your code changed" replace it when the upload is stale. Links that leave the studio carry the `external-link` icon. The setup dialog is a route, like Project and Add screen: three numbered steps, a password field for the token, and a notice about plan usage above its actions.
+
+## Projects
+
+The project header at the top of the left panel (and the collapsed header on the canvas) opens the `project-menu` popover, as Figma's file name does. It lists the saved projects with `MenuChoice` rows, each with the app's address as its second line and a check on the shown project, followed by **Project settings…** and **Connect another app…**. The Project dialog has two modes: settings edit the shown project, and **Connect another app** opens the result in its own workspace, so its title says so and it has no Disconnect.
+
+Requests that need the person's decision before an app is tied to saved work, and connection problems with the shown project, use a `FloatingBar` 108px above the canvas bottom, in the same place as setup progress and errors, and never more than one at a time: setup first, then a pending choice, then the connection notice. A choice offers **New workspace** and **Use saved** as secondary buttons and an × to cancel. The connection notice uses `ink.danger` for a different app and an info icon otherwise, its own primary **Confirm** only when confirming is the expected next step, and a refresh icon to check again. Inside the Project dialog, the same choice appears under the message with secondary buttons.
+
+Frames whose screen cannot load (a route the app no longer lists, or a project whose address another app answers) draw a dashed `surface.panel` placeholder with the reason instead of the app's not-found page. The Screens panel marks such screens with `circle-alert` in `ink.danger`, and a `surface.notice` row above the list counts them with **Remove**.
 
 ## Context menus
 

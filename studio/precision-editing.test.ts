@@ -32,7 +32,7 @@ test('precision editing: nudges, math, distances, theme colours, alignment and s
     await Promise.all([start(editor,'precision-editor',editorPort),start(app,'precision-app',appPort)]);
     suite=await suiteBrowser();page=await suite.newPage({viewport:{width:1440,height:1000},colorScheme:'light'});page.on('pageerror',(e:Error)=>errors.push(e.message));
     await page.goto('http://127.0.0.1:'+editorPort,{waitUntil:'load'});
-    await page.getByRole('button',{name:'Project connection',exact:true}).click();
+    await page.getByRole('button',{name:'Projects',exact:true}).click();await page.getByRole('menuitem',{name:'Project settings…',exact:true}).click();
     await page.getByRole('textbox',{name:'Project name',exact:true}).fill('Ember');await page.getByRole('textbox',{name:'Project URL',exact:true}).fill('http://127.0.0.1:'+appPort);await page.getByRole('button',{name:'Connect',exact:true}).click();
     await page.getByRole('button',{name:'Add screen',exact:true}).click();await page.getByRole('textbox',{name:'Screen name',exact:true}).fill('Library');await page.getByRole('textbox',{name:'Route',exact:true}).fill('/');await page.getByRole('button',{name:'Add screen',exact:true}).last().click();
     await page.getByRole('button',{name:'Edit app design',exact:true}).click();await page.getByRole('button',{name:'Finish editing app',exact:true}).waitFor();
