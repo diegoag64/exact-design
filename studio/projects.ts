@@ -48,7 +48,9 @@ export class ProjectWorkspace {
 export type Resolution={kind:'open';key:string;adopt:boolean}|{kind:'here';adopt:boolean}|{kind:'new'}|{kind:'choose';key:string;message:string};
 export type Intent='setup'|'connect'|'new';
 
-export function resolveConnection(records:ProjectRecord[],current:ProjectRecord|null,pristine:boolean,url:string,live:LiveApp,intent:Intent,decision:''|'adopt'|'new'):Resolution{
+/** `here` is only ever the current workspace edited from its own settings; setup links and new connections always get a
+ *  fresh key, so two tabs can never set up two apps in one starter workspace. */
+export function resolveConnection(records:ProjectRecord[],current:ProjectRecord|null,url:string,live:LiveApp,intent:Intent,decision:''|'adopt'|'new'):Resolution{
   const address=projectUrl(url);
   if(decision==='new')return {kind:'new'};
   const at=(r:ProjectRecord)=>r.url===address;
@@ -68,7 +70,7 @@ export function resolveConnection(records:ProjectRecord[],current:ProjectRecord|
       if(decision==='adopt')return {kind:'open',key:earlier.key,adopt:true};
       return {kind:'choose',key:earlier.key,message:`Exact Design can’t tell whether ${label(earlier)} was made with ${live.name||'this app'}. Its screens and drafts stay as they are until you choose.`};
     }
-    return pristine&&current&&!current.url?{kind:'here',adopt:false}:{kind:'new'};
+    return {kind:'new'};
   }
   // Nothing at the address says which app it is.
   if(intent==='connect'&&current){
@@ -77,14 +79,13 @@ export function resolveConnection(records:ProjectRecord[],current:ProjectRecord|
     if(decision==='adopt')return {kind:'here',adopt:false};
     return {kind:'choose',key:current.key,message:`Exact Design can’t confirm that the app at ${address} is ${label(current)}. Start it with its editing server, or choose how to continue.`};
   }
-  const unverified=records.find(r=>at(r)&&!r.identity);
-  if(unverified)return {kind:'open',key:unverified.key,adopt:false};
-  const verified=records.find(at);
-  if(verified){
-    if(decision==='adopt')return {kind:'open',key:verified.key,adopt:false};
-    return {kind:'choose',key:verified.key,message:`Exact Design can’t confirm that the app at ${address} is ${label(verified)}. Start it with its editing server, or choose how to continue.`};
+  // Saved work at the address, verified or not, is this app's only if the person says so.
+  const saved=records.find(r=>at(r)&&!r.identity)??records.find(at);
+  if(saved){
+    if(decision==='adopt')return {kind:'open',key:saved.key,adopt:false};
+    return {kind:'choose',key:saved.key,message:`Exact Design can’t confirm which app is running at ${address}, so it can’t tell whether ${label(saved)} belongs to it. Start the app with its editing server, or choose how to continue.`};
   }
-  return pristine&&current&&!current.url?{kind:'here',adopt:false}:{kind:'new'};
+  return {kind:'new'};
 }
 
 async function readText(fs:FileSystem,path:string){
@@ -117,6 +118,8 @@ export class ProjectStore {
   /** Set when an earlier release's file could not be migrated; that file is left unchanged. */
   error='';
   readonly workspaces=new Map<string,ProjectWorkspace>();
+  /** Untouched starter workspaces: listed for the page that shows one, hidden from other pages' project menus. */
+  readonly pristine=new Set<string>();
   private loading?:Promise<void>;
   private writes:Promise<unknown>=Promise.resolve();
   constructor(private readonly makeKey:()=>string=()=>`p-${crypto.randomUUID().slice(0,8)}`){}
@@ -145,29 +148,33 @@ export class ProjectStore {
     const keys=[...new Set([...listed.map(r=>r.key).filter(k=>known.includes(k)),...known,...this.workspaces.keys()])];
     const records:ProjectRecord[]=[];
     for(const key of keys){
-      const record=this.workspaces.get(key)?.record??await this.folderRecord(fs,key)??listed.find(r=>r.key===key);
+      const ws=this.workspaces.get(key);
+      const record=ws?.record??await this.folderRecord(fs,key)??listed.find(r=>r.key===key);
+      if(ws){if(ws.editor.isPristine())this.pristine.add(key);else this.pristine.delete(key);}
       if(record)records.push(record);
     }
     this.records=records;
     if(last&&this.find(last))this.last=last;
     return records.some(r=>!listed.some(l=>l.key===r.key));
   }
-  private stamps=new Map<string,{stamp:string;record:ProjectRecord|undefined}>();
+  private stamps=new Map<string,{stamp:string;record:ProjectRecord|undefined;pristine:boolean}>();
   private async folderRecord(fs:FileSystem,key:string):Promise<ProjectRecord|undefined>{
     const path=projectFiles(key).workspace;
     let stamp='';
     try{const st:any=await fs.stat(path);stamp=`${st.modifiedMs??st.mtimeMs??''}:${st.size??''}`;}catch{/* Read it below. */}
     const cached=this.stamps.get(key);
-    if(stamp&&cached?.stamp===stamp)return cached.record;
-    let record:ProjectRecord|undefined;
+    if(stamp&&cached?.stamp===stamp){if(cached.pristine)this.pristine.add(key);else this.pristine.delete(key);return cached.record;}
+    let record:ProjectRecord|undefined,pristine=false;
     try{
       const text=await readText(fs,path);
       if(text!==undefined){
         const value=JSON.parse(text),d=loadWorkspace(value?.workspace!==undefined?value.workspace:value);
         record={key,name:(d.project.name||d.name||'Untitled').slice(0,120),url:d.project.url,identity:d.project.identity??''};
+        const editor=new WorkspaceEditor();editor.document=d;pristine=editor.isPristine();
       }
     }catch{/* An unreadable workspace keeps the list's entry. */}
-    if(stamp)this.stamps.set(key,{stamp,record});
+    if(pristine)this.pristine.add(key);else this.pristine.delete(key);
+    if(stamp)this.stamps.set(key,{stamp,record,pristine});
     return record;
   }
   private writeList(fs:FileSystem){
@@ -188,8 +195,10 @@ export class ProjectStore {
   async open(fs:FileSystem,key:string):Promise<ProjectWorkspace>{
     await this.load(fs);
     let ws=this.workspaces.get(key);
+    // Another tab saved this project since this page last did: work from that copy, not this page's older one.
+    if(ws&&await ws.persistence.changedElsewhere(fs)){ws=undefined;this.workspaces.delete(key);}
     if(!ws){
-      if(!this.find(key))throw new Error('That project is no longer saved in this browser.');
+      if(!this.find(key)&&!await this.folderRecord(fs,key))throw new Error('That project is no longer saved in this browser.');
       ws=new ProjectWorkspace(key);this.workspaces.set(key,ws);
     }
     await ws.load(fs);

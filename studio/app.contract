@@ -871,8 +871,10 @@ component Studio
   state connectionRevision = 0
   resource linked = connection(doc.projectKey, doc.projectUrl, connectionRevision) as shape Connection else empty()
   derive linkState = linked.key == doc.projectKey and linked.url == doc.projectUrl ? linked.state : ""
-  // Editing writes source, so it waits until the app at the address is this project's.
-  derive editBlocked = doc.route != "" and (linkState == "mismatch" or linkState == "confirm" or linkState == "unconfirmed")
+  // Editing writes source and the route list shapes the screens, so both wait until the app at the address is this
+  // project's.
+  derive libraryBlocked = linkState == "mismatch" or linkState == "confirm" or linkState == "unconfirmed"
+  derive editBlocked = doc.route != "" and libraryBlocked
   action recheckConnection
     connectionRevision = connectionRevision + 1
   action refreshConnection
@@ -908,7 +910,7 @@ component Studio
     choiceOp = ""
     requestOp = "dialog"
     send libraryChanged = library(doc.projectKey, (projectMode == "new" ? "new" : "connect"), projectNameValue, projectUrlValue, "", "", decision, time.epochAtZero + performanceNow())
-  derive missingRoutes = discovered.owner == doc.projectUrl and doc.projectUrl != "" ? discovered.missing : []
+  derive missingRoutes = discovered.owner == doc.projectUrl and doc.projectUrl != "" and not libraryBlocked ? discovered.missing : []
   action removeMissing
     send libraryChanged = library(doc.projectKey, "remove-missing", "", missingRoutes.join(" "), "", "", "", time.epochAtZero + performanceNow())
   action addScreen
@@ -1042,8 +1044,6 @@ component Studio
     setupError = ""
     setupRunning = true
     requestOp = "link"
-    if op == "setup"
-      startTidy()
     send libraryChanged = library(doc.projectKey, op, searchParam(top(nav), "name"), setupUrl, searchParam(top(nav), "viewports"), searchParam(top(nav), "show"), decision, time.epochAtZero + performanceNow())
   action runSetup
     startSetup("")
@@ -1082,6 +1082,9 @@ component Studio
           else
             nav = n
           if r.fit
+            // Tidy only a workspace the request just filled: one that already held these screens keeps its layout.
+            if fromLink
+              startTidy()
             cameraProject = (r.project != "" ? r.project : cameraProject)
             fitWhenReady = true
             fittedSignature = ""
@@ -2120,7 +2123,12 @@ component Studio
                   IconButton(icon="x", label="Close preview", hint="Close preview", shortcut="", selected=false, disabled=editing, testId="close-preview", press=togglePreview)
                 scroll width="100%" max-width=doc.width height=doc.height max-height="80%" overflow-x="scroll" border-radius="radius.panel" box-shadow="shadow.menu"
                   column position="relative" width=doc.width height=doc.height overflow="hidden" background-color="paper" testId="live-screen"
-                    ScreenView(source=doc.previewSource, layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick)
+                    if doc.route != "" and (missingRoutes.includes(doc.route) or linkState == "mismatch")
+                      column position="absolute" inset=0 align-items="center" justify-content="center" gap=12 padding=32 box-sizing="border-box" background-color="surface.panel" color="ink.secondary" text-align="center" testId="preview-unavailable"
+                        Icon(name="circle-alert", size=28, angle=0)
+                        text (linkState == "mismatch" ? `${doc.projectName} isn’t running at ${hostOf(doc.projectUrl)}` : `${doc.projectName} has no ${doc.route} route`) font-size=20 font-weight=600 color="ink.primary"
+                    else
+                      ScreenView(source=doc.previewSource, layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick)
         if entry.name == "project" or entry.name == "addScreen"
           column navigationKey=`${entry.id}` navigationPresentation="fullscreen" position="absolute" inset=0 background-color="surface.scrim" align-items="center" justify-content="center" padding=20 box-sizing="border-box"
             column class=Dialog width=420
@@ -2172,7 +2180,11 @@ component Studio
                         row gap=8 align-items="center" padding="10px 8px" color="ink.secondary" role="status"
                           Icon(name="refresh-cw", size=14, angle=0)
                           text "Finding screens…" font="type.body"
-                      if discovered.owner == doc.projectUrl and not pending(discovered)
+                      if libraryBlocked
+                        row gap=8 align-items="flex-start" padding="10px 8px" color="ink.secondary"
+                          Icon(name="circle-alert", size=14, angle=0)
+                          text "The app at this address isn’t confirmed as this project’s, so its routes aren’t listed. Enter a route below." font="type.caption" flex=1 role="status" testId="discovery-blocked"
+                      else if discovered.owner == doc.projectUrl and not pending(discovered)
                         if discovered.error != ""
                           row gap=8 align-items="flex-start" padding="10px 8px" color="ink.secondary"
                             Icon(name="circle-alert", size=14, angle=0)
@@ -2231,7 +2243,7 @@ component Studio
                   button press=saveProject disabled=(projectNameValue.trim() == "" or projectUrlValue.trim() == "" or pending(libraryChanged)) class=PrimaryButton testId="save-project"
                     text (doc.projectUrl == "" or projectMode == "new" ? "Connect" : "Save")
                 else
-                  if screenKind == "add" and discovered.owner == doc.projectUrl and not pending(discovered) and addableScreens > 0
+                  if screenKind == "add" and discovered.owner == doc.projectUrl and not pending(discovered) and addableScreens > 0 and not libraryBlocked
                     button press=addAllScreens disabled=pending(libraryChanged) class=SecondaryButton data-tip="Add every listed screen that is not on the canvas yet, each with the chosen viewports" testId="add-all-screens"
                       Icon(name="layout-grid", size=14, angle=0)
                       text `Add all ${addableScreens}`

@@ -190,18 +190,21 @@ export class WorkspaceEditor {
     try { work(); } finally { if(this.document!==before&&this.past.length>depth){ this.past.length=depth; this.past.push(before); } }
   }
   /** Connect a project and add each of its routes the library lacks, replacing an untouched starter screen; one undo step.
-   *  A non-empty `show` (screen names or routes) leaves only the matching project screens visible; with no match, visibility is unchanged. */
+   *  A non-empty `show` (screen names or routes) leaves only the matching added screens visible; with no match, visibility is unchanged. */
   setupProject(name: string, url: string, routes: NewScreen[], choice: string, show: string[] = [], identity = '') {
     const pristine=this.isPristine(),starter=this.document.screens[0]?.id;
     this.batch(()=>{
       if(this.document.project.url!==projectUrl(url)||(identity&&this.document.project.identity!==identity)) this.connectProject(name||this.document.project.name||'Project',url,identity);
       const have=new Set(this.document.screens.map(s=>s.route)),missing=routes.filter(r=>!hasRouteParameters(r.route)&&!have.has(screenRoute(r.route)));
+      const existing=new Set(this.document.screens.map(s=>s.id));
       if(missing.length) this.addScreens(missing,choice,true);
       if(pristine&&missing.length) this.change(d=>{d.views=d.views.filter(v=>v.screenId!==starter);d.screens=d.screens.filter(s=>s.id!==starter);});
+      // `show` sets the visibility of the screens this setup adds; screens already in the library keep the person's choice.
+      const added=(s:Screen)=>!!s.route&&!existing.has(s.id);
       const wanted=new Set(show.map(entry=>entry.trim().toLowerCase()).filter(Boolean)),listed=(s:Screen)=>wanted.has(s.name.toLowerCase())||wanted.has(s.route);
-      if(wanted.size&&this.document.screens.some(s=>s.route&&listed(s))) this.change(d=>{
+      if(wanted.size&&this.document.screens.some(s=>added(s)&&listed(s))) this.change(d=>{
         for(const s of d.screens) {
-          if(!s.route) continue;
+          if(!added(s)) continue;
           if(!listed(s)) {s.hidden=true;continue;}
           delete s.hidden;
           if(d.views.every(v=>v.screenId!==s.id||v.hidden)) for(const v of d.views) if(v.screenId===s.id) delete v.hidden;

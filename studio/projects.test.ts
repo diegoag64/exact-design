@@ -236,10 +236,13 @@ test('migrated work is tied to a verified app only by choice, and its drafts fol
   await call('document',['',1]);await call('connection',[LEGACY_KEY,url,1]);
   expect((await call('library',[LEGACY_KEY,'adopt','','','','','',clock++])).ok).toBe(true);
   expect(workspaceOf(d,LEGACY_KEY).project.identity).toBe(LUMEN);
-  // An app that cannot say which it is reopens migrated work at its address, as before; its drafts stay with that address.
+  // An app that cannot say which it is reopens migrated work at its address only when the person chooses to; its drafts
+  // stay with that address.
   const plain=legacyDisk();const callPlain=await tab(plain.d.storage);
   helper.apps.set(url,{identity:'',name:'',routes:lumen.routes});
-  const reopened=await setup(callPlain,'','Ember',url,'','','open');
+  const unsure=await setup(callPlain,'','Ember',url,'','','open');
+  expect(unsure.ok).toBe(false);expect(unsure.choice).toBe(LEGACY_KEY);expect(unsure.error).toContain('can’t confirm');
+  const reopened=await setup(callPlain,'','Ember',url,'','adopt','open');
   expect(reopened.project).toBe(LEGACY_KEY);
   const doc=await callPlain('document',[LEGACY_KEY,1]);
   await callPlain('design',['open','',url+'/',0,doc.views[0].id,LEGACY_KEY,clock++]);
@@ -267,7 +270,9 @@ test('two tabs on different projects never overwrite each other’s workspace, d
   const [lumenDoc,tideDoc]=await Promise.all([third('document',[lumenKey,1]),third('document',[tideKey,1])]);
   expect(lumenDoc.views[0].x).toBe(105);expect(tideDoc.views[0].y).toBe(305);
   expect(lumenDoc.groups.map((g:any)=>g.route)).toEqual(['/','/activity']);expect(tideDoc.groups.map((g:any)=>g.route)).toEqual(['/spending','/savings']);
-  expect(read(d,REGISTRY_FILE).projects.map((p:ProjectRecord)=>p.name).sort()).toEqual(['Lumen','Tide']);
+  expect(read(d,REGISTRY_FILE).projects.filter((p:ProjectRecord)=>p.url).map((p:ProjectRecord)=>p.name).sort()).toEqual(['Lumen','Tide']);
+  // The starters the two fresh tabs opened stay untouched and out of the project menu.
+  expect(lumenDoc.projects.map((p:any)=>p.name).sort()).toEqual(['Lumen','Tide']);
   expect(Object.keys(read(d,projectFiles(lumenKey).drafts).drafts)).toEqual([LUMEN]);expect(Object.keys(read(d,projectFiles(tideKey).drafts).drafts)).toEqual([TIDE]);
   expect(read(d,projectFiles(lumenKey).drafts).drafts[LUMEN]).toContain('"16"');expect(read(d,projectFiles(tideKey).drafts).drafts[TIDE]).toContain('"32"');
   const timeline=(key:string)=>read(d,projectFiles(key).history).entries.map((e:any)=>e.project);
@@ -346,25 +351,29 @@ test('connection requests resolve by app identity, never by address alone',()=>{
   const records:ProjectRecord[]=[{key:'p-a',name:'A',url:'http://127.0.0.1:5174',identity:LUMEN},{key:'p-old',name:'Old',url:'http://127.0.0.1:5176',identity:''}];
   const empty={key:'p-start',name:'Untitled',url:'',identity:''};
   // The same app on any port opens its workspace; another app at A's port does not.
-  expect(resolveConnection(records,null,false,'http://127.0.0.1:9000',at('verified',LUMEN),'setup','')).toEqual({kind:'open',key:'p-a',adopt:false});
-  expect(resolveConnection(records,null,false,'http://127.0.0.1:5174',at('verified',TIDE),'setup','')).toEqual({kind:'new'});
-  expect(resolveConnection(records,empty,true,'http://127.0.0.1:5174',at('verified',TIDE),'setup','')).toEqual({kind:'here',adopt:false});
+  expect(resolveConnection(records,null,'http://127.0.0.1:9000',at('verified',LUMEN),'setup','')).toEqual({kind:'open',key:'p-a',adopt:false});
+  expect(resolveConnection(records,null,'http://127.0.0.1:5174',at('verified',TIDE),'setup','')).toEqual({kind:'new'});
+  // A setup link never reuses the current workspace, not even an untouched starter.
+  expect(resolveConnection(records,empty,'http://127.0.0.1:5174',at('verified',TIDE),'setup','')).toEqual({kind:'new'});
+  expect(resolveConnection(records,empty,'http://127.0.0.1:7000',at('verified',TIDE),'connect','')).toEqual({kind:'here',adopt:false});
   // Unverified saved work at the address waits for a choice.
-  expect(resolveConnection(records,null,false,'http://127.0.0.1:5176',at('verified',TIDE),'setup','').kind).toBe('choose');
-  expect(resolveConnection(records,null,false,'http://127.0.0.1:5176',at('verified',TIDE),'setup','adopt')).toEqual({kind:'open',key:'p-old',adopt:true});
-  expect(resolveConnection(records,null,false,'http://127.0.0.1:5176',at('verified',TIDE),'setup','new')).toEqual({kind:'new'});
-  // Nothing says which app runs there: unverified work reopens by address, verified work needs a choice.
-  expect(resolveConnection(records,null,false,'http://127.0.0.1:5176',at('offline'),'setup','')).toEqual({kind:'open',key:'p-old',adopt:false});
-  expect(resolveConnection(records,null,false,'http://127.0.0.1:5174',at('unverified'),'setup','').kind).toBe('choose');
-  expect(resolveConnection(records,records[0],false,'http://127.0.0.1:6000',at('offline'),'connect','').kind).toBe('choose');
+  expect(resolveConnection(records,null,'http://127.0.0.1:5176',at('verified',TIDE),'setup','').kind).toBe('choose');
+  expect(resolveConnection(records,null,'http://127.0.0.1:5176',at('verified',TIDE),'setup','adopt')).toEqual({kind:'open',key:'p-old',adopt:true});
+  expect(resolveConnection(records,null,'http://127.0.0.1:5176',at('verified',TIDE),'setup','new')).toEqual({kind:'new'});
+  // Nothing says which app runs there: saved work at the address reopens only by choice.
+  expect(resolveConnection(records,null,'http://127.0.0.1:5176',at('offline'),'setup','').kind).toBe('choose');
+  expect(resolveConnection(records,null,'http://127.0.0.1:5176',at('offline'),'setup','adopt')).toEqual({kind:'open',key:'p-old',adopt:false});
+  expect(resolveConnection(records,null,'http://127.0.0.1:5199',at('offline'),'setup','')).toEqual({kind:'new'});
+  expect(resolveConnection(records,null,'http://127.0.0.1:5174',at('unverified'),'setup','').kind).toBe('choose');
+  expect(resolveConnection(records,records[0],'http://127.0.0.1:6000',at('offline'),'connect','').kind).toBe('choose');
   // Unverified saved work moves to an address that cannot be verified only by choice; renaming in place needs none.
-  expect(resolveConnection(records,records[1],false,'http://127.0.0.1:6000',at('offline'),'connect','').kind).toBe('choose');
-  expect(resolveConnection(records,records[1],false,'http://127.0.0.1:6000',at('offline'),'connect','adopt')).toEqual({kind:'here',adopt:false});
-  expect(resolveConnection(records,records[1],false,'http://127.0.0.1:5176',at('offline'),'connect','')).toEqual({kind:'here',adopt:false});
-  expect(resolveConnection(records,records[0],false,'http://127.0.0.1:5174',at('verified',LUMEN),'connect','')).toEqual({kind:'open',key:'p-a',adopt:false});
-  expect(resolveConnection(records,records[1],false,'http://127.0.0.1:6000',at('verified',TIDE),'connect','').kind).toBe('choose');
-  expect(resolveConnection(records,records[0],false,'http://127.0.0.1:6000',at('verified',TIDE),'connect','')).toEqual({kind:'new'});
-  expect(()=>resolveConnection(records,null,false,'javascript:alert(1)',at('offline'),'setup','')).toThrow();
+  expect(resolveConnection(records,records[1],'http://127.0.0.1:6000',at('offline'),'connect','').kind).toBe('choose');
+  expect(resolveConnection(records,records[1],'http://127.0.0.1:6000',at('offline'),'connect','adopt')).toEqual({kind:'here',adopt:false});
+  expect(resolveConnection(records,records[1],'http://127.0.0.1:5176',at('offline'),'connect','')).toEqual({kind:'here',adopt:false});
+  expect(resolveConnection(records,records[0],'http://127.0.0.1:5174',at('verified',LUMEN),'connect','')).toEqual({kind:'open',key:'p-a',adopt:false});
+  expect(resolveConnection(records,records[1],'http://127.0.0.1:6000',at('verified',TIDE),'connect','').kind).toBe('choose');
+  expect(resolveConnection(records,records[0],'http://127.0.0.1:6000',at('verified',TIDE),'connect','')).toEqual({kind:'new'});
+  expect(()=>resolveConnection(records,null,'javascript:alert(1)',at('offline'),'setup','')).toThrow();
 });
 
 test('project keys from addresses cannot name other files',async()=>{
@@ -405,4 +414,44 @@ test('migrated drafts follow their project when its app is confirmed at a new po
   expect(store.records.map(r=>r.url).sort()).toEqual(['http://my-app:5174','http://my.app:5174']);
   expect(new Set(store.records.map(r=>r.key)).size).toBe(2);
   for(const r of store.records)expect(Object.values(read(two,projectFiles(r.key).drafts).drafts)).toEqual([r.url==='http://my-app:5174'?'one':'two']);
+});
+
+test('reopening an app’s link keeps the person’s layout and visibility, and the route list cannot change a paused project',async()=>{
+  const d=disk(),call=await tab(d.storage),url='http://127.0.0.1:5177';
+  helper.apps.set(url,lumen);helper.apps.set('http://127.0.0.1:5194',tide);
+  const a=await setup(call,'','Lumen',url,'Home');
+  const doc=await call('document',[a.project,1]);
+  await call('edit',[a.project,'select',doc.views[0].id,'',0,0,clock++]);
+  await call('edit',[a.project,'property','x','777',0,0,clock++]);
+  await call('edit',[a.project,'show',doc.groups[1].id,'',0,0,clock++]);
+  const saved=d.files.get(projectFiles(a.project).workspace);
+  await setup(call,a.project,'Tide','http://127.0.0.1:5194');
+  const again=await setup(call,a.project,'Lumen',url,'Home');
+  expect(again.project).toBe(a.project);expect(again.fit).toBe(false);
+  expect(d.files.get(projectFiles(a.project).workspace)).toBe(saved);
+  // Tide now answers at Lumen's address: its routes may neither add nor remove Lumen's screens.
+  helper.apps.set(url,{...tide,routes:[{name:'Home',route:'/'},{name:'Spending',route:'/spending'}]});
+  for(const op of ['add-all','remove-missing']){
+    const refused=await call('library',[a.project,op,'',op==='remove-missing'?'/activity':'','Phone','','',clock++]);
+    expect(refused.ok).toBe(false);expect(refused.error).toContain('isn’t confirmed');
+  }
+  expect(d.files.get(projectFiles(a.project).workspace)).toBe(saved);
+});
+
+test('a tab returning to a project another tab edited works from that edit, not its older copy',async()=>{
+  const d=disk(),[first,second]=[await tab(d.storage),await tab(d.storage)];
+  helper.apps.set('http://127.0.0.1:5177',lumen);helper.apps.set('http://127.0.0.1:5194',tide);
+  const a=await setup(first,'','Lumen','http://127.0.0.1:5177'),b=await setup(first,a.project,'Tide','http://127.0.0.1:5194');
+  // The first tab has Tide cached and moves to Lumen; the second tab resizes Tide.
+  await first('document',[b.project,1]);await first('camera',[b.project,0,0,1,a.project]);await first('document',[a.project,1]);
+  const tideDoc=await second('document',[b.project,1]);
+  await second('edit',[b.project,'select',tideDoc.views[0].id,'',0,0,clock++]);
+  await second('edit',[b.project,'property','width','640',0,0,clock++]);
+  // Back in the first tab, a camera save and an edit keep the second tab's resize.
+  const back=await first('document',[b.project,1]);
+  expect(back.views[0].width).toBe(640);
+  await first('camera',[b.project,-10,-20,0.5,'']);
+  await first('edit',[b.project,'select',back.views[1].id,'',0,0,clock++]);
+  expect(workspaceOf(d,b.project).views[0].width).toBe(640);
+  expect(read(d,projectFiles(b.project).workspace).camera).toEqual({x:-10,y:-20,zoom:0.5});
 });

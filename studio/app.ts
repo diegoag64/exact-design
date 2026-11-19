@@ -89,7 +89,7 @@ const snapshot = (ws:ProjectWorkspace) => {
     drawing: JSON.stringify({...document,views:shown, screens:[...screens.values()], active: editor.active}),
     projectKey: ws.key, projectName: document.project.name, projectUrl: document.project.url, projectVerified: !!document.project.identity,
     connectionState: linked.state, liveName: linked.liveName,
-    projects: store.records.map(r=>({key:r.key,name:r.name,url:r.url,current:r.key===ws.key})),
+    projects: store.records.filter(r=>r.key===ws.key||!store.pristine.has(r.key)).map(r=>({key:r.key,name:r.name,url:r.url,current:r.key===ws.key})),
     cameraX: camera?.x??0, cameraY: camera?.y??0, cameraZoom: camera?.zoom??0,
     route: editor.screen.route,
     groups: [...screens.values()].map(screen=>({id:screen.id,name:screen.name,route:screen.route,source:screen.source,
@@ -134,9 +134,9 @@ async function logWorkspace(ws:ProjectWorkspace,storage:any,before:string,kind:s
 async function connectTarget(storage:any,ws:ProjectWorkspace,intent:Intent,name:string,value:string,decision:string,deferConnect=false){
   const url=projectUrl(value),live=await identify(url);
   await store.sync(storage.fs);
-  let resolution=resolveConnection(store.records,ws.record,ws.editor.isPristine(),url,live,intent,decision==='adopt'||decision==='new'?decision:'');
-  // An untouched starter that another tab has since set up is no longer this request's to take.
-  if(resolution.kind==='here'&&intent!=='connect'&&await ws.persistence.changedElsewhere(storage.fs))resolution={kind:'new'};
+  let resolution=resolveConnection(store.records,ws.record,url,live,intent,decision==='adopt'||decision==='new'?decision:'');
+  // An untouched starter that another tab has since connected is no longer this request's to take.
+  if(resolution.kind==='here'&&!ws.record.url&&await ws.persistence.changedElsewhere(storage.fs))resolution={kind:'new'};
   const identity=live.state==='verified'?live.identity:'';
   if(resolution.kind==='choose')return {choice:resolution.key,message:resolution.message};
   if(resolution.kind==='new'){
@@ -157,6 +157,12 @@ async function connectTarget(storage:any,ws:ProjectWorkspace,intent:Intent,name:
   // Drafts saved while unverified belong to the address the project had before this request.
   if(resolution.adopt&&identity)await target.drafts.adopt(storage.fs,draftBucket('',record.url||url),identity);
   return {target,live,url,created:false,before};
+}
+/** Whether the app answering at the project's address is the project's own, so its route list may change the screens. */
+async function ownApp(ws:ProjectWorkspace){
+  const p=ws.editor.document.project;if(!p.url)return false;
+  const live=await identify(p.url);
+  return p.identity?live.identity===p.identity:live.state!=='verified';
 }
 const sources: Sources = {
   // Draft changes saved for a project outlive the editing session; the native drawer counts them while not editing.
@@ -341,6 +347,7 @@ const sources: Sources = {
       }
       else if(op==='disconnect') ws.editor.disconnectProject();
       else if(op==='add' || op==='blank') ws.editor.addScreen(name,value,preset,op==='add');
+      else if((op==='add-all'||op==='remove-missing')&&!await ownApp(ws)) return reply(ws,false,'The app at this address isn’t confirmed as this project’s, so its routes can’t change the screens.');
       else if(op==='add-all') {
         const found=await discoverProject(ws.editor.document.project.url,discoveryCache?.owner===ws.editor.document.project.url?discoveryCache.revision:0);
         const added=new Set(ws.editor.document.screens.map(s=>s.route));

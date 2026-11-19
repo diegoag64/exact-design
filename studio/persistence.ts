@@ -51,6 +51,8 @@ export class WorkspacePersistence {
   /** Whether another tab saved this workspace since this page last loaded or saved it. */
   async changedElsewhere(fs:FileSystem){
     await this.writes.catch(()=>{});
+    // A save this page could not read stays paused here; comparing it would only discard the edits made since.
+    if(this.unreadable)return false;
     try{return new TextDecoder().decode(await fs.readFile(this.file))!==this.saved;}
     catch(e){if((e as {code?:string}).code==='bake')throw e;return (e as {code?:string}).code==='ENOENT'?this.saved!=='':true;}
   }
