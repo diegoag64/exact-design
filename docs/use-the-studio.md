@@ -35,7 +35,7 @@ Each app you connect is a project with its own workspace: its screens, layout, c
 - **Project settings…** renames the shown project or changes its address. Entering the address of an app that already has a project opens that project instead.
 - Each tab's address names its project (`/?project=…`). Open two tabs to work on two apps side by side; reloading a tab keeps its project. A tab opened without one shows the project you opened last.
 
-The studio identifies an app by its folder, which Exact's local editing server reports, not by its address. An app that restarts on another port keeps its project. If a different app answers at a project's address, the studio says so: the project's screens pause, editing is refused, and **Open** opens the running app in its own workspace. Click the refresh button in the notice to check again.
+The studio identifies an app by its folder, which Exact's local editing server reports, not by its address. An app that restarts on another port keeps its project. If a different app answers at a project's address, the studio says so: the project's screens pause, editing is refused, and **Open** opens the running app in its own workspace. Click the refresh button in the notice to check again. A setup link or **Project settings** that points at an address where another app's project ran asks before opening the new app in a **New workspace**; × cancels and leaves everything as it was.
 
 Two cases need your choice before the studio ties an app to saved work:
 

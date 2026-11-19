@@ -42,48 +42,57 @@ export class ProjectWorkspace {
 }
 
 /** How a connection request maps onto workspaces.
- *  `open`: the app's own workspace. `here`: connect the current workspace (unconnected, untouched, or the person is editing
- *  this project's own address). `new`: a separate workspace. `choose`: existing work may or may not be this app, so the
- *  person decides (`adopt` it or start `new`) before anything is associated. */
-export type Resolution={kind:'open';key:string;adopt:boolean}|{kind:'here';adopt:boolean}|{kind:'new'}|{kind:'choose';key:string;message:string};
+ *  `open`: the app's own workspace. `here`: connect the current workspace (untouched, or the person is editing this
+ *  project's own address). `new`: a separate workspace. `choose`: existing work may or may not be this app, or another app
+ *  took a project's address, so the person decides before anything changes: `options` lists what they may choose
+ *  (`adopt` that work, or a `new` workspace); cancelling keeps everything as it is. */
+export type Resolution={kind:'open';key:string;adopt:boolean}|{kind:'here';adopt:boolean}|{kind:'new'}|{kind:'choose';key:string;message:string;options:('adopt'|'new')[]};
 export type Intent='setup'|'connect'|'new';
 
 /** `here` is only ever the current workspace edited from its own settings; setup links and new connections always get a
- *  fresh key, so two tabs can never set up two apps in one starter workspace. */
-export function resolveConnection(records:ProjectRecord[],current:ProjectRecord|null,url:string,live:LiveApp,intent:Intent,decision:''|'adopt'|'new'):Resolution{
+ *  fresh key, so two tabs can never set up two apps in one starter workspace. `pristine` says the current workspace is
+ *  the untouched starter: any other unconnected workspace holds work, so connecting an app to it is a choice. */
+export function resolveConnection(records:ProjectRecord[],current:ProjectRecord|null,url:string,live:LiveApp,intent:Intent,decision:''|'adopt'|'new',pristine=false):Resolution{
   const address=projectUrl(url);
+  // A verified app has one project: asking for a new workspace opens that one when it exists.
+  const known=live.state==='verified'?records.find(r=>r.identity===live.identity):undefined;
+  if(known)return {kind:'open',key:known.key,adopt:false};
   if(decision==='new')return {kind:'new'};
   const at=(r:ProjectRecord)=>r.url===address;
   const label=(r:ProjectRecord)=>`“${r.name}”`;
+  const app=live.name||'this app';
+  const choose=(r:ProjectRecord,message:string,options:('adopt'|'new')[]=['adopt','new']):Resolution=>({kind:'choose',key:r.key,message,options});
+  const unsure=(r:ProjectRecord)=>`Exact Design can’t tell whether ${label(r)} was made with ${app}. Its screens and drafts stay as they are until you choose.`;
   if(live.state==='verified'){
-    const own=records.find(r=>r.identity===live.identity);
-    if(own)return {kind:'open',key:own.key,adopt:false};
     if(intent==='connect'&&current){
-      if(!current.url)return {kind:'here',adopt:false};
-      if(current.identity)return {kind:'new'};
+      if(!current.url&&pristine)return {kind:'here',adopt:false};
+      if(current.identity)return decision==='adopt'?{kind:'new'}:choose(current,`${app==='this app'?'Another app':app} is running at ${address}, not ${label(current)}. Open it in a new workspace? ${label(current)} stays as it is.`,['new']);
       if(decision==='adopt')return {kind:'here',adopt:true};
-      return {kind:'choose',key:current.key,message:`Exact Design can’t tell whether ${label(current)} was made with ${live.name||'this app'}. Its screens and drafts stay as they are until you choose.`};
+      return choose(current,unsure(current));
     }
     // Work saved before identities were checked, at this address: it may be this app, or one that used the port before.
     const earlier=records.find(r=>at(r)&&!r.identity);
     if(earlier){
       if(decision==='adopt')return {kind:'open',key:earlier.key,adopt:true};
-      return {kind:'choose',key:earlier.key,message:`Exact Design can’t tell whether ${label(earlier)} was made with ${live.name||'this app'}. Its screens and drafts stay as they are until you choose.`};
+      return choose(earlier,unsure(earlier));
     }
+    // Another app's project was here: the port was reused. Nothing of that project changes; the person confirms the switch.
+    const replaced=records.find(at);
+    if(replaced&&decision!=='adopt')return choose(replaced,`${app==='this app'?'A different app':app} is running at ${address}, where ${label(replaced)} ran before. Open it in a new workspace? ${label(replaced)} stays as it is.`,['new']);
     return {kind:'new'};
   }
   // Nothing at the address says which app it is.
   if(intent==='connect'&&current){
-    // Renaming, or connecting an empty workspace, ties no saved work to an app it cannot confirm.
-    if(!current.url||current.url===address)return {kind:'here',adopt:false};
+    // Renaming, or connecting the untouched starter, ties no saved work to an app it cannot confirm.
+    if((!current.url&&pristine)||(current.url&&current.url===address))return {kind:'here',adopt:false};
     if(decision==='adopt')return {kind:'here',adopt:false};
-    return {kind:'choose',key:current.key,message:`Exact Design can’t confirm that the app at ${address} is ${label(current)}. Start it with its editing server, or choose how to continue.`};
+    return choose(current,`Exact Design can’t confirm that the app at ${address} is ${current.url?label(current):'the one these screens came from'}. Start it with its editing server, or choose how to continue.`);
   }
   // Saved work at the address, verified or not, is this app's only if the person says so.
   const saved=records.find(r=>at(r)&&!r.identity)??records.find(at);
   if(saved){
     if(decision==='adopt')return {kind:'open',key:saved.key,adopt:false};
-    return {kind:'choose',key:saved.key,message:`Exact Design can’t confirm which app is running at ${address}, so it can’t tell whether ${label(saved)} belongs to it. Start the app with its editing server, or choose how to continue.`};
+    return choose(saved,`Exact Design can’t confirm which app is running at ${address}, so it can’t tell whether ${label(saved)} belongs to it. Start the app with its editing server, or choose how to continue.`);
   }
   return {kind:'new'};
 }
@@ -288,11 +297,12 @@ export class ProjectStore {
     }
     for(const [key,values] of drafts)files.set(projectFiles(key).drafts,JSON.stringify({version:2,drafts:values}));
     for(const [key,entries] of history)files.set(projectFiles(key).history,JSON.stringify({version:1,entries}));
+    // Another tab may finish migrating first and save new work: a file that exists by now is newer, never replaced.
     for(const key of records.keys())await fs.mkdir(projectFiles(key).dir);
-    for(const [path,text] of files)await fs.atomicWriteFile(path,new TextEncoder().encode(text));
+    for(const [path,text] of files)if(await readText(fs,path)===undefined)await fs.atomicWriteFile(path,new TextEncoder().encode(text));
     this.records=[...records.values()];
     this.last=records.has(LEGACY_KEY)?LEGACY_KEY:this.records[0]?.key??'';
-    await fs.atomicWriteFile(REGISTRY_FILE,new TextEncoder().encode(JSON.stringify({version:1,projects:this.records,last:this.last})));
+    if(await readText(fs,REGISTRY_FILE)===undefined)await fs.atomicWriteFile(REGISTRY_FILE,new TextEncoder().encode(JSON.stringify({version:1,projects:this.records,last:this.last})));
     if(problems.length)this.error=`Some saved data from an earlier version could not be moved (${[...new Set(problems)].join(', ')}). It was left unchanged.`;
   }
 }

@@ -133,8 +133,11 @@ Every source a page asks (`document`, `edit`, `library`, `camera`, `history`, `s
 | --- | --- |
 | Verified, a project has its identity | That project opens; a new address relinks its screens |
 | Verified, an unverified project is at the address | The person chooses: adopt that project, or a new workspace |
+| Verified, another app's project is at the address | The person confirms a new workspace or cancels; the other project never changes |
 | Verified, none | A new workspace opens; setup links and new connections never reuse the current workspace, so two tabs cannot set up two apps in one starter |
 | Unverified or offline | Saved work at the address reopens only by choice. Moving a connected project to such an address needs a choice too; renaming does not |
+
+From Project settings, only the untouched starter connects without a question: an unconnected workspace that holds screens (one that was disconnected, say) asks first, and a verified project asked to point at another verified app offers that app a new workspace instead. Setup re-reads the identity after reading the routes and stops if the app changed in between.
 
 On `open`, `design` refuses a project screen unless the app at the address has the project's identity, and the helper checks it again against `hello` before restoring drafts. Apply re-reads `hello` and refuses if the folder changed. Unverified projects edit only an app that is also unverified, by address, as before. While the app at a project's address is not its own (`mismatch`, `confirm`, `unconfirmed`), **Add all**, **Remove** and the discovered route list are unavailable, so another app's routes never change its screens. A page that returns to a project another tab saved since reloads it before acting, and untouched starter workspaces are hidden from other pages' project menus.
 

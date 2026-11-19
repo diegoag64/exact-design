@@ -10,7 +10,8 @@ function installMenu(root, selector, contextual) {
   if (!menu) return () => {};
   let origin = null, search = '', searchedAt = 0;
   const items = () => [...menu.querySelectorAll('[role="menuitem"],[role="menuitemradio"]')].filter(el => !el.disabled && el.checkVisibility());
-  const focus = el => el?.focus({preventScroll:true});
+  // Focus never scrolls the canvas; a long project list scrolls only itself to the focused row.
+  const focus = el => { el?.focus({preventScroll:true}); if (!contextual && el && menu.contains(el)) el.scrollIntoView({block:'nearest',inline:'nearest'}); };
   const fallback = () => contextual ? root.querySelector('#canvas-stage') : null;
   // A context menu returns focus to what was right-clicked; a menu opened from a button returns it to that button.
   const remember = e => { if (e.target.closest?.('[contextpopover]')) origin = e.target.closest('button') || root.querySelector('#canvas-stage'); };

@@ -119,9 +119,9 @@ const snapshot = (ws:ProjectWorkspace) => {
     code: editor.code(), status: ws.persistence.error || store.error || status, resizing, devices: catalog.devices, nativeDevices: catalog.native, deviceSets: catalog.sets,
   };
 };
-const reply = (ws:ProjectWorkspace,fit=false,error='',extra:{project?:string;choice?:string;message?:string}={}) => {
+const reply = (ws:ProjectWorkspace,fit=false,error='',extra:{project?:string;choice?:string;options?:string;message?:string}={}) => {
   const d=snapshot(ws);
-  return {ok:error==='',error,fit,minX:d.minX,minY:d.minY,maxX:d.maxX,maxY:d.maxY,project:extra.project??'',choice:extra.choice??'',message:extra.message??''};
+  return {ok:error==='',error,fit,minX:d.minX,minY:d.minY,maxX:d.maxX,maxY:d.maxY,project:extra.project??'',choice:extra.choice??'',options:extra.options??'',message:extra.message??''};
 };
 /** The project a request names. An empty or unknown key means the project this page shows by default. */
 async function project(storage:any,key:string){return store.current(storage.fs,key);}
@@ -134,11 +134,11 @@ async function logWorkspace(ws:ProjectWorkspace,storage:any,before:string,kind:s
 async function connectTarget(storage:any,ws:ProjectWorkspace,intent:Intent,name:string,value:string,decision:string,deferConnect=false){
   const url=projectUrl(value),live=await identify(url);
   await store.sync(storage.fs);
-  let resolution=resolveConnection(store.records,ws.record,url,live,intent,decision==='adopt'||decision==='new'?decision:'');
+  let resolution=resolveConnection(store.records,ws.record,url,live,intent,decision==='adopt'||decision==='new'?decision:'',ws.editor.isPristine());
   // An untouched starter that another tab has since connected is no longer this request's to take.
   if(resolution.kind==='here'&&!ws.record.url&&await ws.persistence.changedElsewhere(storage.fs))resolution={kind:'new'};
   const identity=live.state==='verified'?live.identity:'';
-  if(resolution.kind==='choose')return {choice:resolution.key,message:resolution.message};
+  if(resolution.kind==='choose')return {choice:resolution.key,message:resolution.message,options:resolution.options.join(',')};
   if(resolution.kind==='new'){
     // Setup connects a new workspace itself, so the app's screens replace the starter screen.
     const target=await store.create(storage.fs,undefined,deferConnect?undefined:editor=>editor.connectProject(name.trim()||live.name||'Project',url,identity));
@@ -333,8 +333,10 @@ const sources: Sources = {
         }
         const intent:Intent=op==='new'?'new':op==='open'||op==='setup'?'setup':'connect';
         const result=await connectTarget(storage,ws,intent,op==='adopt'?ws.editor.document.project.name:name,url,op==='adopt'?'adopt':decision,op==='setup'||(op==='open'&&!!found));
-        if(!result.target)return reply(ws,false,result.message,{choice:result.choice});
+        if(!result.target)return reply(ws,false,result.message,{choice:result.choice,options:result.options});
         target=result.target;before=result.before;opened=true;
+        // The routes were read before the identity: the same app must still answer, or they may be another app's.
+        if(found&&result.live.state==='verified'&&(await identify(url)).identity!==result.live.identity)return reply(ws,false,'The app at this address changed during setup. Try again.');
         await target.history.load(storage.fs);
         if(target!==ws)message=`Opened ${target.record.name} in its own workspace.`;
         // Setup adds the app's screens; opening an app adds them only to the workspace it just created.

@@ -247,6 +247,7 @@ shape Reply
   ok: bool
   project: string
   choice: string
+  options: string
   message: string
   fit: bool
   minX: number
@@ -894,6 +895,8 @@ component Studio
   state choiceUrl = ""
   state choiceKey = ""
   state choiceMessage = ""
+  // "adopt,new" or "new": a different app at a project's address can only open in a new workspace.
+  state choiceOptions = ""
   action decide(decision: string)
     let op = choiceOp
     choiceOp = ""
@@ -1054,6 +1057,7 @@ component Studio
   task autoSetup when setupUrl != "" and setupError == "" and not setupDismissed and not setupRunning and choiceOp == "" and not pending(doc) and not pending(libraryChanged)
     after(1, runSetup)
   derive dialogChoice = match libraryChanged { case some(r) => (requestOp == "dialog" ? r.choice : ""), case none => "" }
+  derive dialogOptions = match libraryChanged { case some(r) => r.options, case none => "" }
   action afterLibrary
     match libraryChanged
       case some(r)
@@ -1068,6 +1072,7 @@ component Studio
           choiceOp = requestOp
           choiceKey = r.choice
           choiceMessage = r.error
+          choiceOptions = r.options
           tidyWhenReady = false
         if r.ok
           connectionRevision = connectionRevision + 1
@@ -1634,8 +1639,9 @@ component Studio
                     text choiceMessage font="type.body" color="ink.primary" flex=1 min-width=0 testId="workspace-choice-message"
                     button press=decide("new") disabled=pending(libraryChanged) class=SecondaryButton height=26 padding="0 10px" flex-shrink=0 testId="choice-new"
                       text "New workspace"
-                    button press=decide("adopt") disabled=pending(libraryChanged) class=SecondaryButton height=26 padding="0 10px" flex-shrink=0 data-tip=`Use ${projectEntryName(doc.projects, choiceKey)} · Its screens, drafts and timeline belong to this app from now on` testId="choice-adopt"
-                      text "Use saved"
+                    if choiceOptions.includes("adopt")
+                      button press=decide("adopt") disabled=pending(libraryChanged) class=SecondaryButton height=26 padding="0 10px" flex-shrink=0 data-tip=`Use ${projectEntryName(doc.projects, choiceKey)} · Its screens, drafts and timeline belong to this app from now on` testId="choice-adopt"
+                        text "Use saved"
                     SmallButton(icon="x", label="Cancel", hint="Cancel · Keep everything as it is", selected=false, disabled=false, testId="choice-dismiss", press=dismissChoice)
                 // The app at this project's address is another one, or cannot be confirmed: its screens stay paused and
                 // editing waits, so nothing of one app reaches another.
@@ -1645,7 +1651,7 @@ component Studio
                       Icon(name=(linkState == "mismatch" ? "circle-alert" : "info"), size=14, angle=0)
                     text (linkState == "mismatch" ? `A different app${doc.liveName == "" ? "" : ` (${doc.liveName})`} is running at ${hostOf(doc.projectUrl)}. ${doc.projectName}’s screens are paused.` : linkState == "confirm" ? `Is ${doc.liveName == "" ? "the app" : doc.liveName} at ${hostOf(doc.projectUrl)} the app for ${doc.projectName}? Confirm before editing.` : `Can’t confirm that ${doc.projectName} is running at ${hostOf(doc.projectUrl)}. Editing is paused.`) font="type.body" color="ink.primary" flex=1 min-width=0 testId="connection-message"
                     if linkState == "mismatch"
-                      button press=openLiveApp("") disabled=pending(libraryChanged) class=SecondaryButton height=26 padding="0 10px" flex-shrink=0 data-tip="Open the running app in its own workspace · This project stays as it is" testId="open-live-app"
+                      button press=openLiveApp("new") disabled=pending(libraryChanged) class=SecondaryButton height=26 padding="0 10px" flex-shrink=0 data-tip="Open the running app in its own workspace · This project stays as it is" testId="open-live-app"
                         text (doc.liveName == "" ? "Open that app" : `Open ${doc.liveName}`)
                     if linkState == "confirm"
                       button press=openLiveApp("new") disabled=pending(libraryChanged) class=SecondaryButton height=26 padding="0 10px" flex-shrink=0 data-tip="Open the running app in a new workspace · This project stays as it is" testId="open-live-app"
@@ -2162,8 +2168,9 @@ component Studio
                     row gap=8 justify-content="flex-end" flex-wrap="wrap"
                       button press=saveProjectAs("new") disabled=pending(libraryChanged) class=SecondaryButton testId="choice-new"
                         text "Start a new workspace"
-                      button press=saveProjectAs("adopt") disabled=pending(libraryChanged) class=SecondaryButton testId="choice-adopt"
-                        text `Use ${projectEntryName(doc.projects, dialogChoice)}`
+                      if dialogOptions.includes("adopt")
+                        button press=saveProjectAs("adopt") disabled=pending(libraryChanged) class=SecondaryButton testId="choice-adopt"
+                          text `Use ${projectEntryName(doc.projects, dialogChoice)}`
                 else
                   if doc.projectUrl != ""
                     row class=Segmented

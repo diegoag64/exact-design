@@ -108,7 +108,11 @@ test('a reused port opens a separate workspace, pauses the old one, and its draf
   expect(refused.ok).toBe(false);expect(refused.error).toContain('different app');expect(helper.design.length).toBe(sent);
 
   const lumenSaved=d.files.get(projectFiles(a.project).workspace);
-  const b=await setup(call,a.project,'Tide',url);
+  // The link names Tide, but Lumen's project was at this address: the switch waits for the person (#35).
+  const asked=await setup(call,a.project,'Tide',url);
+  expect(asked.ok).toBe(false);expect(asked.choice).toBe(a.project);expect(asked.options).toBe('new');expect(asked.error).toContain('where “Lumen” ran before');
+  expect(d.files.get(projectFiles(a.project).workspace)).toBe(lumenSaved);
+  const b=await setup(call,a.project,'Tide',url,'','new');
   expect(b.project).not.toBe(a.project);
   expect(workspaceOf(d,b.project).screens.map((s:any)=>s.route)).toEqual(['/spending','/savings']);
   expect(workspaceOf(d,b.project).project.identity).toBe(TIDE);
@@ -135,8 +139,10 @@ test('manual connect opens another app in its own workspace, follows a moved app
   await call('library',[a.project,'add','Home','/','Phone','','',clock++]);
   const lumenSaved=d.files.get(projectFiles(a.project).workspace);
 
-  // Lumen's settings, with Tide's address: Tide opens in its own workspace.
-  const b=await connect(call,a.project,'Lumen','http://127.0.0.1:5194');
+  // Lumen's settings, with Tide's address: the person confirms, and Tide opens in its own workspace.
+  const asked=await connect(call,a.project,'Lumen','http://127.0.0.1:5194');
+  expect(asked.ok).toBe(false);expect(asked.options).toBe('new');expect(asked.error).toContain('not “Lumen”');
+  const b=await connect(call,a.project,'Lumen','http://127.0.0.1:5194','new');
   expect(b.ok).toBe(true);expect(b.project).not.toBe(a.project);
   expect(workspaceOf(d,b.project).project).toEqual({name:'Lumen',url:'http://127.0.0.1:5194',identity:TIDE});
   expect(d.files.get(projectFiles(a.project).workspace)).toBe(lumenSaved);
@@ -352,10 +358,10 @@ test('connection requests resolve by app identity, never by address alone',()=>{
   const empty={key:'p-start',name:'Untitled',url:'',identity:''};
   // The same app on any port opens its workspace; another app at A's port does not.
   expect(resolveConnection(records,null,'http://127.0.0.1:9000',at('verified',LUMEN),'setup','')).toEqual({kind:'open',key:'p-a',adopt:false});
-  expect(resolveConnection(records,null,'http://127.0.0.1:5174',at('verified',TIDE),'setup','')).toEqual({kind:'new'});
+  expect(resolveConnection(records,null,'http://127.0.0.1:5174',at('verified',TIDE),'setup','new')).toEqual({kind:'new'});
   // A setup link never reuses the current workspace, not even an untouched starter.
-  expect(resolveConnection(records,empty,'http://127.0.0.1:5174',at('verified',TIDE),'setup','')).toEqual({kind:'new'});
-  expect(resolveConnection(records,empty,'http://127.0.0.1:7000',at('verified',TIDE),'connect','')).toEqual({kind:'here',adopt:false});
+  expect(resolveConnection(records,empty,'http://127.0.0.1:5199',at('verified',TIDE),'setup','',true)).toEqual({kind:'new'});
+  expect(resolveConnection(records,empty,'http://127.0.0.1:7000',at('verified',TIDE),'connect','',true)).toEqual({kind:'here',adopt:false});
   // Unverified saved work at the address waits for a choice.
   expect(resolveConnection(records,null,'http://127.0.0.1:5176',at('verified',TIDE),'setup','').kind).toBe('choose');
   expect(resolveConnection(records,null,'http://127.0.0.1:5176',at('verified',TIDE),'setup','adopt')).toEqual({kind:'open',key:'p-old',adopt:true});
@@ -366,13 +372,24 @@ test('connection requests resolve by app identity, never by address alone',()=>{
   expect(resolveConnection(records,null,'http://127.0.0.1:5199',at('offline'),'setup','')).toEqual({kind:'new'});
   expect(resolveConnection(records,null,'http://127.0.0.1:5174',at('unverified'),'setup','').kind).toBe('choose');
   expect(resolveConnection(records,records[0],'http://127.0.0.1:6000',at('offline'),'connect','').kind).toBe('choose');
+  expect(resolveConnection(records,records[0],'http://127.0.0.1:6000',at('offline'),'connect','')).toMatchObject({options:['adopt','new']});
   // Unverified saved work moves to an address that cannot be verified only by choice; renaming in place needs none.
   expect(resolveConnection(records,records[1],'http://127.0.0.1:6000',at('offline'),'connect','').kind).toBe('choose');
   expect(resolveConnection(records,records[1],'http://127.0.0.1:6000',at('offline'),'connect','adopt')).toEqual({kind:'here',adopt:false});
   expect(resolveConnection(records,records[1],'http://127.0.0.1:5176',at('offline'),'connect','')).toEqual({kind:'here',adopt:false});
   expect(resolveConnection(records,records[0],'http://127.0.0.1:5174',at('verified',LUMEN),'connect','')).toEqual({kind:'open',key:'p-a',adopt:false});
   expect(resolveConnection(records,records[1],'http://127.0.0.1:6000',at('verified',TIDE),'connect','').kind).toBe('choose');
-  expect(resolveConnection(records,records[0],'http://127.0.0.1:6000',at('verified',TIDE),'connect','')).toEqual({kind:'new'});
+  expect(resolveConnection(records,records[0],'http://127.0.0.1:6000',at('verified',TIDE),'connect','')).toMatchObject({kind:'choose',options:['new']});
+  expect(resolveConnection(records,records[0],'http://127.0.0.1:6000',at('verified',TIDE),'connect','new')).toEqual({kind:'new'});
+  // Another verified app at a verified project's address asks before switching, and never offers to adopt.
+  expect(resolveConnection(records,null,'http://127.0.0.1:5174',at('verified',TIDE),'setup','')).toMatchObject({kind:'choose',key:'p-a',options:['new']});
+  // A known app always opens its own project, even when a new workspace was asked for.
+  expect(resolveConnection(records,null,'http://127.0.0.1:9000',at('verified',LUMEN),'setup','new')).toEqual({kind:'open',key:'p-a',adopt:false});
+  // An unconnected workspace that holds work is connected only by choice; the untouched starter needs none.
+  const local={key:'p-local',name:'Sketch',url:'',identity:''};
+  expect(resolveConnection(records,local,'http://127.0.0.1:7000',at('verified',TIDE),'connect','').kind).toBe('choose');
+  expect(resolveConnection(records,local,'http://127.0.0.1:7000',at('offline'),'connect','').kind).toBe('choose');
+  expect(resolveConnection(records,local,'http://127.0.0.1:7000',at('offline'),'connect','',true)).toEqual({kind:'here',adopt:false});
   expect(()=>resolveConnection(records,null,'javascript:alert(1)',at('offline'),'setup','')).toThrow();
 });
 
@@ -454,4 +471,19 @@ test('a tab returning to a project another tab edited works from that edit, not 
   await first('edit',[b.project,'select',back.views[1].id,'',0,0,clock++]);
   expect(workspaceOf(d,b.project).views[0].width).toBe(640);
   expect(read(d,projectFiles(b.project).workspace).camera).toEqual({x:-10,y:-20,zoom:0.5});
+});
+
+test('routes match as the router does, and a migration finishing late never replaces newer work',async()=>{
+  const {routeServed}=await import('./discovery');
+  expect(routeServed('/activity','/activity')).toBe(true);expect(routeServed('/activity/','/activity')).toBe(false);
+  expect(routeServed('/note/7?tab=a#x','/note/:id')).toBe(true);expect(routeServed('/note/','/note/:id')).toBe(false);
+  expect(routeServed('/files/a/b','/files/*path')).toBe(true);expect(routeServed('/','/')).toBe(true);expect(routeServed('/x','/')).toBe(false);
+  const {d}=legacyDisk(),fast=new ProjectStore();await fast.load(d.fs);
+  const ws=await fast.open(d.fs,LEGACY_KEY);ws.editor.addView('Desktop');await ws.persistence.save(d.fs);
+  const newer=d.files.get(projectFiles(LEGACY_KEY).workspace);
+  // A slow tab still sees no list when it starts, then writes after the fast tab saved.
+  const slow=new ProjectStore(),read0=d.fs.readFile;let hide=true;
+  d.fs.readFile=async(path:string)=>{if(hide&&path===REGISTRY_FILE)throw {code:'ENOENT'};return read0(path);};
+  const loading=slow.load(d.fs);hide=false;await loading;d.fs.readFile=read0;
+  expect(d.files.get(projectFiles(LEGACY_KEY).workspace)).toBe(newer);
 });
