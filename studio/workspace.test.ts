@@ -152,6 +152,22 @@ test('choosing a layout settles late measurements into the choice, so one undo r
   e.redo();expect(JSON.stringify(e.document.views)).toBe(views);
   e.undo();expect(e.arrange(true,true)).toBe(false);expect(e.past.length).toBe(depth+1);
 });
+test('a single-screen add ends the earlier settling window instead of owning it',()=>{
+  const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');
+  e.addScreens(Array.from({length:9},(_,i)=>({name:`S${i}`,route:`/s${i}`})),'Phone',true);
+  e.select(e.document.views[0].id);e.property('name','Start');
+  e.arrange(false,true);
+  e.addScreen('Blank','','Phone',false);const added=e.past.length,screens=e.document.screens.length;
+  const v=e.document.views.find(v=>e.document.screens.find(s=>s.id===v.screenId)?.route==='/s3')!;
+  e.contentSizes.set(v.id,{source:'http://127.0.0.1:5174/s3',width:v.width,viewportHeight:v.height,height:4000});
+  // The late reflow is its own step: one Undo reverts it and keeps the blank screen.
+  expect(e.arrange(true,true)).toBe(false);expect(e.past.length).toBe(added+1);expect(tidied(e).overlap).toBe(false);
+  e.undo();expect(e.document.screens.length).toBe(screens);
+  // A screen added with a device set opens its own window and owns the tidy that follows.
+  e.addScreen('Set','','Core',false);const owned=e.past.length;
+  expect(e.arrange(true,true)).toBe(true);expect(e.past.length).toBe(owned);
+  e.undo();expect(e.document.screens.length).toBe(screens);
+});
 test('both layouts keep hidden screens below the visible rows, without a gap',()=>{
   for(const collage of [false,true]) {
     const e=new WorkspaceEditor();e.connectProject('Ember','http://127.0.0.1:5174');

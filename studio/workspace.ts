@@ -108,7 +108,8 @@ export class WorkspaceEditor {
       d.project={name:'',url:''};
     });
   }
-  addScreen(name: string, path: string, preset: string, linked: boolean) { this.addScreens([{name, route: path}], preset, linked); }
+  /** One screen; like the studio, only a device set starts a settling window for it. */
+  addScreen(name: string, path: string, preset: string, linked: boolean) { this.addScreens([{name, route: path}], preset, linked); this.settling=!!deviceSets[preset]; }
   /** Add screens in one undo step: one row each, with a viewport per device in the chosen device or set.
    *  Rows that `later` names (screens about to be hidden) go below the others, where Tidy up keeps hidden screens. */
   addScreens(items: NewScreen[], choice: string, linked: boolean, later?: (row: {name: string; route: string}) => boolean) {

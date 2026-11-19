@@ -1011,6 +1011,7 @@ test "tidy up arranges screens in the layout chosen beside it"
   expect state tidyLayout == "collage"
   expect state collage == true
   expect state tidyWhenReady == true
+  expect state tidyFit == false
   expect state doc.views.1.x >= 500
   expect state doc.views.2.x >= 1000
   tap "undo"

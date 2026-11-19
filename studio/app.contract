@@ -836,18 +836,23 @@ component Studio
   state tidySignature = ""
   state tidyFit = false
   state tidyFitted = ""
+  // Each window gets its own 20-second deadline.
+  state tidyRun = 0
   action startTidy
     tidyWhenReady = true
+    tidyRun = tidyRun + 1
     tidySignature = ""
     tidyFit = true
     tidyFitted = ""
-  // Settle an explicit tidy on later measurements only, without refitting the camera.
+  // Settle an explicit tidy on later measurements only. It never refits the camera, even inside a bulk add's window.
   action watchTidy
     tidyWhenReady = true
+    tidyRun = tidyRun + 1
     tidySignature = previews.signature
+    tidyFit = false
   action finishTidy
     tidyWhenReady = false
-  task stopTidy when tidyWhenReady
+  task stopTidy when tidyWhenReady key=tidyRun
     after(20000, finishTidy)
   action tidyLoadedScreens
     tidySignature = previews.signature
@@ -999,7 +1004,6 @@ component Studio
       tidyWhenReady = false
     send changed = edit("property", key, value, 0, 0, time.epochAtZero + performanceNow())
   action down(e: PointerEvent)
-    tidyWhenReady = false
     cancelPan()
     fitWhenReady = false
     tidyFit = false
@@ -1014,6 +1018,9 @@ component Studio
         send changed = edit("hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom, time.epochAtZero + performanceNow())
   action move(e: PointerEvent)
     if dragging
+      // Moving a frame ends settling, so a late tidy never pulls it back.
+      if not hand
+        tidyWhenReady = false
       freeDrag = e.altKey
       dx = (e.offsetX - sx) / zoom
       dy = (e.offsetY - sy) / zoom
