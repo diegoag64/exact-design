@@ -1,4 +1,7 @@
-export type Project = { name: string; url: string };
+/** A connected app. `url` is where it runs now; `identity` is the app's verified identity (a digest of its folder, from
+ *  the helper), or '' while it is unverified. An address alone never identifies an app. */
+export type Project = { name: string; url: string; identity?: string };
+export const validIdentity = (value: unknown): value is string => typeof value === 'string' && /^(app-[a-f\d]{24})?$/.test(value);
 export type ScreenSource = { source: string; route: string };
 
 export function projectUrl(value: string): string {

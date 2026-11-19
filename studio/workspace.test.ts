@@ -113,7 +113,7 @@ test('project setup connects, adds missing routes once, replaces the untouched s
   const e=new WorkspaceEditor();expect(e.isPristine()).toBe(true);
   const routes=[{name:'Today',route:'/'},{name:'Diary',route:'/diary'},{name:'Note',route:'/note/:id'}];
   expect(e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core')).toBe(2);
-  expect(e.document.project).toEqual({name:'Ember',url:'http://127.0.0.1:5174'});
+  expect(e.document.project).toEqual({name:'Ember',url:'http://127.0.0.1:5174',identity:''});
   expect(e.document.screens.map(s=>s.name)).toEqual(['Today','Diary']);expect(e.document.views.length).toBe(6);
   expect(e.document.views.some(v=>v.id===e.active)).toBe(true);
   e.setupProject('Ember','http://127.0.0.1:5174',routes,'Core');expect(e.document.views.length).toBe(6);expect(e.past.length).toBe(1);

@@ -350,6 +350,7 @@ test "appearance sets the studio and screens themes and persists"
 test "project screens share a server and group their viewports"
   size 1440x900
   tap "project-connection"
+  tap "menu-project-settings"
   clock settle
   type "project-name" "Ember"
   type "project-url" "http://127.0.0.1:5174/"
@@ -377,6 +378,7 @@ test "project screens share a server and group their viewports"
   expect tree has "view-view-2"
   expect tree has "view-view-3"
   tap "project-connection"
+  tap "menu-project-settings"
   clock settle
   type "project-url" "http://127.0.0.1:6000"
   tap "save-project"
@@ -400,6 +402,7 @@ test "project screens share a server and group their viewports"
   clock data
   expect state doc.views.2.source == "http://127.0.0.1:5174/note?state=empty"
   tap "project-connection"
+  tap "menu-project-settings"
   clock settle
   reload
   clock data
@@ -410,6 +413,7 @@ test "project screens share a server and group their viewports"
 test "project setup and viewport settings restore automatically without Save"
   size 1440x900
   tap "project-connection"
+  tap "menu-project-settings"
   clock settle
   type "project-name" "Ember"
   type "project-url" "http://127.0.0.1:5176"
@@ -451,6 +455,7 @@ test "project setup and viewport settings restore automatically without Save"
 test "invalid connections and duplicate routes stay in the form"
   size 1440x900
   tap "project-connection"
+  tap "menu-project-settings"
   clock settle
   type "project-name" "Ember"
   type "project-url" "javascript:bad"
@@ -478,6 +483,7 @@ test "invalid connections and duplicate routes stay in the form"
   tap "close-library"
   clock settle
   tap "project-connection"
+  tap "menu-project-settings"
   clock settle
   tap "disconnect-project"
   clock data
@@ -490,6 +496,7 @@ test "discover screens, resolve parameters, and refresh the manifest"
   size 1440x900
   request POST "http://127.0.0.1:5176/mode" {"mode":"normal"}
   tap "project-connection"
+  tap "menu-project-settings"
   type "project-name" "Discovered app"
   type "project-url" "http://127.0.0.1:5176"
   tap "save-project"
@@ -532,6 +539,7 @@ test "discovery errors retry and keep manual entry available"
   size 1440x900
   request POST "http://127.0.0.1:5176/mode" {"mode":"invalid"}
   tap "project-connection"
+  tap "menu-project-settings"
   type "project-name" "Discovered app"
   type "project-url" "http://127.0.0.1:5176"
   tap "save-project"
@@ -561,6 +569,7 @@ test "discovery errors retry and keep manual entry available"
   expect tree missing "discovery-error"
   tap "close-library"
   tap "project-connection"
+  tap "menu-project-settings"
   type "project-url" "http://127.0.0.1:5177"
   tap "save-project"
   clock data
@@ -575,6 +584,7 @@ test "an empty manifest still offers a blank or manual screen"
   request POST "http://127.0.0.1:5176/mode" {"mode":"empty"}
   tap "toggle-screens"
   tap "project-connection"
+  tap "menu-project-settings"
   type "project-name" "Empty app"
   type "project-url" "http://127.0.0.1:5176"
   tap "save-project"
@@ -996,6 +1006,7 @@ test "add every discovered screen with a device set"
   size 1440x900
   request POST "http://127.0.0.1:5176/mode" {"mode":"normal"}
   tap "project-connection"
+  tap "menu-project-settings"
   type "project-name" "Discovered app"
   type "project-url" "http://127.0.0.1:5176"
   tap "save-project"
@@ -1292,3 +1303,139 @@ test "expo simulators connects once and tests the latest saved code on a cloud i
   clock settle
   expect tree missing "expo-dialog"
   expect tree has "expo-setup"
+
+test "a setup link for another app opens its own workspace and switching keeps both"
+  size 1440x900
+  at "/?connect=http://127.0.0.1:5176&name=Alpha&viewports=Phone"
+  request POST "http://127.0.0.1:5176/mode" {"mode":"normal","app":"/exact-design-fixture/alpha","name":"Alpha"}
+  reload
+  clock data
+  clock +600 real
+  clock data
+  expect state doc.projectName == "Alpha"
+  expect state doc.projectVerified == true
+  expect state doc.groups.length == 2
+  expect state doc.projects.length == 1
+  tap "project-connection"
+  tap "menu-new-project"
+  clock settle
+  expect text "library-title" == "Connect another app"
+  type "project-name" "Ember"
+  type "project-url" "http://127.0.0.1:5174"
+  tap "save-project"
+  clock data
+  clock settle
+  expect state doc.projectName == "Ember"
+  expect state doc.projectUrl == "http://127.0.0.1:5174"
+  expect state doc.projects.length == 2
+  tap "add-screen"
+  clock settle
+  type "new-screen-name" "Compose"
+  type "new-screen-route" "/note"
+  tap "create-screen"
+  clock data
+  clock settle
+  expect state doc.groups.length == 2
+  tap "project-connection"
+  tap "project-0"
+  clock data
+  clock settle
+  expect state doc.projectName == "Alpha"
+  expect state doc.projectUrl == "http://127.0.0.1:5176"
+  expect state doc.groups.length == 2
+  expect state doc.groups.0.route == "/"
+  expect state doc.groups.1.route == "/settings"
+  reload
+  clock data
+  expect state doc.projectName == "Alpha"
+  tap "project-connection"
+  tap "project-1"
+  clock data
+  clock settle
+  expect state doc.projectName == "Ember"
+  expect state doc.groups.1.route == "/note"
+  expect state doc.projects.length == 2
+  tap "project-connection"
+  tap "project-0"
+  clock data
+  clock settle
+  tap "project-connection"
+  tap "menu-project-settings"
+  clock settle
+  type "project-url" "http://127.0.0.1:6000"
+  tap "save-project"
+  clock data
+  expect tree has "choice-adopt"
+  expect state doc.projectUrl == "http://127.0.0.1:5176"
+  tap "choice-new"
+  clock data
+  clock settle
+  expect state doc.projectUrl == "http://127.0.0.1:6000"
+  expect state doc.projects.length == 3
+  expect state doc.projects.0.url == "http://127.0.0.1:5176"
+
+test "another app at a project's address opens separately and pauses the first"
+  size 1440x900
+  at "/?connect=http://127.0.0.1:5176&name=Alpha&viewports=Phone"
+  request POST "http://127.0.0.1:5176/mode" {"mode":"normal","app":"/exact-design-fixture/alpha","name":"Alpha"}
+  reload
+  clock data
+  clock +600 real
+  clock data
+  expect state doc.projectName == "Alpha"
+  expect tree missing "connection-notice"
+  request POST "http://127.0.0.1:5176/mode" {"mode":"normal","app":"/exact-design-fixture/beta","name":"Beta"}
+  reload
+  clock data
+  clock +600 real
+  clock data
+  expect state linkState == "mismatch"
+  expect state doc.liveName == "Beta"
+  expect tree has "connection-message"
+  expect state doc.views.0.source == ""
+  expect state doc.previewRequests == "[]"
+  tap "open-live-app"
+  clock data
+  clock +600 real
+  clock data
+  expect state doc.projectName == "Beta"
+  expect state doc.projects.length == 2
+  expect state doc.groups.length == 2
+  expect state linkState == "ok"
+  expect tree missing "connection-notice"
+  tap "project-connection"
+  tap "project-0"
+  clock data
+  clock +600 real
+  clock data
+  expect state doc.projectName == "Alpha"
+  expect state linkState == "mismatch"
+  expect tree has "connection-notice"
+
+test "screens whose routes the app dropped are flagged and can be removed"
+  size 1440x900
+  at "/?connect=http://127.0.0.1:5176&name=Alpha&viewports=Phone"
+  request POST "http://127.0.0.1:5176/mode" {"mode":"normal","app":"/exact-design-fixture/alpha","name":"Alpha"}
+  reload
+  clock data
+  clock +600 real
+  clock data
+  expect tree missing "missing-routes"
+  tap "add-screen"
+  clock data
+  type "new-screen-name" "Old"
+  type "new-screen-route" "/old"
+  tap "create-screen"
+  clock data
+  clock settle
+  expect state doc.groups.length == 3
+  expect state missingRoutes.length == 1
+  expect state missingRoutes.0 == "/old"
+  expect tree has "missing-routes"
+  tap "remove-missing"
+  clock data
+  expect state doc.groups.length == 2
+  expect tree missing "missing-routes"
+  tap "undo"
+  clock data
+  expect state doc.groups.length == 3

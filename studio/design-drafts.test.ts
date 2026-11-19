@@ -49,9 +49,9 @@ test('Apply validates the whole batch once and preserves source on compiler or d
 test('draft cache saves projects in order, retries failed writes, and restores on reload',async()=>{
   let disk:string|undefined,fail=false,writes=0;
   const fs={readFile:async()=>{if(!disk)throw {code:'ENOENT'};return new TextEncoder().encode(disk);},atomicWriteFile:async(_path:string,bytes:Uint8Array)=>{writes++;if(fail)throw new Error('disk full');disk=new TextDecoder().decode(bytes);}} as FileSystem;
-  const cache=new DraftStorage();await cache.load(fs);
+  const cache=new DraftStorage('app:/data/projects/p-a/drafts.json');await cache.load(fs);
   await Promise.all([cache.save(fs,'a','first'),cache.save(fs,'b','second')]);
-  const restored=new DraftStorage();await restored.load(fs);expect(restored.get('a')).toBe('first');expect(restored.get('b')).toBe('second');
+  const restored=new DraftStorage('app:/data/projects/p-a/drafts.json');await restored.load(fs);expect(restored.get('a')).toBe('first');expect(restored.get('b')).toBe('second');
   const count=writes;await restored.save(fs,'a','first');expect(writes).toBe(count);
   fail=true;await expect(restored.save(fs,'a','latest')).rejects.toThrow('disk full');expect(restored.get('a')).toBe('first');
   fail=false;await restored.save(fs,'a','latest');expect(restored.get('a')).toBe('latest');

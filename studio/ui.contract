@@ -460,6 +460,27 @@ component MenuCheck
       if shortcut != ""
         text shortcut color="ink.muted" font="type.caption" aria-hidden=true
 
+// One of several choices in a menu, such as a project: a check mark on the current one and a muted second line.
+// Choosing closes the menu.
+component MenuChoice
+  props
+    label: string
+    detail: string
+    checked: bool
+    menu: string
+    testId: string
+    press: action
+  view
+    button id=testId press=press class=MenuRow role="menuitemradio" aria-checked=checked popovertarget=menu popovertargetaction="hide" height=40 align-items="center" testId=testId color="ink.primary" data-tip=(detail == "" ? label : `${label} · ${detail}`)
+      if checked
+        Icon(name="check", size=16, angle=0)
+      else
+        column width=16 flex-shrink=0
+      column flex=1 min-width=0 gap=1 align-items="flex-start"
+        text label font="type.body" font-weight=(checked ? 600 : 400) width="100%" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" text-align="left"
+        if detail != ""
+          text detail font="type.caption" color="ink.muted" width="100%" overflow="hidden" white-space="nowrap" text-overflow="ellipsis" text-align="left"
+
 component Divider
   view
     column width=1 height=16 flex-shrink=0 margin="0 4px" background-color="line.subtle" aria-hidden=true

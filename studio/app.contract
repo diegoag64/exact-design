@@ -1,5 +1,5 @@
 use Icon from "./icons.contract"
-use Tool, SmallTool, Field, FieldShell, TreeRow, PanelSection, SectionHead, FloatingBar, Segmented, Segment, RowButton, PrimaryButton, SecondaryButton, Dialog, Menu, IconButton, SmallButton, ToolbarButton, SectionHeading, FieldLabel, InlineField, MenuItem, MenuDivider, Divider, Kbd, PropertyField, VisibilityButton, ExpoMark, screensWidth, inspectorWidth, MenuCheck from "./ui.contract"
+use Tool, SmallTool, Field, FieldShell, TreeRow, PanelSection, SectionHead, FloatingBar, Segmented, Segment, RowButton, PrimaryButton, SecondaryButton, Dialog, Menu, IconButton, SmallButton, ToolbarButton, SectionHeading, FieldLabel, InlineField, MenuItem, MenuChoice, MenuDivider, Divider, Kbd, PropertyField, VisibilityButton, ExpoMark, screensWidth, inspectorWidth, MenuCheck from "./ui.contract"
 
 routes nav
   editor "/"
@@ -25,6 +25,11 @@ fn compoundIcon(property: string): string = property == "padding" ? "square-dash
 fn fieldPrefix(label: string): string = label == "Top" ? "T" : label == "Right" ? "R" : label == "Bottom" ? "B" : label == "Left" ? "L" : label == "Top left" ? "TL" : label == "Top right" ? "TR" : label == "Bottom right" ? "BR" : label == "Bottom left" ? "BL" : label == "Row" ? "↕" : label == "Column" ? "↔" : label
 fn swatchable(property: string, value: string): bool = (property == "color" or property.endsWith("-color")) and (value.startsWith("#") or value.startsWith("rgb") or value.startsWith("hsl"))
 fn magnitude(n: number): number = max(n, -n)
+// The studio address that shows one project, keeping the collage layout option.
+fn projectLocation(key: string, collage: bool): string = collage ? `/?project=${key}&layout=collage` : `/?project=${key}`
+// An app's address without its scheme, as the project menu and notices show it.
+fn projectEntryName(projects: ProjectEntry[], key: string): string = match first(projects.filter(p => p.key == key)) { case some(p) => `“${p.name}”`, case none => "the saved workspace" }
+fn hostOf(url: string): string = url.replaceAll("http://", "").replaceAll("https://", "")
 fn panEase(t: number): number = 1 - (1 - t) * (1 - t) * (1 - t)
 fn layerKind(kind: string): string = kind == "text" or kind == "span" ? "Text" : kind == "button" ? "Button" : kind == "row" ? "Row" : kind == "column" ? "Column" : kind == "scroll" ? "Scroll" : kind == "grid" ? "Grid" : kind == "image" or kind == "img" ? "Image" : kind == "screen" or kind == "main" ? "Screen" : kind == "input" ? "Input" : kind == "rectangle" ? "Rectangle" : "Container"
 fn isSpacing(property: string): bool = property.startsWith("padding") or property.startsWith("margin") or property == "gap" or property.endsWith("-gap")
@@ -125,6 +130,7 @@ shape NativeStatus
   frames: NativeShot[]
 
 shape CanvasView
+  route: string
   canAutoHeight: bool
   autoHeight: bool
   source: string
@@ -158,7 +164,31 @@ shape ScreenGroup
   views: LibraryView[]
   layers: Layer[]
 
+// A saved project: one workspace, listed in the project menu.
+shape ProjectEntry
+  key: string
+  name: string
+  url: string
+  current: bool
+
+// Which app answers at a project's address: "ok", "offline", "unverified" (neither has an identity), "confirm" (a project
+// saved before identities and a verified app), "unconfirmed" (a verified project, an app that cannot say which it is),
+// "mismatch" (a different app), or "" before the first check.
+shape Connection
+  key: string
+  url: string
+  state: string
+  liveName: string
+
 shape Document
+  projectKey: string
+  projectVerified: bool
+  connectionState: string
+  liveName: string
+  projects: ProjectEntry[]
+  cameraX: number
+  cameraY: number
+  cameraZoom: number
   nativeScreens: string
   previewSource: string
   previewRequests: string
@@ -210,9 +240,14 @@ shape DeviceSet
   label: string
   count: number
 
+// `project` is the project the request left open, `choice` a project the person must confirm or decline before the
+// request can continue, with `error` explaining why.
 shape Reply
   error: string
   ok: bool
+  project: string
+  choice: string
+  message: string
   fit: bool
   minX: number
   minY: number
@@ -225,9 +260,11 @@ shape DiscoveredScreen
   dynamic: bool
   added: bool
 
+// `missing` lists the screens' routes the app no longer serves.
 shape Discovery
   owner: string
   routes: DiscoveredScreen[]
+  missing: string[]
   error: string
 
 shape HistoryChange
@@ -323,6 +360,7 @@ shape PreviewSignal
 
 shape DesignReply
   operation: string
+  project: string
   historyChanged: bool
   instances: number
   draftCount: number
@@ -418,7 +456,10 @@ shape Time
 component Studio
   resource time = exactTime() as shape Time
   resource viewport = exactViewport() as shape Viewport
-  resource doc = document() with time.epochAtZero as shape Document else empty(name="Untitled")
+  // Each tab shows one project, named in its address (`/?project=<key>`), so tabs on different projects stay apart and
+  // reload where they were. A tab without one opens the project this browser opened last.
+  derive linkProject = match first(stack(nav)) { case some(e) => searchParam(e, "project"), case none => "" }
+  resource doc = document(linkProject) with time.epochAtZero as shape Document else empty(name="Untitled")
   state discoveryRevision = 0
   // The native preview drawer shows the active screen as the app's native iOS build renders it, beside the editable
   // web canvas. It asks the helper only while open. Each press sends a fresh run token. nativeCapture lists the screen
@@ -437,7 +478,7 @@ component Studio
   // device controls, actions, the Expo Simulators section and padding (about 302px, plus room for a status or error line).
   derive nativeFit = min(288 / nativeSize.width, max(120, viewport.height - (rightOpen ? 12 : 64) - (viewport.width >= 1000 ? 64 : 120) - 302 - (expoWorking ? 128 : expo.running ? 44 : 0) - (nativeFrameError != "" or native.state == "working" or nativeDone ? 36 : 0) - (nativeDrafts > 0 ? 52 : 0)) / nativeSize.height)
   // Read again when editing ends, since finishing saves the session's drafts without applying them.
-  resource savedDrafts = savedDrafts((nativeOpen and not editing ? doc.projectUrl : "")) as shape SavedDrafts else empty()
+  resource savedDrafts = savedDrafts((nativeOpen and not editing ? doc.projectKey : "")) as shape SavedDrafts else empty()
   derive nativeDrafts = editing ? (match designChanged { case some(r) => r.draftCount, case none => 0 }) : savedDrafts.count
   derive nativeBusy = native.state == "working" or native.state == "unavailable"
   action toggleNative
@@ -461,10 +502,10 @@ component Studio
   task nativeFade when nativeDone key=nativeRun
     after(2400, dismissNative)
   resource previews = previews(doc.previewRequests) as shape PreviewSizes else empty()
-  resource renderedScene = scene(doc.drawing, previews.signature) with time.epochAtZero as shape Document else empty()
+  resource renderedScene = scene(doc.projectKey, doc.drawing, previews.signature) with time.epochAtZero as shape Document else empty()
   derive scene = renderedScene.active != "" ? renderedScene : doc
   resource discovered = discover(doc.projectUrl, doc.groups.map(g => g.route), discoveryRevision) as shape Discovery else empty()
-  resource history = history(doc.projectUrl) as shape History else empty()
+  resource history = history(doc.projectKey) as shape History else empty()
   // Expo Simulators runs the app's latest saved source on a cloud iPhone. The helper builds it, uploads it to the project's
   // one session (started on first use, reused after) and opens the active screen. Each press sends a fresh run token with
   // its action. The access token goes to the helper once, from the setup dialog, and never comes back.
@@ -583,7 +624,7 @@ component Studio
     previewUpdateSeen = -1
     designWriting = true
     rightPanel = "open"
-    send designChanged = design("open", "", doc.source, 0, doc.active, "", time.epochAtZero + performanceNow())
+    send designChanged = design("open", "", doc.source, 0, doc.active, doc.projectKey, time.epochAtZero + performanceNow())
   action finishEditing
     reviewOpen = false
     spacingProperty = ""
@@ -592,6 +633,13 @@ component Studio
     designWriting = true
     send designChanged = design("close", designSession, "", 0, "", "", time.epochAtZero + performanceNow())
     designSession = ""
+  state staleSession = ""
+  action closeStaleSession
+    let session = staleSession
+    staleSession = ""
+    send designChanged = design("close", session, "", 0, "", "", time.epochAtZero + performanceNow())
+  task staleClose when staleSession != "" and not pending(designChanged)
+    after(1, closeStaleSession)
   action toggleEditing
     if editing
       finishEditing()
@@ -702,7 +750,12 @@ component Studio
           reviewOpen = false
         if r.error != ""
           designError = r.error
-        if r.ok
+        if r.ok and r.project != "" and r.project != doc.projectKey
+          // The tab switched projects while this request ran. A session that opened for the other project ends rather
+          // than edit its app from here; other late replies change nothing.
+          if r.operation == "open"
+            staleSession = r.session
+        else if r.ok
           if r.historyChanged
             refresh history
           if leftOpen and r.selectionRevision != revealedLayerRevision
@@ -747,13 +800,117 @@ component Studio
     nav = go(nav, url)
   action closeLibrary
     nav = back(nav)
+  // "edit" changes the shown project's connection; "new" connects another app in its own workspace.
+  state projectMode = "edit"
   action projectSettings
     if editing
       finishEditing()
+    projectMode = "edit"
     projectNameChanged = false
     projectUrlChanged = false
     libraryChanged = none
     nav = go(nav, path("project"))
+  action newProject
+    if editing
+      finishEditing()
+    projectMode = "new"
+    projectName = ""
+    projectUrl = ""
+    projectNameChanged = true
+    projectUrlChanged = true
+    libraryChanged = none
+    nav = go(nav, path("project"))
+  // Projects: each keeps its own screens, layout, camera, drafts and timeline. Switching leaves the current one as it is,
+  // saving where its camera was, and opens the other where it was left.
+  mutation cameraSaved as shape Reply queue
+  action openProject(key: string)
+    if key != "" and key != doc.projectKey
+      if editing
+        finishEditing()
+      send cameraSaved = camera(doc.projectKey, px, py, zoom, key)
+      addingViewport = false
+      tidyWhenReady = false
+      fitWhenReady = false
+      historySelected = ""
+      nativeRun = ""
+      hoveredRow = ""
+      libraryChanged = none
+      nav = replace(nav, projectLocation(key, collage))
+  // The camera this browser last showed belongs to `cameraProject`. Opening another project restores that project's
+  // saved camera, or fits its screens when it has none; a reload of the same project keeps the camera as it was.
+  state cameraProject = "" persist
+  state cameraSent = ""
+  derive cameraNow = `${doc.projectKey} ${round(px)} ${round(py)} ${zoom}`
+  action restoreCamera
+    let first = cameraProject == ""
+    cameraProject = doc.projectKey
+    if not first
+      cancelPan()
+      if doc.cameraZoom > 0
+        zoom = doc.cameraZoom
+        px = doc.cameraX
+        py = doc.cameraY
+        cameraSent = `${doc.projectKey} ${round(doc.cameraX)} ${round(doc.cameraY)} ${doc.cameraZoom}`
+      else
+        fitWhenReady = true
+        fittedSignature = ""
+        fitBounds(doc.minX, doc.minY, doc.maxX, doc.maxY)
+  task cameraRestore when doc.projectKey != "" and doc.projectKey != cameraProject and not pending(doc)
+    after(1, restoreCamera)
+  action saveCamera
+    cameraSent = cameraNow
+    send cameraSaved = camera(doc.projectKey, px, py, zoom, "")
+  task cameraSave when doc.projectKey != "" and cameraProject == doc.projectKey and cameraSent != cameraNow and not panning and not dragging and not pending(doc) key=cameraNow
+    after(1000, saveCamera)
+  // A tab opened without a project in its address takes the one it shows, so a reload keeps it.
+  action nameProject
+    nav = replace(nav, projectLocation(doc.projectKey, collage))
+  task projectAddress when doc.projectKey != "" and linkProject != doc.projectKey and top(nav).name == "editor" and setupUrl == "" and not pending(doc)
+    after(1, nameProject)
+  // Which app answers at the project's address, checked when the project or its address changes and on Retry.
+  state connectionRevision = 0
+  resource linked = connection(doc.projectKey, doc.projectUrl, connectionRevision) as shape Connection else empty()
+  derive linkState = linked.key == doc.projectKey and linked.url == doc.projectUrl ? linked.state : ""
+  // Editing writes source, so it waits until the app at the address is this project's.
+  derive editBlocked = doc.route != "" and (linkState == "mismatch" or linkState == "confirm" or linkState == "unconfirmed")
+  action recheckConnection
+    connectionRevision = connectionRevision + 1
+  action refreshConnection
+    refresh doc
+  task connectionShown when linkState != doc.connectionState and not pending(doc) and not pending(linked)
+    after(1, refreshConnection)
+  action confirmApp
+    send libraryChanged = library(doc.projectKey, "adopt", "", "", "", "", "", time.epochAtZero + performanceNow())
+  action openLiveApp(decision: string)
+    requestOp = "open"
+    choiceName = doc.liveName
+    choiceUrl = doc.projectUrl
+    send libraryChanged = library(doc.projectKey, "open", doc.liveName, doc.projectUrl, "", "", decision, time.epochAtZero + performanceNow())
+  // A request that would tie an app to saved work it cannot verify waits for the person: use that work or start anew.
+  state choiceOp = ""
+  state choiceName = ""
+  state choiceUrl = ""
+  state choiceKey = ""
+  state choiceMessage = ""
+  action decide(decision: string)
+    let op = choiceOp
+    choiceOp = ""
+    if op == "link"
+      startSetup(decision)
+    else
+      if op != ""
+        send libraryChanged = library(doc.projectKey, op, choiceName, choiceUrl, "", "", decision, time.epochAtZero + performanceNow())
+  action dismissChoice
+    choiceOp = ""
+    if setupUrl != ""
+      setupDismissed = true
+  action saveProjectAs(decision: string)
+    choiceOp = ""
+    requestOp = "dialog"
+    send libraryChanged = library(doc.projectKey, (projectMode == "new" ? "new" : "connect"), projectNameValue, projectUrlValue, "", "", decision, time.epochAtZero + performanceNow())
+  derive missingRoutes = discovered.owner == doc.projectUrl and doc.projectUrl != "" ? discovered.missing : []
+  action removeMissing
+    send libraryChanged = library(doc.projectKey, "remove-missing", "", missingRoutes.join(" "), "", "", "", time.epochAtZero + performanceNow())
   action addScreen
     screenName = ""
     screenPath = "/"
@@ -782,26 +939,27 @@ component Studio
     screenPath = route
     libraryChanged = none
   action saveProject
-    send libraryChanged = library("connect", projectNameValue, projectUrlValue, "", "", time.epochAtZero + performanceNow())
+    requestOp = "dialog"
+    send libraryChanged = library(doc.projectKey, (projectMode == "new" ? "new" : "connect"), projectNameValue, projectUrlValue, "", "", "", time.epochAtZero + performanceNow())
   action disconnectProject
-    send libraryChanged = library("disconnect", "", "", "", "", time.epochAtZero + performanceNow())
+    send libraryChanged = library(doc.projectKey, "disconnect", "", "", "", "", "", time.epochAtZero + performanceNow())
   action addAllScreens
     startTidy()
-    send libraryChanged = library("add-all", "", "", screenPreset, "", time.epochAtZero + performanceNow())
+    send libraryChanged = library(doc.projectKey, "add-all", "", "", screenPreset, "", "", time.epochAtZero + performanceNow())
   action saveScreen
     if doc.deviceSets.filter(s => s.name == screenPreset).length > 0
       startTidy()
-    send libraryChanged = library(screenKind, screenName, screenPath, screenPreset, "", time.epochAtZero + performanceNow())
+    send libraryChanged = library(doc.projectKey, screenKind, screenName, screenPath, screenPreset, "", "", time.epochAtZero + performanceNow())
   state hoveredRow = ""
   action hoverRow(id: string, on: bool)
     if on or hoveredRow == id
       hoveredRow = on ? id : ""
   action setVisibility(id: string, hidden: bool)
-    send changed = edit((hidden ? "hide" : "show"), id, "", 0, 0, time.epochAtZero + performanceNow())
+    send changed = edit(doc.projectKey, (hidden ? "hide" : "show"), id, "", 0, 0, time.epochAtZero + performanceNow())
   action openView(id: string, hidden: bool, x: number, y: number, w: number, h: number)
     if hidden
       addingViewport = false
-      send changed = edit("select", id, "", 0, 0, time.epochAtZero + performanceNow())
+      send changed = edit(doc.projectKey, "select", id, "", 0, 0, time.epochAtZero + performanceNow())
     else
       focusView(id, x, y, w, h)
   action toggleGroup(id: string)
@@ -848,7 +1006,7 @@ component Studio
   // can fail to report (an app error, a stopped app server), so it also leaves after 4 seconds without progress, or 15 in all.
   state booting = true
   state bootSeen = -1
-  derive setupPending = setupUrl != "" and appliedSetup != setupKey and setupError == "" and not setupDismissed
+  derive setupPending = setupUrl != "" and setupError == "" and not setupDismissed
   derive still = viewport.prefersReducedMotion
   action finishBoot
     booting = false
@@ -863,9 +1021,10 @@ component Studio
   task bootTimeout when booting
     after(15000, finishBoot)
   derive addableScreens = discovered.routes.filter(r => not r.added and not r.dynamic).length
-  // A setup link (`/?connect=<app url>&name=<name>&viewports=<set or device>&show=<screens>`) connects that project and adds
-  // each of its screens once per browser; reloading the link leaves later edits alone. `show` lists the screens,
-  // by name or route, that start visible; the others are added hidden so their previews do not load.
+  // A setup link (`/?connect=<app url>&name=<name>&viewports=<set or device>&show=<screens>`) opens that app's own
+  // workspace and adds each of its screens once per browser; opening the link again opens the workspace without adding
+  // screens, so later edits stay. Once it is open, the address names the project instead. `show` lists the screens, by
+  // name or route, that start visible; the others are added hidden so their previews do not load.
   derive setupUrl = top(nav).name == "editor" ? searchParam(top(nav), "connect") : ""
   derive setupName = searchParam(top(nav), "name") == "" ? "project" : searchParam(top(nav), "name")
   derive setupKey = `${setupUrl} ${searchParam(top(nav), "name")} ${searchParam(top(nav), "viewports")}${searchParam(top(nav), "show") == "" ? "" : " " + searchParam(top(nav), "show")}`
@@ -873,31 +1032,57 @@ component Studio
   state setupRunning = false
   state setupError = ""
   state setupDismissed = false
-  action runSetup
+  state linkOp = ""
+  // Which request may come back asking for a choice: "link", "dialog" or "open".
+  state requestOp = ""
+  action startSetup(decision: string)
+    let op = decision != "" and linkOp != "" ? linkOp : (appliedSetup == setupKey ? "open" : "setup")
+    linkOp = op
     appliedSetup = setupKey
     setupError = ""
     setupRunning = true
-    startTidy()
-    send libraryChanged = library("setup", searchParam(top(nav), "name"), setupUrl, searchParam(top(nav), "viewports"), searchParam(top(nav), "show"), time.epochAtZero + performanceNow())
+    requestOp = "link"
+    if op == "setup"
+      startTidy()
+    send libraryChanged = library(doc.projectKey, op, searchParam(top(nav), "name"), setupUrl, searchParam(top(nav), "viewports"), searchParam(top(nav), "show"), decision, time.epochAtZero + performanceNow())
+  action runSetup
+    startSetup("")
   action dismissSetupError
     setupError = ""
     setupDismissed = true
   // A failed setup (the app not started yet) runs again on the next load, unless its error was dismissed.
-  task autoSetup when setupUrl != "" and appliedSetup != setupKey and setupError == "" and not setupDismissed and not pending(doc) and not pending(libraryChanged)
+  task autoSetup when setupUrl != "" and setupError == "" and not setupDismissed and not setupRunning and choiceOp == "" and not pending(doc) and not pending(libraryChanged)
     after(1, runSetup)
+  derive dialogChoice = match libraryChanged { case some(r) => (requestOp == "dialog" ? r.choice : ""), case none => "" }
   action afterLibrary
     match libraryChanged
       case some(r)
+        let fromLink = setupRunning
         if setupRunning
           setupRunning = false
-          if not r.ok
+          if not r.ok and r.choice == ""
             setupError = r.error
             appliedSetup = ""
             tidyWhenReady = false
+        if r.choice != "" and requestOp != "dialog"
+          choiceOp = requestOp
+          choiceKey = r.choice
+          choiceMessage = r.error
+          tidyWhenReady = false
         if r.ok
-          if top(nav).name != "editor"
-            nav = back(nav)
+          connectionRevision = connectionRevision + 1
+          let n = top(nav).name != "editor" ? back(nav) : nav
+          if r.project != "" and (r.project != linkProject or fromLink)
+            // The request opened its app's own workspace: this tab shows it now, and the one it left keeps its camera.
+            if r.project != doc.projectKey
+              if editing
+                finishEditing()
+              send cameraSaved = camera(doc.projectKey, px, py, zoom, "")
+            nav = replace(n, projectLocation(r.project, collage))
+          else
+            nav = n
           if r.fit
+            cameraProject = (r.project != "" ? r.project : cameraProject)
             fitWhenReady = true
             fittedSignature = ""
             collapsed = [""]
@@ -974,9 +1159,9 @@ component Studio
       undoDesign()
     else
       if not editing or op == "save"
-        send changed = edit(op, key, "", 0, 0, time.epochAtZero + performanceNow())
+        send changed = edit(doc.projectKey, op, key, "", 0, 0, time.epochAtZero + performanceNow())
   action prop(key: string, value: string)
-    send changed = edit("property", key, value, 0, 0, time.epochAtZero + performanceNow())
+    send changed = edit(doc.projectKey, "property", key, value, 0, 0, time.epochAtZero + performanceNow())
   action down(e: PointerEvent)
     cancelPan()
     fitWhenReady = false
@@ -989,7 +1174,7 @@ component Studio
       dx = 0
       dy = 0
       if not hand
-        send changed = edit("hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom, time.epochAtZero + performanceNow())
+        send changed = edit(doc.projectKey, "hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom, time.epochAtZero + performanceNow())
   action move(e: PointerEvent)
     if dragging
       freeDrag = e.altKey
@@ -1001,7 +1186,7 @@ component Studio
         px = px + e.offsetX - sx
         py = py + e.offsetY - sy
       else
-        send changed = edit("move", (e.altKey ? "free" : "snap"), `${zoom}`, (e.offsetX - sx) / zoom, (e.offsetY - sy) / zoom, time.epochAtZero + performanceNow())
+        send changed = edit(doc.projectKey, "move", (e.altKey ? "free" : "snap"), `${zoom}`, (e.offsetX - sx) / zoom, (e.offsetY - sy) / zoom, time.epochAtZero + performanceNow())
       dragging = false
       dx = 0
       dy = 0
@@ -1060,7 +1245,7 @@ component Studio
           resetView()
   action canvasMenu(e: PointerEvent)
     if not editing
-      send changed = edit("hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom, time.epochAtZero + performanceNow())
+      send changed = edit(doc.projectKey, "hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom, time.epochAtZero + performanceNow())
   action resetView
     fitBounds(scene.minX, scene.minY, scene.maxX, scene.maxY)
   action afterEdit
@@ -1075,7 +1260,7 @@ component Studio
   action focusView(id: string, x: number, y: number, w: number, h: number)
     fitWhenReady = false
     addingViewport = false
-    send changed = edit("select", id, "", 0, 0, time.epochAtZero + performanceNow())
+    send changed = edit(doc.projectKey, "select", id, "", 0, 0, time.epochAtZero + performanceNow())
     let fromX = cameraX
     let fromY = cameraY
     panFromX = fromX
@@ -1156,6 +1341,14 @@ component Studio
       column id="plan-menu" popover="auto" role="menu" aria-label="Plan view options" class=Menu testId="plan-menu"
         MenuCheck(label="Layout boxes", shortcut="⇧B", checked=planBoxes, testId="plan-boxes", press=togglePlanBoxes)
         MenuCheck(label="Readable text", shortcut="⇧T", checked=planText, testId="plan-text", press=togglePlanText)
+      column id="project-menu" popover="auto" role="menu" aria-label="Projects" class=Menu width=264 testId="project-menu"
+        text "Projects" font="type.caption" font-weight=600 color="ink.secondary" padding="4px 8px 6px"
+        column max-height=280 overflow-y="auto" gap=1
+          for p, i in doc.projects key=p.key
+            MenuChoice(label=p.name, detail=(p.url == "" ? "Not connected" : hostOf(p.url)), checked=p.current, menu="project-menu", testId=`project-${i}`, press=openProject(p.key))
+        MenuDivider()
+        MenuItem(label="Project settings…", icon="link-2", shortcut="", disabled=false, destructive=false, menu="project-menu", testId="menu-project-settings", press=projectSettings)
+        MenuItem(label="Connect another app…", icon="plus", shortcut="", disabled=false, destructive=false, menu="project-menu", testId="menu-new-project", press=newProject)
       column id="studio-menu" popover="auto" role="menu" aria-label="Canvas actions" class=Menu
         MenuItem(label="Undo", icon="undo-2", shortcut="⌘Z", disabled=(editing ? not appCanUndo : not doc.canUndo), destructive=false, menu="studio-menu", testId="menu-undo", press=command("undo", ""))
         if not editing
@@ -1166,7 +1359,7 @@ component Studio
           MenuItem(label="Finish editing", icon="check", shortcut="Esc", disabled=designWriting, destructive=false, menu="studio-menu", testId="menu-finish", press=finishEditing)
         else
           if doc.source != ""
-            MenuItem(label="Edit app design", icon="mouse-pointer-2", shortcut="", disabled=designWriting, destructive=false, menu="studio-menu", testId="menu-edit", press=startEditing)
+            MenuItem(label="Edit app design", icon="mouse-pointer-2", shortcut="", disabled=(designWriting or editBlocked), destructive=false, menu="studio-menu", testId="menu-edit", press=startEditing)
           if doc.frameSelected
             MenuItem(label="Duplicate screen", icon="copy", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-duplicate", press=command("duplicate", ""))
             for preset in ["Phone", "Tablet", "Desktop"] key=preset
@@ -1194,7 +1387,7 @@ component Studio
             row flex=1 min-height=0 position="relative"
               if leftOpen
                 column testId="screens-panel" position=(viewport.width >= 1000 ? "relative" : "absolute") left=0 top=0 bottom=0 z-index=3 background-color="surface.panel" width=screensWidth() flex-shrink=0 box-sizing="border-box" border-right="1px solid line.subtle"
-                  FileHeader(name=(doc.projectName == "" ? doc.name : doc.projectName), subtitle=(doc.projectUrl == "" ? "No project connected" : doc.projectUrl), compact=false, open=true, disabled=false, connect=projectSettings, toggle=toggleLeft)
+                  FileHeader(name=(doc.projectName == "" ? doc.name : doc.projectName), subtitle=(doc.projectUrl == "" ? "No project connected" : doc.projectUrl), compact=false, open=true, disabled=false, toggle=toggleLeft)
                   if editing
                     row height=40 flex-shrink=0 box-sizing="border-box" align-items="center" gap=8 padding="0 12px 0 16px"
                       SectionHeading(label="Layers")
@@ -1218,6 +1411,11 @@ component Studio
                       SectionHeading(label="Screens")
                       SmallButton(icon="layout-grid", label="Tidy up", hint="Tidy up · Arrange the canvas in one row per screen", selected=false, disabled=false, testId="tidy-up", press=tidyUp)
                       SmallButton(icon="plus", label="Add screen", hint="Add screen · Choose a route from your project or start a blank screen", selected=false, disabled=false, testId="add-screen", press=addScreen)
+                    if missingRoutes.length > 0
+                      row margin="0 8px 8px" padding="6px 6px 6px 10px" gap=8 align-items="center" border-radius="radius.control" background-color="surface.notice" testId="missing-routes"
+                        text `${missingRoutes.length} ${missingRoutes.length == 1 ? "screen isn’t" : "screens aren’t"} in ${doc.projectName}’s routes` font="type.caption" color="ink.primary" flex=1 min-width=0
+                        button press=removeMissing disabled=(pending(libraryChanged) or missingRoutes.length >= scene.groups.length) class=SecondaryButton height=24 padding="0 8px" flex-shrink=0 data-tip="Remove missing screens · One undo step" testId="remove-missing"
+                          text "Remove"
                     scroll flex=1 min-height=0
                       column padding="0 8px 12px" gap=1
                         if scene.groups.length == 0
@@ -1226,9 +1424,9 @@ component Studio
                           row class=TreeRow hover=hoverRow(group.id) height=28 flex-shrink=0 align-items="center" padding="0 2px 0 4px"
                             button press=toggleGroup(group.id) testId=`fold-group-${group.id}` class=SmallTool width=16 height=28 padding=0 color="ink.muted" aria-label=`Toggle ${group.name}` aria-expanded=(not collapsed.includes(group.id)) data-tip=(collapsed.includes(group.id) ? "Show viewports" : "Hide viewports")
                               Icon(name="chevron-right", size=12, angle=(collapsed.includes(group.id) ? 0 : 90))
-                            button press=focusScreen(group.id) testId=`group-${group.id}` aria-label=group.name data-tip=(group.hidden ? "Hidden screen · Show it to see it on the canvas" : "Go to screen · Pan the canvas to this screen") display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 4px" border-width=0 background-color="transparent" color=(group.hidden ? "ink.muted" : "ink.primary")
-                              column color="ink.muted" flex-shrink=0
-                                Icon(name=(group.source == "" ? "frame" : "globe"), size=14, angle=0)
+                            button press=focusScreen(group.id) testId=`group-${group.id}` aria-label=(missingRoutes.includes(group.route) ? `${group.name}, route not found` : group.name) data-tip=(missingRoutes.includes(group.route) ? `Route not found · ${doc.projectName} doesn’t list ${group.route}` : group.hidden ? "Hidden screen · Show it to see it on the canvas" : "Go to screen · Pan the canvas to this screen") display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 4px" border-width=0 background-color="transparent" color=(group.hidden ? "ink.muted" : "ink.primary")
+                              column color=(missingRoutes.includes(group.route) ? "ink.danger" : "ink.muted") flex-shrink=0
+                                Icon(name=(missingRoutes.includes(group.route) ? "circle-alert" : group.route == "" and group.source == "" ? "frame" : "globe"), size=14, angle=0)
                               text group.name font="type.body" font-weight=500 flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
                             VisibilityButton(name="screen", hidden=group.hidden, revealed=(hoveredRow == group.id), testId=`visibility-${group.id}`, press=setVisibility(group.id, not group.hidden))
                           if not collapsed.includes(group.id)
@@ -1249,7 +1447,15 @@ component Studio
               column id="canvas-stage" outline="none" tabindex=-1 contextmenu=canvasMenu contextPopover="studio-menu" testId="canvas-stage" wheel=wheel flex=1 min-width=0 min-height=0 position="relative" overflow="clip" background-color="surface.canvas"
                 for v in scene.views.filter(v => not v.hidden) key=v.id
                   column position="absolute" left=0 top=0 translate=`${(hand ? cameraX + dx * zoom : cameraX) + (v.x + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragX : 0)) * zoom}px ${(hand ? cameraY + dy * zoom : cameraY) + (v.y + (not hand and doc.frameSelected and doc.active == v.id and not doc.resizing ? dragY : 0)) * zoom}px` width=max(100, v.width + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragX : 0)) height=max(100, v.height + (not hand and doc.frameSelected and doc.active == v.id and doc.resizing ? dragY : 0)) scale=zoom transform-origin="top left" pointer-events=(editing and not hand and v.source.startsWith(designOrigin + "/") ? "auto" : "none") inert=(not editing or hand or not v.source.startsWith(designOrigin + "/")) background-color="paper" border="none" box-shadow="none" testId=`frame-${v.id}`
-                    ScreenView(source=v.previewSource, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
+                    // A route the app no longer serves, or a project whose address another app answers, shows why instead of
+                    // that app's not-found page.
+                    if v.route != "" and (missingRoutes.includes(v.route) or linkState == "mismatch")
+                      column position="absolute" inset=0 align-items="center" justify-content="center" gap=12 padding=32 box-sizing="border-box" background-color="surface.panel" border="1px dashed line.strong" color="ink.secondary" text-align="center" testId=`unavailable-${v.id}`
+                        Icon(name="circle-alert", size=28, angle=0)
+                        text (linkState == "mismatch" ? `${doc.projectName} isn’t running at ${hostOf(doc.projectUrl)}` : `${doc.projectName} has no ${v.route} route`) font-size=20 font-weight=600 color="ink.primary"
+                        text (linkState == "mismatch" ? "Another app answers at this address. This screen will load when its own app is back." : "Remove this screen from the Screens panel, or add the route back to your app.") font-size=15 max-width=420
+                    else
+                      ScreenView(source=v.previewSource, layers=v.layers, prefix=v.id, selected=(doc.screenId == v.screenId and not doc.frameSelected ? doc.selected : ""), dx=(hand ? 0 : dragX), dy=(hand ? 0 : dragY), resizing=doc.resizing, activate=previewClick)
                 canvas pointer-events=(editing and not hand ? "none" : "auto") surface=design(scene.drawing, doc.selected, zoom, (hand ? cameraX + dx * zoom : cameraX), (hand ? cameraY + dy * zoom : cameraY), (hand ? 0 : dragX), (hand ? 0 : dragY), doc.resizing, snapping) position="relative" flex=1 width="100%" min-height=0 pointerdown=down pointermove=move pointerup=up cursor=(hand ? (dragging ? "grabbing" : "grab") : (dragging ? (doc.resizing ? "nwse-resize" : "move") : "default")) touch-action="none" testId="canvas" aria-label="Design canvas"
                 if booting
                   column position="absolute" inset=0 z-index=1 display="flex" flex-direction="column" align-items="center" justify-content="center" background-color="surface.canvas" role="status" aria-label="Loading screens" pointerdown=finishBoot testId="canvas-loading" -exact-exit-animation=(still or previews.total == 0 ? "none" : "veilOut 280ms ease-in both")
@@ -1305,7 +1511,7 @@ component Studio
                 row position="absolute" top=12 left=(leftOpen and viewport.width < 1000 ? screensWidth() + 12 : 12) right=(rightOpen and viewport.width < 700 ? inspectorWidth() + 12 : 12) z-index=2 flex-wrap="wrap" gap=8 align-items="flex-start" pointer-events="none"
                   if not leftOpen
                     column class=FloatingBar align-items="stretch" width=(viewport.width >= 700 ? "232px" : "auto") max-width="100%" min-width=0 flex-shrink=1 padding=0 pointer-events="auto"
-                      FileHeader(name=(doc.projectName == "" ? doc.name : doc.projectName), subtitle="", compact=true, open=false, disabled=false, connect=projectSettings, toggle=toggleLeft)
+                      FileHeader(name=(doc.projectName == "" ? doc.name : doc.projectName), subtitle="", compact=true, open=false, disabled=false, toggle=toggleLeft)
                   if not rightOpen
                     column class=FloatingBar align-items="stretch" margin-left="auto" max-width="100%" flex-shrink=0 padding=0 pointer-events="auto"
                       ActionBar(compact=true, narrow=(viewport.width < 700), minimal=(leftOpen and viewport.width < 700), canUndo=(editing ? appCanUndo : doc.canUndo), canRedo=(not editing and doc.canRedo), canExport=(doc.source == ""), canPreview=not editing, open=false, undo=command("undo", ""), redo=command("redo", ""), save=command("save", ""), preview=togglePreview, exportCode=toggleCode, toggle=toggleRight)
@@ -1418,6 +1624,32 @@ component Studio
                     button press=runSetup class=SecondaryButton height=26 padding="0 10px" testId="setup-retry"
                       text "Retry"
                     SmallButton(icon="x", label="Dismiss", hint="", selected=false, disabled=false, testId="setup-dismiss", press=dismissSetupError)
+                if choiceOp != "" and not setupRunning and setupError == ""
+                  row class=FloatingBar position="absolute" bottom=108 left="50%" translate="-50% 0" width=560 max-width="calc(100% - 32px)" box-sizing="border-box" min-height=36 padding="6px 4px 6px 12px" gap=8 z-index=2 role="group" aria-label="Choose a workspace" testId="workspace-choice"
+                    column color="ink.secondary" flex-shrink=0
+                      Icon(name="info", size=14, angle=0)
+                    text choiceMessage font="type.body" color="ink.primary" flex=1 min-width=0 testId="workspace-choice-message"
+                    button press=decide("new") disabled=pending(libraryChanged) class=SecondaryButton height=26 padding="0 10px" flex-shrink=0 testId="choice-new"
+                      text "New workspace"
+                    button press=decide("adopt") disabled=pending(libraryChanged) class=SecondaryButton height=26 padding="0 10px" flex-shrink=0 data-tip=`Use ${projectEntryName(doc.projects, choiceKey)} · Its screens, drafts and timeline belong to this app from now on` testId="choice-adopt"
+                      text "Use saved"
+                    SmallButton(icon="x", label="Cancel", hint="Cancel · Keep everything as it is", selected=false, disabled=false, testId="choice-dismiss", press=dismissChoice)
+                // The app at this project's address is another one, or cannot be confirmed: its screens stay paused and
+                // editing waits, so nothing of one app reaches another.
+                if choiceOp == "" and not setupRunning and setupError == "" and (linkState == "mismatch" or linkState == "confirm" or linkState == "unconfirmed")
+                  row class=FloatingBar position="absolute" bottom=108 left="50%" translate="-50% 0" width=560 max-width="calc(100% - 32px)" box-sizing="border-box" min-height=36 padding="6px 4px 6px 12px" gap=8 z-index=2 role="status" testId="connection-notice"
+                    column color=(linkState == "mismatch" ? "ink.danger" : "ink.secondary") flex-shrink=0
+                      Icon(name=(linkState == "mismatch" ? "circle-alert" : "info"), size=14, angle=0)
+                    text (linkState == "mismatch" ? `A different app${doc.liveName == "" ? "" : ` (${doc.liveName})`} is running at ${hostOf(doc.projectUrl)}. ${doc.projectName}’s screens are paused.` : linkState == "confirm" ? `Is ${doc.liveName == "" ? "the app" : doc.liveName} at ${hostOf(doc.projectUrl)} the app for ${doc.projectName}? Confirm before editing.` : `Can’t confirm that ${doc.projectName} is running at ${hostOf(doc.projectUrl)}. Editing is paused.`) font="type.body" color="ink.primary" flex=1 min-width=0 testId="connection-message"
+                    if linkState == "mismatch"
+                      button press=openLiveApp("") disabled=pending(libraryChanged) class=SecondaryButton height=26 padding="0 10px" flex-shrink=0 data-tip="Open the running app in its own workspace · This project stays as it is" testId="open-live-app"
+                        text (doc.liveName == "" ? "Open that app" : `Open ${doc.liveName}`)
+                    if linkState == "confirm"
+                      button press=openLiveApp("new") disabled=pending(libraryChanged) class=SecondaryButton height=26 padding="0 10px" flex-shrink=0 data-tip="Open the running app in a new workspace · This project stays as it is" testId="open-live-app"
+                        text "Open separately"
+                      button press=confirmApp disabled=pending(libraryChanged) class=PrimaryButton height=26 padding="0 10px" flex-shrink=0 data-tip="Use this app · Its screens, drafts and timeline belong to it from now on" testId="confirm-app"
+                        text "Confirm"
+                    IconButton(icon="refresh-cw", label="Check again", hint="Check again · Ask the app which one it is", shortcut="", selected=false, disabled=pending(linked), testId="recheck-connection", press=recheckConnection)
                 row class=FloatingBar display=(panelOverlay ? "none" : "flex") position="absolute" bottom=16 left="50%" translate="-50% 0" z-index=2
                   ToolbarButton(icon="mouse-pointer-2", label="Select", hint="Select (V) · Select and move screens and layers", shortcut="v", selected=not hand, disabled=false, testId="select-tool", press=selectTool)
                   ToolbarButton(icon="hand", label="Pan", hint="Pan (H) · Drag to move around the canvas · Hold Space to pan from any tool", shortcut="h", selected=hand, disabled=false, testId="hand-tool", press=handTool)
@@ -1454,7 +1686,7 @@ component Studio
                             Icon(name="check", size=14, angle=0)
                             text "Done" font="type.caption" font-weight=500
                         else
-                          button press=toggleEditing disabled=designWriting class=SecondaryButton height=24 padding="0 8px" aria-label="Edit app design" data-tip="Edit app design · Select and edit elements in this app" testId="edit-app"
+                          button press=toggleEditing disabled=(designWriting or editBlocked) class=SecondaryButton height=24 padding="0 8px" aria-label="Edit app design" data-tip=(editBlocked ? "Edit app design · Paused until this project’s app is confirmed at its address" : "Edit app design · Select and edit elements in this app") testId="edit-app"
                             Icon(name="mouse-pointer-2", size=14, angle=0)
                             text "Edit app" font="type.caption" font-weight=500
                     if designError != ""
@@ -1896,8 +2128,8 @@ component Studio
                 row width=28 height=28 flex-shrink=0 border-radius=6 align-items="center" justify-content="center" background-color="surface.field" color="ink.secondary"
                   Icon(name=(entry.name == "project" ? "link-2" : "frame"), size=14, angle=0)
                 column flex=1 min-width=0
-                  text (entry.name == "project" ? "Project" : "Add screen") font="type.heading" font-weight=600
-                  text (entry.name == "project" ? "Connect a running Exact app" : (screenKind == "add" ? "Choose a route from your project" : "Start from an editable blank screen")) font="type.caption" color="ink.secondary"
+                  text (entry.name == "project" ? (projectMode == "new" ? "Connect another app" : "Project") : "Add screen") font="type.heading" font-weight=600 testId="library-title"
+                  text (entry.name == "project" ? (projectMode == "new" ? "Opens in its own workspace" : "Connect a running Exact app") : (screenKind == "add" ? "Choose a route from your project" : "Start from an editable blank screen")) font="type.caption" color="ink.secondary"
                 if entry.name == "addScreen" and screenKind == "add"
                   IconButton(icon="refresh-cw", label="Refresh screens", hint="Refresh screens · Reload the route list from your project", shortcut="", selected=false, disabled=pending(discovered), testId="refresh-discovery", press=refreshDiscovery)
                 button id="closeLibrary" press=closeLibrary class=Tool aria-label="Close" data-tip="Close" testId="close-library"
@@ -1915,9 +2147,15 @@ component Studio
                       input value=projectUrlValue input=projectUrlInput class=Field flex=1 background-color="transparent" padding-left=0 placeholder="http://127.0.0.1:5174" aria-label="Project URL" testId="project-url"
                     text "Start the app with EXACT_TOOL_PORT set to this editor's port." font="type.caption" color="ink.muted"
                   if libraryError != ""
-                    row gap=8 align-items="flex-start" color="ink.danger"
-                      Icon(name="circle-alert", size=14, angle=0)
+                    row gap=8 align-items="flex-start" color=(dialogChoice == "" ? "ink.danger" : "ink.secondary")
+                      Icon(name=(dialogChoice == "" ? "circle-alert" : "info"), size=14, angle=0)
                       text libraryError role="alert" color="ink.primary" font="type.caption" flex=1 testId="library-error"
+                  if dialogChoice != ""
+                    row gap=8 justify-content="flex-end" flex-wrap="wrap"
+                      button press=saveProjectAs("new") disabled=pending(libraryChanged) class=SecondaryButton testId="choice-new"
+                        text "Start a new workspace"
+                      button press=saveProjectAs("adopt") disabled=pending(libraryChanged) class=SecondaryButton testId="choice-adopt"
+                        text `Use ${projectEntryName(doc.projects, dialogChoice)}`
                 else
                   if doc.projectUrl != ""
                     row class=Segmented
@@ -1985,13 +2223,13 @@ component Studio
                       text libraryError role="alert" color="ink.primary" font="type.caption" flex=1 testId="library-error"
               row padding="12px 16px" gap=8 align-items="center" border-top="1px solid line.subtle"
                 if entry.name == "project"
-                  if doc.projectUrl != ""
+                  if doc.projectUrl != "" and projectMode != "new"
                     button press=disconnectProject class=SecondaryButton color="ink.danger" disabled=pending(libraryChanged) testId="disconnect-project"
                       Icon(name="unplug", size=14, angle=0)
                       text "Disconnect"
                   row flex=1
                   button press=saveProject disabled=(projectNameValue.trim() == "" or projectUrlValue.trim() == "" or pending(libraryChanged)) class=PrimaryButton testId="save-project"
-                    text (doc.projectUrl == "" ? "Connect" : "Save")
+                    text (doc.projectUrl == "" or projectMode == "new" ? "Connect" : "Save")
                 else
                   if screenKind == "add" and discovered.owner == doc.projectUrl and not pending(discovered) and addableScreens > 0
                     button press=addAllScreens disabled=pending(libraryChanged) class=SecondaryButton data-tip="Add every listed screen that is not on the canvas yet, each with the chosen viewports" testId="add-all-screens"
@@ -2050,6 +2288,7 @@ component Studio
                 button press=saveExpo disabled=(expoToken.trim() == "" or pending(expoSaved)) class=PrimaryButton testId="expo-save"
                   text (pending(expoSaved) ? "Connecting…" : expo.configured ? "Replace" : "Connect")
 
+// The project header opens the project menu: switch projects, change this one's connection, or connect another app.
 component FileHeader
   props
     name: string
@@ -2057,11 +2296,10 @@ component FileHeader
     compact: bool
     open: bool
     disabled: bool
-    connect: action
     toggle: action
   view
     row height=(compact ? 40 : 48) flex-shrink=0 box-sizing="border-box" align-items="center" gap=2 padding=(compact ? "0 4px" : "0 8px") border-bottom=(compact ? "none" : "1px solid line.subtle")
-      button press=connect disabled=disabled class=TreeRow display="flex" align-items="center" gap=8 flex=1 min-width=0 height=(compact ? 32 : 36) padding="0 6px" border-width=0 background-color="transparent" color="ink.primary" text-align="left" aria-label="Project connection" data-tip=(subtitle == "" ? "Project settings" : subtitle) testId="project-connection"
+      button popovertarget="project-menu" disabled=disabled class=TreeRow display="flex" align-items="center" gap=8 flex=1 min-width=0 height=(compact ? 32 : 36) padding="0 6px" border-width=0 background-color="transparent" color="ink.primary" text-align="left" aria-label="Projects" aria-haspopup="menu" data-tip=(subtitle == "" ? "Projects · Switch projects or change this one" : `Projects · ${subtitle}`) testId="project-connection"
         row width=22 height=22 flex-shrink=0 border-radius=6 align-items="center" justify-content="center" background-color="surface.action" color="ink.on-action" aria-hidden=true
           Icon(name="layers", size=13, angle=0)
         column flex=1 min-width=0 gap=0

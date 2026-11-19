@@ -21,3 +21,15 @@ export function parseRoutes(value: unknown): DiscoveredScreen[] {
   }
   return screens;
 }
+/** Whether a screen's route (a real path, with any query or fragment) is one the manifest pattern serves: `:name` takes
+ *  one segment and `*name` the rest. */
+export function routeServed(route: string, pattern: string): boolean {
+  const path = route.split(/[?#]/)[0] || '/';
+  const parts = path.split('/').filter(Boolean), wanted = pattern.split('/').filter(Boolean);
+  for (let i = 0; i < wanted.length; i++) {
+    if (wanted[i].startsWith('*')) return true;
+    if (i >= parts.length) return false;
+    if (!wanted[i].startsWith(':') && wanted[i] !== parts[i]) return false;
+  }
+  return parts.length === wanted.length;
+}

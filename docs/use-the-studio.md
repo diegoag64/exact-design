@@ -10,8 +10,8 @@ Start the editor with the [README setup commands](../README.md#run-locally).
 EXACT_TOOL_PORT=5173 bun exact.mjs web --port 5174
 ```
 
-2. In the editor, click **Connect project** above Screens.
-3. Enter a project name and `http://127.0.0.1:5174`.
+2. In the editor, click the project name above Screens and choose **Project settings…**.
+3. Enter a project name and `http://127.0.0.1:5174`, then click **Connect**.
 4. Click **+** beside Screens, choose a discovered route, and select its viewports.
 
 Use **Add all** to add routes that are not already on the canvas. For a dynamic route, replace parameters with a real path, such as `/note/7`. Use **Refresh screens** after adding routes to your app.
@@ -22,9 +22,27 @@ For a connection that also adds the screens, open a setup link:
 http://127.0.0.1:5173/?connect=http://127.0.0.1:5174&name=Ember&viewports=Core
 ```
 
-Replace the app URL and name with your own. Set `viewports` to a device preset or a set: `Core`, `Apple%20devices`, or `Every%20size`. To load fewer previews at first, add `show` with a comma-separated list of screen names or routes, such as `&show=Today,/welcome`. The link still adds every screen, but only the listed ones start visible; show the others from the Screens panel. Each browser applies a link once. If setup fails, start the app and click **Retry**.
+Replace the app URL and name with your own. Set `viewports` to a device preset or a set: `Core`, `Apple%20devices`, or `Every%20size`. To load fewer previews at first, add `show` with a comma-separated list of screen names or routes, such as `&show=Today,/welcome`. The link still adds every screen, but only the listed ones start visible; show the others from the Screens panel. A link opens its app's own workspace and adds the screens once per browser. Opening it again opens that workspace as you left it. If setup fails, start the app and click **Retry**.
 
 If a preview is blank, use `127.0.0.1` for the editor URL and restart the app with `EXACT_TOOL_PORT` matching the editor port. Keep the app server running.
+
+## Work on several projects
+
+Each app you connect is a project with its own workspace: its screens, layout, camera, drafts and timeline. Projects never share a canvas.
+
+- Click the project name above Screens to open the project menu. Choose a project to switch to it. The project you leave keeps its camera and everything else.
+- **Connect another app…** opens a new app in its own workspace. A setup link for another app does the same.
+- **Project settings…** renames the shown project or changes its address. Entering the address of an app that already has a project opens that project instead.
+- Each tab's address names its project (`/?project=…`). Open two tabs to work on two apps side by side; reloading a tab keeps its project. A tab opened without one shows the project you opened last.
+
+The studio identifies an app by its folder, which Exact's local editing server reports, not by its address. An app that restarts on another port keeps its project. If a different app answers at a project's address, the studio says so: the project's screens pause, editing is refused, and **Open** opens the running app in its own workspace. Click the refresh button in the notice to check again.
+
+Two cases need your choice before the studio ties an app to saved work:
+
+- **Saved before identities.** Projects migrated from an earlier version don't know their app yet. When an app answers at their address, the notice asks: **Confirm** ties it to the project, and **Open separately** opens the app in a new workspace. A setup link to that address asks the same with **Use saved** and **New workspace**. Drafts saved before migration stay with the address until you confirm.
+- **An app that can't be identified.** A server without Exact's editing API, or one that isn't running, can't say which app it is. Changing a verified project to such an address asks whether to keep this project or start a new workspace. Editing stays paused until the project's own app answers there.
+
+When the app no longer lists a screen's route, the Screens panel marks that screen and the canvas shows why instead of the app's not-found page. Click **Remove** in the panel to delete those screens in one undo step, or add the route back to your app.
 
 ## Arrange screens
 
@@ -147,7 +165,9 @@ Click **Export** to copy Contract source for the active viewport. Add button act
 
 ## Save and navigate
 
-The workspace saves automatically. Reopen the same browser URL and port to restore it. Use **Save** to retry a failed write. Workspace saves and app design drafts are separate.
+Each project's workspace saves automatically, in this browser's storage for the studio's address and port. Reopen that address to restore it. Use **Save** to retry a failed write. Workspace saves and app design drafts are separate.
+
+Saved data from earlier versions, one workspace for the whole studio, moves into projects the first time the studio opens. Its screens, layout, selection, drafts and timeline are kept, and the original files are left unchanged. Drafts and timeline entries saved for other app addresses become projects of their own, named after the address.
 
 Use these shortcuts when a text field is not focused:
 
