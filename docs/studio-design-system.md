@@ -23,10 +23,10 @@ The Exact Contract owns view state and actions. Browser hatches handle browser-s
 | Role | Tokens / values |
 | --- | --- |
 | Surfaces | `surface.panel`, `surface.field`, `surface.raised` (selected segment), `surface.canvas`, `surface.notice` (pending drafts, info tiles) |
-| Interaction | `surface.hover`, `surface.pressed`, `surface.selected`, `surface.action` |
+| Interaction | `surface.hover-wash` (hover, over any fill), `surface.hover` and `surface.pressed` (neutral rows and buttons), `surface.selected` / `surface.selected-pressed`, `surface.action` / `surface.action-pressed` |
 | Review diffs | `surface.diff-add` / `ink.diff-add`, `surface.diff-remove` / `ink.diff-remove` |
 | Text and icons | `ink.primary`, `ink.secondary`, `ink.muted`, `ink.selected`, `ink.on-action`, `ink.danger` |
-| Boundaries | `line.subtle`, `line.strong` |
+| Boundaries | `line.subtle`, `line.strong`, `line.hover` (segment hover edge) |
 | Accent | `accent`, also used by canvas selection outlines |
 | Typography | `type.body` 12px, `type.caption` 11px, `type.heading` 13px, `type.mono` 11px for source, routes, and diffs |
 | Corners | `radius.control` 5px, `radius.panel` 8px, `radius.menu` 12px (menus, dialogs, floating bars) |
@@ -44,15 +44,15 @@ Import components and styles from `./ui.contract`; import `Icon` from `./icons.c
 | Primitive | Use |
 | --- | --- |
 | `Icon` | `name`, `size`, `angle`; inherits the enclosing control's text color |
-| `IconButton` | Labeled 32px tool button with selected, disabled, hint, shortcut, and test ID props |
-| `ToolbarButton` | Floating-toolbar tool; the active tool is filled with the action colour |
-| `SmallButton` | 24px icon action beside a section title or field (add, delete, duplicate, revert), with an optional `hint` tooltip |
+| `IconButton` | Labeled 32px tool button with selected, disabled, hint, shortcut, and test ID props; selected uses `ToolSelected` |
+| `ToolbarButton` | Floating-toolbar tool; the active tool uses `ToolAction`, filled with the action colour |
+| `SmallButton` | 24px icon action beside a section title or field (add, delete, duplicate, revert), with an optional `hint` tooltip; selected uses `SmallToolSelected` |
 | `InlineField` | Figma-style field: a prefix letter (X, Y, W, H, T/R/B/L) or icon shares one `FieldShell` box with its input |
 | `PropertyField` | `InlineField` with a letter prefix and a descriptive accessible label |
 | `FieldLabel` | Caption above a full-width control |
 | `SectionHeading` | Consistent compact inspector heading |
 | `PrimaryButton` / `SecondaryButton` | 28px text buttons with optional leading icon; one primary action per surface |
-| `Segmented` / `Segment` | Segmented control; `aria-pressed` drives the selected (`:checked`) look |
+| `Segmented` / `Segment` / `SegmentOn` | Segmented control; the selected option uses `SegmentOn`, chosen from the same condition as its `aria-pressed` |
 | `RowButton` | Full-width secondary action with a leading icon |
 | `FloatingBar` | Canvas chrome surface: toolbar, zoom, collapsed headers, status toast |
 | `Dialog` | Modal surface for Add screen, Project, Export, and Review |
@@ -60,9 +60,10 @@ Import components and styles from `./ui.contract`; import `Icon` from `./icons.c
 | `MenuItem` | Action, optional icon and shortcut hint, disabled/destructive state, closing menu target |
 | `MenuDivider` | Separation between groups of related actions |
 | `MenuCheck` | Setting in a menu: a check mark while on, `role="menuitemcheckbox"`, and the menu stays open |
-| `Tool` | Custom button compositions using the standard hit area and interaction states |
+| `Tool` / `SmallTool` | Custom button compositions using the standard hit area and interaction states |
+| `Chip` / `ChipSelected` | Timeline point pill and its selected state |
 | `Field` | Native text inputs and selects; Exact owns their focus behavior |
-| `TreeRow` | Layer row hover and keyboard focus treatment |
+| `TreeRow` / `TreeRowSelected` | Layer, screen and viewport row hover, press and keyboard focus treatment; a selected row uses `TreeRowSelected` |
 | `VisibilityButton` | 24px eye toggle at the end of a tree row. It appears while the row is hovered or focused, and stays visible with `eye-off` while the item is hidden |
 | `InspectorValue` | Single compound-value field with an inline All/Both identifier |
 | `PanelSection` | Padding, vertical rhythm, and divider for inspector groups |
@@ -79,6 +80,23 @@ PropertyField(label="X", accessibleLabel="X position", value=`${node.x}`,
 Native inputs and selects cannot take state parts, so they keep the platform focus ring. Prefix glyphs never overlay a control: they sit in the same `FieldShell` beside a transparent input, which keeps the verify audit's covered-text check clean.
 
 Use accessible labels for icon-only controls and descriptive names for fields. A tooltip supplements the label.
+
+## Interaction states
+
+Every control that can be selected or active shows rest, hover, pressed and keyboard focus differently in both themes, whether it is selected or not. A selected or active fill keeps its colour while hovered and never falls back to the neutral grey.
+
+| State | Unselected | Selected or active |
+| --- | --- | --- |
+| Rest | Transparent or `surface.field` | `surface.selected` with `ink.selected`, or `surface.action` with `ink.on-action` |
+| Hover | `surface.hover-wash` over the rest fill | `surface.hover-wash` over the selected fill |
+| Pressed | `surface.pressed` | `surface.selected-pressed` or `surface.action-pressed` |
+| Keyboard focus | Accent ring | Accent ring; tool buttons add a `surface.panel` band inside it, which keeps the ring visible on the action fill |
+
+A selected control takes a selected class, such as `ToolSelected`, `ToolAction`, `SmallToolSelected`, `TreeRowSelected`, `SegmentOn` or `ChipSelected`, chosen from the same condition as its `aria-pressed`. Do not paint the selected fill as the node's own `background-color` on a neutral class: a `:hover` row outranks the node's own fill and `:checked`, so the hover would replace it with grey.
+
+Exact applies `:hover` and `:focus-visible` without asking the runner, so their rows are literals, and a node's classes must agree on them. Hover therefore adds the `surface.hover-wash` inset shadow over the fill rather than replacing it: it darkens a light fill and lightens a dark one, and on the panel it matches `surface.hover`. `:active` may differ per class, so each selected class names its own pressed colour. While a control is focused, the focus ring replaces the hover wash.
+
+Segments are the exception: the wash would turn a raised white option grey. Their hover draws a `line.hover` edge and full ink, and leaves the fill and `shadow.raised` alone. Menu rows highlight with `surface.selected` on hover. The menu moves focus only by keyboard, so a focused row also carries the accent ring. A checked `MenuCheck` row shows its check mark, not a fill. A hidden item's `VisibilityButton` shows `eye-off` and stays visible; it has no selected fill.
 
 ## Tooltips
 
@@ -202,7 +220,7 @@ Workspace events retain document snapshots. Source events retain draft patches, 
 
 - `bun run test`: source editing, persistence, selection, geometry, and proxy tests.
 - `bun run test:ui`: Exact behavior tests, including camera coordinates and context actions.
-- `bun run test:preview`: isolated real-browser tests. The studio regression covers icon tint and centering in both themes, right-click targeting, keyboard focus, edge placement, Space and middle dragging, and typing. The real-app regressions cover menus and navigation across inspected iframe boundaries, literal text editing, independent padding and corners, linked values, checked source writes, timeline persistence, property additions, explicit responsive overrides, and stable controls during background polling.
+- `bun run test:preview`: isolated real-browser tests. The studio regression covers icon tint and centering in both themes, the hover, pressed and focus states of selected controls in both themes, right-click targeting, keyboard focus, edge placement, Space and middle dragging, and typing. The real-app regressions cover menus and navigation across inspected iframe boundaries, literal text editing, independent padding and corners, linked values, checked source writes, timeline persistence, property additions, explicit responsive overrides, and stable controls during background polling.
 - `bun run verify`: the required Exact layout and behavior audit.
 
 New controls use these primitives and add behavior tests where they introduce interaction or state. Changes to tokens apply to all consumers; feature-specific source editing belongs outside the component library.

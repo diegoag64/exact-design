@@ -95,6 +95,8 @@ test('studio icons, context menus and canvas gestures share the desktop interact
     await page.keyboard.press('ArrowDown');expect(await page.evaluate(()=>document.activeElement.id)).toBe('menu-plan');
     await page.keyboard.press('ArrowDown');expect(await page.evaluate(()=>document.activeElement.id)).toBe('menu-tidy');
     await page.keyboard.press('ArrowDown');expect(await page.evaluate(()=>document.activeElement.id)).toBe('menu-fit');
+    // A keyboard-focused menu row carries a ring, so it differs from a row under the pointer.
+    expect(await page.evaluate(()=>getComputedStyle(document.activeElement).boxShadow)).toContain('rgb(13, 153, 255)');
     await page.keyboard.press('Escape');expect(await menu.isVisible()).toBe(false);expect(await heading.evaluate(el=>el===document.activeElement)).toBe(true);
     // Menu actions address the right-clicked row, not the previous selection.
     await page.getByRole('button',{name:'Description',exact:true}).click({button:'right'});await page.getByRole('menuitem',{name:'Delete',exact:true}).click();
@@ -128,6 +130,49 @@ test('studio icons, context menus and canvas gestures share the desktop interact
     expect(await viewEye.getAttribute('aria-label')).toBe('Hide viewport');
     await screenEye.click();await frame.waitFor({state:'detached'});
     await page.getByRole('button',{name:'Undo',exact:true}).click();await frame.waitFor();
+    // Selected controls keep their own fill while hovered, take a pressed shade of it, and show
+    // a focus ring that differs from hover.
+    const look=(l:any)=>l.evaluate((el:Element)=>{const s=getComputedStyle(el);return {bg:s.backgroundColor,shadow:s.boxShadow,border:s.borderTopColor,color:s.color};});
+    const bluish=(c:string)=>{const [r,,b]=c.match(/[\d.]+/g)!.map(Number);return b-r>=20;};
+    const rest=async()=>{await page.evaluate(()=>(document.activeElement as HTMLElement|null)?.blur());await page.mouse.move(800,700);};
+    const states=async(target:any)=>{
+      await rest();const idle=await look(target);
+      await target.hover();const hover=await look(target);
+      const box=await target.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
+      await page.waitForFunction(([el,bg]:[Element,string])=>getComputedStyle(el).backgroundColor!==bg,[await target.elementHandle(),idle.bg]);
+      const pressed=await look(target);
+      // Release away from the control, so the press does not toggle it.
+      await page.mouse.move(5,995);await page.mouse.up();await rest();
+      await page.keyboard.press('Shift');await target.focus();const focus=await look(target);
+      expect(await target.evaluate((el:Element)=>el.matches(':focus-visible'))).toBe(true);
+      await rest();return {idle,hover,pressed,focus};
+    };
+    const selectedFill=async(target:any)=>{
+      const s=await states(target);
+      expect(bluish(s.idle.bg)).toBe(true);
+      expect(s.hover.bg).toBe(s.idle.bg);expect(s.hover.shadow).toContain('100px inset');
+      expect(bluish(s.pressed.bg)).toBe(true);expect(s.pressed.bg).not.toBe(s.idle.bg);
+      expect(s.focus.shadow).toContain('rgb(13, 153, 255)');expect(s.focus.shadow).not.toBe(s.hover.shadow);
+    };
+    const layer=page.getByRole('button',{name:'Heading',exact:true}),reduce=page.getByRole('button',{name:'Reduce preview effects',exact:true});
+    if(await reduce.getAttribute('aria-pressed')!=='true')await reduce.click();
+    for(const colorScheme of ['light','dark'] as const){
+      await page.emulateMedia({colorScheme});
+      await layer.click();await page.waitForFunction(()=>getComputedStyle(document.querySelector('button[aria-label="Heading"]')!).backgroundColor!=='rgba(0, 0, 0, 0)');
+      const select=page.getByRole('button',{name:'Select',exact:true});
+      expect(await select.getAttribute('aria-pressed')).toBe('true');await selectedFill(select);
+      expect(await reduce.getAttribute('aria-pressed')).toBe('true');await selectedFill(reduce);
+      await selectedFill(layer);
+      await page.getByRole('button',{name:'Appearance',exact:true}).click();
+      const system=page.locator('[data-testid="theme-studio-system"]');await system.waitFor();
+      expect(await system.getAttribute('aria-pressed')).toBe('true');
+      // The raised option keeps its fill and shadow on hover and gains an edge instead.
+      const segment=await states(system);
+      expect(segment.hover.bg).toBe(segment.idle.bg);expect(segment.hover.shadow).toBe(segment.idle.shadow);
+      expect(segment.hover.border).not.toBe(segment.idle.border);expect(segment.pressed.bg).not.toBe(segment.idle.bg);
+      expect(segment.focus.shadow).toContain('rgb(13, 153, 255)');
+      await page.keyboard.press('Escape');await system.waitFor({state:'hidden'});
+    }
     expect(errors).toEqual([]);
   }finally{await page?.context().close();await suite?.browser.close();child.kill('SIGTERM');await child.exited;await rm(temp,{recursive:true,force:true});}
 },60000);

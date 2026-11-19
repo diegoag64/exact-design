@@ -1,5 +1,5 @@
 use Icon from "./icons.contract"
-use Tool, SmallTool, Field, FieldShell, TreeRow, PanelSection, SectionHead, FloatingBar, Segmented, Segment, RowButton, PrimaryButton, SecondaryButton, Dialog, Menu, IconButton, SmallButton, ToolbarButton, SectionHeading, FieldLabel, InlineField, MenuItem, MenuDivider, Divider, Kbd, PropertyField, VisibilityButton, ExpoMark, screensWidth, inspectorWidth, MenuCheck from "./ui.contract"
+use Tool, SmallTool, SmallToolSelected, Field, FieldShell, TreeRow, TreeRowSelected, PanelSection, SectionHead, FloatingBar, Segmented, Segment, SegmentOn, Chip, ChipSelected, RowButton, PrimaryButton, SecondaryButton, Dialog, Menu, IconButton, SmallButton, ToolbarButton, SectionHeading, FieldLabel, InlineField, MenuItem, MenuDivider, Divider, Kbd, PropertyField, VisibilityButton, ExpoMark, screensWidth, inspectorWidth, MenuCheck from "./ui.contract"
 
 routes nav
   editor "/"
@@ -1149,7 +1149,7 @@ component Studio
             row class=Segmented role="group" aria-label=`${group} theme`
               for choice in ["system", "light", "dark"] key=choice
                 for current in [group == "Studio" ? studioTheme : screenTheme] key=choice
-                  button press=chooseTheme(group, choice) class=Segment aria-pressed=(current == choice) aria-label=`${group}: ${choice == "system" ? "Match system" : choice == "light" ? "Light" : "Dark"}` testId=`theme-${group.toLowerCase()}-${choice}`
+                  button press=chooseTheme(group, choice) class=(current == choice ? SegmentOn : Segment) aria-pressed=(current == choice) aria-label=`${group}: ${choice == "system" ? "Match system" : choice == "light" ? "Light" : "Dark"}` testId=`theme-${group.toLowerCase()}-${choice}`
                     Icon(name=(choice == "system" ? "monitor" : choice == "light" ? "sun" : "moon"), size=14, angle=0)
                     text (choice == "system" ? "System" : choice == "light" ? "Light" : "Dark")
             text (group == "Studio" ? "Panels and canvas." : "Your app in canvas previews and plan view. Full-screen Preview follows your system.") font="type.caption" color="ink.muted"
@@ -1203,7 +1203,7 @@ component Studio
                       column padding="0 8px 12px" gap=1
                         for element, i in elementTree key=element.id
                           if element.ancestors.filter(id => collapsedElements.includes(id)).length == 0
-                            row class=TreeRow contextmenu=selectElement(element.id) contextPopover="studio-menu" id=`layer-row-${element.id}` hover=hoverElement(element.id) height=28 flex-shrink=0 align-items="center" padding-left=(4 + min(element.depth, 8) * 12) background-color=(element.selected ? "surface.selected" : "transparent")
+                            row class=(element.selected ? TreeRowSelected : TreeRow) contextmenu=selectElement(element.id) contextPopover="studio-menu" id=`layer-row-${element.id}` hover=hoverElement(element.id) height=28 flex-shrink=0 align-items="center" padding-left=(4 + min(element.depth, 8) * 12)
                               if element.hasChildren
                                 button press=toggleElement(element.id) class=SmallTool width=16 height=28 padding=0 color="ink.muted" aria-label=`Toggle ${element.label}` aria-expanded=(not collapsedElements.includes(element.id)) data-tip=(collapsedElements.includes(element.id) ? "Expand" : "Collapse") testId=`fold-element-${i}`
                                   Icon(name="chevron-right", size=12, angle=(collapsedElements.includes(element.id) ? 0 : 90))
@@ -1233,7 +1233,7 @@ component Studio
                             VisibilityButton(name="screen", hidden=group.hidden, revealed=(hoveredRow == group.id), testId=`visibility-${group.id}`, press=setVisibility(group.id, not group.hidden))
                           if not collapsed.includes(group.id)
                             for v in group.views key=v.id
-                              row class=TreeRow hover=hoverRow(v.id) contextmenu=command("select", v.id) contextPopover="studio-menu" height=28 flex-shrink=0 align-items="center" padding-right=2 background-color=(doc.active == v.id and doc.frameSelected ? "surface.selected" : "transparent")
+                              row class=(doc.active == v.id and doc.frameSelected ? TreeRowSelected : TreeRow) hover=hoverRow(v.id) contextmenu=command("select", v.id) contextPopover="studio-menu" height=28 flex-shrink=0 align-items="center" padding-right=2
                                 button press=openView(v.id, v.hidden, v.x, v.y, v.width, v.height) testId=`view-${v.id}` aria-label=`${group.name}, ${v.name}` display="flex" flex=1 min-width=0 align-items="center" gap=6 height=28 padding="0 4px 0 30px" border-width=0 background-color="transparent" color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : (v.hidden ? "ink.muted" : "ink.primary"))
                                   column color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.muted") flex-shrink=0
                                     Icon(name=deviceIcon(v.name), size=14, angle=0)
@@ -1241,7 +1241,7 @@ component Studio
                                   text `${v.width} × ${v.height}` font="type.caption" color=(doc.active == v.id and doc.frameSelected ? "ink.selected" : "ink.muted") font-variant-numeric="tabular-nums"
                                 VisibilityButton(name="viewport", hidden=v.hidden, revealed=(hoveredRow == v.id), testId=`visibility-${v.id}`, press=setVisibility(v.id, not v.hidden))
                             for n in group.layers key=n.id
-                              button contextmenu=command("select", n.id) contextPopover="studio-menu" class=TreeRow press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" flex-shrink=0 align-items="center" gap=6 height=28 padding="0 8px 0 44px" border-width=0 background-color=(doc.selected == n.id ? "surface.selected" : "transparent") color=(doc.selected == n.id ? "ink.selected" : "ink.primary")
+                              button contextmenu=command("select", n.id) contextPopover="studio-menu" class=(doc.selected == n.id ? TreeRowSelected : TreeRow) press=command("select", n.id) testId=`layer-${n.id}` aria-label=n.name display="flex" flex-shrink=0 align-items="center" gap=6 height=28 padding="0 8px 0 44px" border-width=0 color=(doc.selected == n.id ? "ink.selected" : "ink.primary")
                                 column color=(doc.selected == n.id ? "ink.selected" : "ink.muted") flex-shrink=0
                                   ElementIcon(kind=n.kind)
                                 text n.name font="type.body" flex=1 min-width=0 text-align="left" overflow="hidden" white-space="nowrap" text-overflow="ellipsis"
@@ -1328,9 +1328,9 @@ component Studio
                             for device in doc.nativeDevices key=device.slug
                               option device.name value=device.slug
                         row class=Segmented width=104 flex-shrink=0 role="group" aria-label="Appearance"
-                          button press=chooseNativeAppearance("light") class=Segment aria-pressed=(nativeAppearance == "light") aria-label="Light appearance" testId="native-light"
+                          button press=chooseNativeAppearance("light") class=(nativeAppearance == "light" ? SegmentOn : Segment) aria-pressed=(nativeAppearance == "light") aria-label="Light appearance" testId="native-light"
                             text "Light"
-                          button press=chooseNativeAppearance("dark") class=Segment aria-pressed=(nativeAppearance == "dark") aria-label="Dark appearance" testId="native-dark"
+                          button press=chooseNativeAppearance("dark") class=(nativeAppearance == "dark" ? SegmentOn : Segment) aria-pressed=(nativeAppearance == "dark") aria-label="Dark appearance" testId="native-dark"
                             text "Dark"
                     column position="relative" flex=1 min-height=0 align-items="center" justify-content="center" padding=16 overflow="hidden" background-color="surface.canvas"
                       if doc.route == ""
@@ -1580,17 +1580,17 @@ component Studio
                                               row gap=2
                                                 for c in [0, 1, 2] key=`${c}`
                                                   for on in [alignOn(selectionFlow, designRows, r, c)] key=`${c}`
-                                                    button press=alignDesign(r, c) class=Segment flex="none" width=26 height=20 padding=0 aria-label=`Align ${alignName(r, c).toLowerCase()}` aria-pressed=on data-tip=`${alignName(r, c)} · Sets alignment on both axes` disabled=designWriting testId=`align-${r}-${c}`
+                                                    button press=alignDesign(r, c) class=(on ? SegmentOn : Segment) flex="none" width=26 height=20 padding=0 aria-label=`Align ${alignName(r, c).toLowerCase()}` aria-pressed=on data-tip=`${alignName(r, c)} · Sets alignment on both axes` disabled=designWriting testId=`align-${r}-${c}`
                                                       column width=(on ? 8 : 3) height=(on ? 8 : 3) border-radius=(on ? 2 : 2) background-color=(on ? "accent" : "ink.muted") aria-hidden=true
                                           // Stretch and baseline have no cell: they stay one press away beside the grid.
                                           column gap=2 padding=2 border-radius="radius.control" background-color="surface.field" role="group" aria-label="Cross-axis alignment"
                                             for choice in ["stretch", "baseline"] key=choice
-                                              button press=editDesign(property.id, choice) class=Segment flex="none" height=20 padding="0 8px" aria-label=`Align items: ${choice == "stretch" ? "Stretch" : "Baseline"}` aria-pressed=(property.value == choice) data-tip=(choice == "stretch" ? "Stretch · Children fill the cross axis" : "Baseline · Children line up on their text baseline") disabled=designWriting testId=`align-${choice}`
+                                              button press=editDesign(property.id, choice) class=(property.value == choice ? SegmentOn : Segment) flex="none" height=20 padding="0 8px" aria-label=`Align items: ${choice == "stretch" ? "Stretch" : "Baseline"}` aria-pressed=(property.value == choice) data-tip=(choice == "stretch" ? "Stretch · Children fill the cross axis" : "Baseline · Children line up on their text baseline") disabled=designWriting testId=`align-${choice}`
                                                 text (choice == "stretch" ? "Stretch" : "Baseline") font="type.caption"
                                       else if property.property == "flex-direction" or property.property == "align-items" or property.property == "justify-content"
                                         row class=Segmented
                                           for choice in property.options key=choice.value
-                                            button press=editDesign(property.id, choice.value) class=Segment aria-label=`${property.name}: ${choice.label}` data-tip=choice.label aria-pressed=(property.value == choice.value) disabled=designWriting
+                                            button press=editDesign(property.id, choice.value) class=(property.value == choice.value ? SegmentOn : Segment) aria-label=`${property.name}: ${choice.label}` data-tip=choice.label aria-pressed=(property.value == choice.value) disabled=designWriting
                                               Icon(name=propertyIcon(property.property, choice.value), size=14, angle=(choice.value.includes("reverse") ? 180 : 0))
                                       else if property.options.length > 0
                                         select value=property.value change=editDesign(property.id) class=Field aria-label=property.name testId=`design-property-${property.id}` disabled=designWriting
@@ -1712,7 +1712,7 @@ component Studio
                               PropertyField(label="W", accessibleLabel="Viewport width", value=`${v.width}`, change=prop("width"), testId="frame-width")
                               PropertyField(label="H", accessibleLabel="Viewport height", value=`${v.height}`, change=prop("height"), testId="frame-height")
                               if v.canAutoHeight
-                                button press=prop("heightMode", "content") class=SmallTool width=28 height=28 aria-label="Fit screen height to content" aria-pressed=v.autoHeight data-tip=(v.autoHeight ? "Height fits content · enter a height to fix it" : "Fit height to content") background-color=(v.autoHeight ? "surface.selected" : "surface.field") color=(v.autoHeight ? "ink.selected" : "ink.secondary") testId="auto-height"
+                                button press=prop("heightMode", "content") class=(v.autoHeight ? SmallToolSelected : SmallTool) width=28 height=28 aria-label="Fit screen height to content" aria-pressed=v.autoHeight data-tip=(v.autoHeight ? "Height fits content · enter a height to fix it" : "Fit height to content") background-color=(v.autoHeight ? "surface.selected" : "surface.field") color=(v.autoHeight ? "ink.selected" : "ink.secondary") testId="auto-height"
                                   Icon(name="fold-vertical", size=14, angle=0)
                       for n in doc.layers.filter(n => n.id == doc.selected) key=n.id
                         column class=PanelSection
@@ -1735,10 +1735,10 @@ component Studio
                             PropertyField(label="W", accessibleLabel="Width", value=`${n.width}`, change=prop("width"), testId="width")
                             PropertyField(label="H", accessibleLabel="Height", value=`${n.height}`, change=prop("height"), testId="height")
                           row class=Segmented
-                            button press=prop("widthMode", "fixed") class=Segment aria-pressed=(n.widthMode == "fixed") aria-label="Fixed width" data-tip="Keep this width in every viewport" testId="width-fixed"
+                            button press=prop("widthMode", "fixed") class=(n.widthMode == "fixed" ? SegmentOn : Segment) aria-pressed=(n.widthMode == "fixed") aria-label="Fixed width" data-tip="Keep this width in every viewport" testId="width-fixed"
                               Icon(name="move-horizontal", size=14, angle=0)
                               text "Fixed"
-                            button press=prop("widthMode", "fill") class=Segment aria-pressed=(n.widthMode == "fill") aria-label="Fill width" data-tip="Stretch with the viewport" testId="width-fill"
+                            button press=prop("widthMode", "fill") class=(n.widthMode == "fill" ? SegmentOn : Segment) aria-pressed=(n.widthMode == "fill") aria-label="Fill width" data-tip="Stretch with the viewport" testId="width-fill"
                               Icon(name="stretch-horizontal", size=14, angle=0)
                               text "Fill"
                         column class=PanelSection
@@ -1782,7 +1782,7 @@ component Studio
                 else
                   row overflow-x="auto" height=56 flex-shrink=0 align-items="center" padding="0 16px" gap=0 aria-label="Design history"
                     for point in history.entries key=point.id
-                      button press=inspectHistory(point.id) class=Segment flex="none" width="auto" min-width=44 height=30 flex-shrink=0 padding="0 10px" gap=6 border-radius=15 border="1px solid line.subtle" aria-label=`Change ${point.number}: ${point.label}` aria-pressed=(historySelected == point.id) data-tip=`${point.label} · ${point.target} · ${point.timeLabel}` background-color=(historySelected == point.id ? "surface.selected" : "surface.field") color=(historySelected == point.id ? "ink.selected" : "ink.secondary")
+                      button press=inspectHistory(point.id) class=(historySelected == point.id ? ChipSelected : Chip) flex="none" aria-label=`Change ${point.number}: ${point.label}` aria-pressed=(historySelected == point.id) data-tip=`${point.label} · ${point.target} · ${point.timeLabel}`
                         Icon(name=point.icon, size=14, angle=0)
                         text `${point.number}` font="type.caption" font-variant-numeric="tabular-nums"
                       if point.number < history.entries.length
@@ -1921,10 +1921,10 @@ component Studio
                 else
                   if doc.projectUrl != ""
                     row class=Segmented
-                      button press=chooseKind("add") class=Segment aria-pressed=(screenKind == "add") testId="screen-project"
+                      button press=chooseKind("add") class=(screenKind == "add" ? SegmentOn : Segment) aria-pressed=(screenKind == "add") testId="screen-project"
                         Icon(name="route", size=14, angle=0)
                         text "Project" font="type.body"
-                      button press=chooseKind("blank") class=Segment aria-pressed=(screenKind == "blank") testId="screen-blank"
+                      button press=chooseKind("blank") class=(screenKind == "blank" ? SegmentOn : Segment) aria-pressed=(screenKind == "blank") testId="screen-blank"
                         Icon(name="square-dashed", size=14, angle=0)
                         text "Blank" font="type.body"
                   if screenKind == "add"
@@ -1948,7 +1948,7 @@ component Studio
                             scroll max-height=184 border="1px solid line.subtle" border-radius="radius.panel"
                               column gap=1 padding=4
                                 for screen, i in discovered.routes key=screen.route
-                                  button press=chooseScreen(screen.name, screen.route) disabled=screen.added class=TreeRow testId=`discovered-${i}` aria-label=`${screen.name}, ${screen.route}` display="flex" align-items="center" gap=10 height=40 flex-shrink=0 padding="0 8px" border-width=0 background-color=(screenPath == screen.route and screenName == screen.name ? "surface.selected" : "transparent") color=(screenPath == screen.route and screenName == screen.name ? "ink.selected" : "ink.primary") opacity=(screen.added ? 0.55 : 1)
+                                  button press=chooseScreen(screen.name, screen.route) disabled=screen.added class=(screenPath == screen.route and screenName == screen.name ? TreeRowSelected : TreeRow) testId=`discovered-${i}` aria-label=`${screen.name}, ${screen.route}` display="flex" align-items="center" gap=10 height=40 flex-shrink=0 padding="0 8px" border-width=0 color=(screenPath == screen.route and screenName == screen.name ? "ink.selected" : "ink.primary") opacity=(screen.added ? 0.55 : 1)
                                     column color="ink.muted" flex-shrink=0
                                       Icon(name=(screen.added ? "check" : "route"), size=14, angle=0)
                                     column flex=1 min-width=0 gap=0 align-items="flex-start"

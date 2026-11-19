@@ -7,15 +7,19 @@ theme
   surface.raised = light-dark(#ffffff, #4a4a4a)
   surface.canvas = light-dark(#f5f5f5, #1e1e1e)
   surface.hover = light-dark(#f0f0f0, #383838)
+  surface.hover-wash = light-dark(#00000014, #ffffff12)
   surface.pressed = light-dark(#e5e5e5, #444444)
   surface.action = #0877c9 scheme=fixed
+  surface.action-pressed = #055a99 scheme=fixed
   surface.selected = light-dark(#e5f4ff, #164b70)
+  surface.selected-pressed = light-dark(#c2e2fb, #2a6fa3)
   surface.notice = light-dark(#f2f9ff, #1f3242)
   surface.scrim = #00000059 scheme=fixed
   surface.diff-add = light-dark(#e7f7ec, #1c3324)
   surface.diff-remove = light-dark(#fdeeee, #3d2326)
   line.subtle = light-dark(#e6e6e6, #3e3e3e)
   line.strong = light-dark(#d4d4d4, #505050)
+  line.hover = light-dark(#b8b8b8, #7a7a7a)
   ink.primary = light-dark(#242424, #f5f5f5)
   ink.secondary = light-dark(#595959, #bfbfbf)
   ink.muted = light-dark(#6c6c6c, #a5a5a5)
