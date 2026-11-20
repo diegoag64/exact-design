@@ -716,6 +716,129 @@ test "label every gap and show that they share one value"
   expect state spacingHover == ""
   expect tree missing "spacing-linked"
 
+test "focus a deeply nested layer group and navigate back out"
+  size 1440x900
+  request POST "http://127.0.0.1:5176/mode" {"mode":"elements-deep"}
+  tap "view-view-1"
+  clock data
+  type "preview-url" "http://127.0.0.1:5176/"
+  type "preview-url" key "Enter"
+  clock data
+  tap "edit-app"
+  clock data
+  clock +3500 real
+  clock data
+  expect state elementTree.length == 19
+  expect tree missing "layer-focus"
+  expect tree missing "focus-element-0"
+  expect tree missing "focus-element-17"
+  tap "focus-element-14"
+  clock data
+  expect tree has "layer-focus"
+  expect text "layer-focus-current" == "Level 10"
+  expect text "layer-focus-parent" == "Level 9"
+  expect tree has "layer-focus-more"
+  expect focused "layer-focus-back"
+  expect state focusedLayerDepth == 11
+  expect tree missing "element-1"
+  expect tree missing "element-13"
+  expect tree has "element-14"
+  expect tree has "element-18"
+  expect tree missing "focus-element-14"
+  tap "element-17" hover
+  clock data
+  expect state hoveredElement == "root/0:main/1:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div/0:span"
+  tap "layer-focus-parent" hover
+  clock data
+  expect state hoveredElement == "root/0:main/1:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div"
+  tap "element-17"
+  clock +500 real
+  clock data
+  expect text "selected-element-name" == "Leaf A"
+  expect text "layer-focus-current" == "Level 10"
+  tap "layer-focus-back"
+  clock data
+  expect text "layer-focus-current" == "Level 9"
+  expect focused "element-14"
+  tap "layer-focus-all"
+  clock data
+  expect tree missing "layer-focus"
+  expect tree has "element-1"
+  expect focused "element-13"
+  expect text "selected-element-name" == "Leaf A"
+  tap "focus-element-14"
+  clock data
+  request POST "http://127.0.0.1:5176/fixture/deep" {"levels":6}
+  clock +1500 real
+  clock data
+  expect state elementTree.length == 13
+  expect text "layer-focus-current" == "Level 6"
+  expect state focusedLayerDepth == 7
+  expect focused "layer-focus-back"
+  tap "fold-element-10"
+  expect tree missing "element-11"
+  request POST "http://127.0.0.1:5176/fixture/deep" {"levels":12}
+  clock +1500 real
+  clock data
+  expect state elementTree.length == 19
+  expect text "layer-focus-current" == "Level 10"
+  expect tree has "element-14"
+  expect tree has "element-17"
+  tap "layer-focus-all"
+  clock data
+  expect focused "element-14"
+  expect tree has "element-11"
+  tap "focus-element-14"
+  clock data
+  request POST "http://127.0.0.1:5176/fixture/deep" {"levels":12,"lead":true}
+  clock +1500 real
+  clock data
+  expect state elementTree.length == 20
+  expect text "layer-focus-current" == "Level 10"
+  expect state focusedLayerId == "root/0:main/1:div/1:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div/0:div"
+  expect focused "layer-focus-back"
+  request POST "http://127.0.0.1:5176/fixture/deep" {"levels":12}
+  clock +1500 real
+  clock data
+  expect state elementTree.length == 19
+  expect text "layer-focus-current" == "Level 10"
+  request POST "http://127.0.0.1:5176/fixture/deep" {"levels":12,"renumber":true}
+  clock +1500 real
+  clock data
+  expect text "layer-focus-current" == "Deep"
+  request POST "http://127.0.0.1:5176/fixture/deep" {"levels":12}
+  clock +1500 real
+  clock data
+  expect text "layer-focus-current" == "Level 10"
+  request POST "http://127.0.0.1:5176/fixture/select" {"site":202}
+  clock +1000 real
+  clock data
+  expect text "selected-element-name" == "Level 3"
+  expect text "layer-focus-current" == "Level 3"
+  request POST "http://127.0.0.1:5176/fixture/select" {"site":1}
+  clock +1000 real
+  clock data
+  expect text "selected-element-name" == "Header"
+  expect tree missing "layer-focus"
+  expect tree has "element-17"
+  request POST "http://127.0.0.1:5176/fixture/select" {"site":202}
+  clock +1000 real
+  clock data
+  expect text "selected-element-name" == "Level 3"
+  tap "element-17" contextmenu
+  tap "menu-focus-layer"
+  clock +500 real
+  clock data
+  expect text "selected-element-name" == "Leaf A"
+  clock data
+  expect text "layer-focus-current" == "Level 12"
+  expect tree has "element-17"
+  expect tree missing "element-15"
+  tap "edit-app"
+  clock data
+  expect state editing == false
+  expect state focusedLayerId == ""
+
 test "reveal an offscreen canvas selection and reveal it again after manual scrolling"
   size 1440x900
   request POST "http://127.0.0.1:5176/mode" {"mode":"elements-long"}

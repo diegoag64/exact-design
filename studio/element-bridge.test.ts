@@ -399,7 +399,9 @@ test('selection restoration waits for the new plan and verifies the source locat
   events=[{event:'selection',build:'page',site:40,instance:[],source,rows:[]}];
   await s.poll();expect(s.view().restoring).toBe(false);expect(s.view().selectedLabel).toBe('Save');
   expect(s.view().selectionRevision).toBe(1);
-  const immediate=s.navigate('new');expect(immediate.selecting).toBe(true);expect(immediate.tree[0].selected).toBe(true);expect(immediate.rows).toEqual([]);
+  const immediate=s.navigate('new');expect(immediate.selecting).toBe(true);expect(immediate.tree[0].selected).toBe(true);
+  // Layers focus follows the source identity, which survives a shift in tree paths.
+  expect(immediate.tree[0].identity).toBe('[40,[]]');expect(immediate.rows).toEqual([]);
   expect(immediate.selectionRevision).toBe(2);
   events=[{event:'selection',build:'page',site:2,instance:[],source,rows:[]}];
   await s.poll();expect(s.view().selecting).toBe(true);

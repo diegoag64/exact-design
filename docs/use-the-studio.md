@@ -97,6 +97,12 @@ A running cloud iPhone uses your plan's simulator time. It stops when you click 
 4. Click **Review** to inspect changes grouped by source file.
 5. Revert individual changes if needed, then click **Apply changes**.
 
+### Focus a nested group
+
+In a deep layout, focus one group of the Layers tree to see only what it holds. Hover a layer that holds others and click its focus button, or right-click an element on the canvas or in the tree and choose **Focus in layers**. For an element without children, the menu focuses its parent group. The focused tree indents from the group, so nesting stays readable however deep the group sits.
+
+The path above the tree shows the layers icon (**All layers**), the parent group and the focused group. Click the back arrow or the parent to go up one level, the **…** to go up two, or the layers icon to see the whole tree again. Going up keeps the group you came from in view and focused. Hovering a layer or a path item outlines its element in the previews, and selecting works as usual. Selecting an element outside the focused group, on the canvas or with **Select parent**, widens the focus to the closest group that holds both, or shows all layers. If the focused group leaves the page, the tree focuses its nearest parent that remains, and returns to the group when it renders again. Finishing editing clears the focus.
+
 Property edits create a local draft. They do not write source until Apply. Drafts survive reloads and remain after **Done editing**. Use draft undo to undo an edit, or discard to restore the source values.
 
 ### Adjust values precisely
