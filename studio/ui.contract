@@ -460,6 +460,26 @@ component MenuCheck
       if shortcut != ""
         text shortcut color="ink.muted" font="type.caption" aria-hidden=true
 
+// One choice among a menu's options: a check mark on the chosen one, `role="menuitemradio"`. Choosing closes the menu.
+component MenuRadio
+  props
+    label: string
+    icon: string
+    checked: bool
+    menu: string
+    testId: string
+    press: action
+  view
+    button id=testId press=press class=MenuRow role="menuitemradio" aria-checked=checked popovertarget=menu popovertargetaction="hide" testId=testId color="ink.primary"
+      if checked
+        Icon(name="check", size=16, angle=0)
+      else
+        column width=16 flex-shrink=0
+      text label flex=1 font="type.body"
+      if icon != ""
+        column color="ink.muted" flex-shrink=0
+          Icon(name=icon, size=16, angle=0)
+
 component Divider
   view
     column width=1 height=16 flex-shrink=0 margin="0 4px" background-color="line.subtle" aria-hidden=true

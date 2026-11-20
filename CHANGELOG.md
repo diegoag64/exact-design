@@ -6,6 +6,7 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Added
 
+- A layout menu beside **Tidy up** in the Screens panel. Choose **Single column** or **Collage** to arrange the canvas at once; the menu marks the current layout, works from the keyboard, and the studio remembers the choice for later tidies and loading previews. The `layout=collage` address option still selects the collage when a page loads.
 - A collage arrangement for demos: add `layout=collage` to the studio's address, and **Tidy up** and setup links pack screens into columns so the workspace fits one view. Each screen's viewports stay side by side.
 - Waymark, a second demo app: the companion app for an invented adventure game, with painted backdrops, a scrolling realm map, quests, rewards, badges and statistics. Start it with `bun run demo:waymark`. `bun tools/demo.mjs --app <name>` selects a demo, and Ember stays the default.
 - **Lumen**, a finance example app: a personal finance app built with Exact, with Home, Activity, Cards, Budgets and Goals tabs, Send money, Add to a goal, Payment and Account sheets, and a Welcome screen. Its panels use Liquid Glass on iOS 26. Start it with `bun run demo:lumen` and open the printed setup link. Native previews recognize it.
@@ -36,6 +37,8 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 - While editing an app, Escape clears the selected element, from the canvas or the studio, and inspection continues. With nothing selected, Escape finishes editing. The inspector also has a **×** beside the selected element's name.
 
 ### Fixed
+
+- Tidy up in a single column places hidden screens below the visible rows, as the collage does, instead of leaving gaps between visible screens. Setup links with `show` lay out the screens they hide the same way. Layout choices after setup links and bulk adds share their undo step. Later measurements update displayed positions without adding undo or timeline entries.
 
 - Canvas previews show the first five repeated list rows by default, with per-viewport choices for 10, 20, or all loaded rows. Preview keeps the full scrollable app, and tidied screen rows stay separated as late content loads.
 

@@ -1,5 +1,5 @@
 use Icon from "./icons.contract"
-use Tool, SmallTool, Field, FieldShell, TreeRow, PanelSection, SectionHead, FloatingBar, Segmented, Segment, RowButton, PrimaryButton, SecondaryButton, Dialog, Menu, IconButton, SmallButton, ToolbarButton, SectionHeading, FieldLabel, InlineField, MenuItem, MenuDivider, Divider, Kbd, PropertyField, VisibilityButton, ExpoMark, screensWidth, inspectorWidth, MenuCheck from "./ui.contract"
+use Tool, SmallTool, Field, FieldShell, TreeRow, PanelSection, SectionHead, FloatingBar, Segmented, Segment, RowButton, PrimaryButton, SecondaryButton, Dialog, Menu, IconButton, SmallButton, ToolbarButton, SectionHeading, FieldLabel, InlineField, MenuItem, MenuDivider, Divider, Kbd, PropertyField, VisibilityButton, ExpoMark, screensWidth, inspectorWidth, MenuCheck, MenuRadio from "./ui.contract"
 
 routes nav
   editor "/"
@@ -730,10 +730,23 @@ component Studio
     addingViewport = false
     startTidy()
     command("variants", name)
-  // `layout=collage` in the studio's address packs screens into columns when tidying, for a workspace that fits one view.
-  derive collage = searchParam(top(nav), "layout") == "collage"
+  // Tidy up's layout: "column" stacks one row per screen; "collage" packs the rows into columns so the workspace fits one view.
+  // The choice persists. `layout=collage` in the studio's address is a setup shortcut: it selects the collage on each load
+  // until a layout is chosen from the menu on that page.
+  state tidyLayout = "column" persist
+  state tidyLayoutChosen = false
+  derive collage = tidyLayoutChosen ? tidyLayout == "collage" : (searchParam(top(nav), "layout") == "collage" or tidyLayout == "collage")
+  derive layoutName = collage ? "Collage" : "Single column"
+  // An explicit tidy records its layout immediately; measurements update displayed rows.
   action tidyUp
+    watchTidy()
     command("arrange", (collage ? "collage" : ""))
+  // Choosing a layout tidies the canvas in it at once, as one undo step.
+  action chooseLayout(layout: string)
+    tidyLayout = layout
+    tidyLayoutChosen = true
+    watchTidy()
+    command("arrange", (layout == "collage" ? "collage" : ""))
   state projectName = ""
   state projectUrl = ""
   state projectNameChanged = false
@@ -825,14 +838,23 @@ component Studio
   state tidySignature = ""
   state tidyFit = false
   state tidyFitted = ""
+  // Each window gets its own 20-second deadline.
+  state tidyRun = 0
   action startTidy
     tidyWhenReady = true
+    tidyRun = tidyRun + 1
     tidySignature = ""
     tidyFit = true
     tidyFitted = ""
+  // Observe loading without inheriting a bulk add's camera refit.
+  action watchTidy
+    tidyWhenReady = true
+    tidyRun = tidyRun + 1
+    tidySignature = previews.signature
+    tidyFit = false
   action finishTidy
     tidyWhenReady = false
-  task stopTidy when tidyWhenReady
+  task stopTidy when tidyWhenReady key=tidyRun
     after(20000, finishTidy)
   action tidyLoadedScreens
     tidySignature = previews.signature
@@ -984,7 +1006,6 @@ component Studio
       tidyWhenReady = false
     send changed = edit("property", key, value, 0, 0, time.epochAtZero + performanceNow())
   action down(e: PointerEvent)
-    tidyWhenReady = false
     cancelPan()
     fitWhenReady = false
     tidyFit = false
@@ -999,6 +1020,9 @@ component Studio
         send changed = edit("hit", "", `${zoom}`, (e.offsetX - cameraX) / zoom, (e.offsetY - cameraY) / zoom, time.epochAtZero + performanceNow())
   action move(e: PointerEvent)
     if dragging
+      // Moving a frame ends settling, so a late tidy never pulls it back.
+      if not hand
+        tidyWhenReady = false
       freeDrag = e.altKey
       dx = (e.offsetX - sx) / zoom
       dy = (e.offsetY - sy) / zoom
@@ -1163,6 +1187,9 @@ component Studio
       column id="plan-menu" popover="auto" role="menu" aria-label="Plan view options" class=Menu testId="plan-menu"
         MenuCheck(label="Layout boxes", shortcut="⇧B", checked=planBoxes, testId="plan-boxes", press=togglePlanBoxes)
         MenuCheck(label="Readable text", shortcut="⇧T", checked=planText, testId="plan-text", press=togglePlanText)
+      column id="layout-menu" popover="auto" role="menu" aria-label="Tidy up layout" class=Menu testId="layout-menu"
+        MenuRadio(label="Single column", icon="rows-2", checked=not collage, menu="layout-menu", testId="layout-column", press=chooseLayout("column"))
+        MenuRadio(label="Collage", icon="layout-grid", checked=collage, menu="layout-menu", testId="layout-collage", press=chooseLayout("collage"))
       column id="studio-menu" popover="auto" role="menu" aria-label="Canvas actions" class=Menu
         MenuItem(label="Undo", icon="undo-2", shortcut="⌘Z", disabled=(editing ? not appCanUndo : not doc.canUndo), destructive=false, menu="studio-menu", testId="menu-undo", press=command("undo", ""))
         if not editing
@@ -1188,7 +1215,7 @@ component Studio
         MenuItem(label=(planView ? "Hide plan view" : "Show plan view"), icon="drafting-compass", shortcut="⇧P", disabled=false, destructive=false, menu="studio-menu", testId="menu-plan", press=togglePlanView)
         MenuDivider()
         if not editing
-          MenuItem(label="Tidy up", icon="layout-grid", shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-tidy", press=tidyUp)
+          MenuItem(label="Tidy up", icon=(collage ? "layout-grid" : "rows-2"), shortcut="", disabled=false, destructive=false, menu="studio-menu", testId="menu-tidy", press=tidyUp)
         MenuItem(label="Zoom to fit", icon="maximize", shortcut="⇧1", disabled=false, destructive=false, menu="studio-menu", testId="menu-fit", press=resetView)
         MenuItem(label=(editing or doc.frameSelected ? "Zoom to screen" : "Zoom to selection"), icon="scan", shortcut="⇧2", disabled=false, destructive=false, menu="studio-menu", testId="menu-fit-selection", press=fitSelection)
         MenuDivider()
@@ -1223,7 +1250,9 @@ component Studio
                   else
                     row height=40 flex-shrink=0 box-sizing="border-box" align-items="center" gap=4 padding="0 12px 0 16px"
                       SectionHeading(label="Screens")
-                      SmallButton(icon="layout-grid", label="Tidy up", hint="Tidy up · Arrange the canvas in one row per screen", selected=false, disabled=false, testId="tidy-up", press=tidyUp)
+                      SmallButton(icon=(collage ? "layout-grid" : "rows-2"), label="Tidy up", hint=(collage ? "Tidy up · Pack screens into columns as a collage · Each screen's viewports stay side by side" : "Tidy up · Arrange one row per screen in a single column"), selected=false, disabled=false, testId="tidy-up", press=tidyUp)
+                      button popovertarget="layout-menu" class=SmallTool width=24 padding=0 margin-left=-4 aria-label="Tidy up layout" aria-haspopup="menu" data-tip=`Tidy up layout · ${layoutName}` testId="layout-options" color="ink.secondary" background-color="transparent"
+                        Icon(name="chevron-down", size=12, angle=0)
                       SmallButton(icon="plus", label="Add screen", hint="Add screen · Choose a route from your project or start a blank screen", selected=false, disabled=false, testId="add-screen", press=addScreen)
                     scroll flex=1 min-height=0
                       column padding="0 8px 12px" gap=1

@@ -995,6 +995,65 @@ test "add a device set to a screen and tidy up"
   clock data
   expect state doc.views.1.x == 800
 
+test "tidy up arranges screens in the layout chosen beside it"
+  size 1440x900
+  at "/?connect=http://127.0.0.1:5176&name=Discovered%20app&viewports=Phone"
+  request POST "http://127.0.0.1:5176/mode" {"mode":"updated"}
+  reload
+  clock data
+  clock +600 real
+  clock data
+  expect state doc.views.length == 3
+  expect state tidyLayout == "column"
+  expect state collage == false
+  expect state doc.views.1.x == 0
+  expect state doc.views.2.x == 0
+  tap "layout-options"
+  tap "layout-collage"
+  clock data
+  expect state tidyLayout == "collage"
+  expect state collage == true
+  expect state tidyWhenReady == true
+  expect state tidyFit == false
+  expect state doc.views.1.x >= 500
+  expect state doc.views.2.x >= 1000
+  tap "undo"
+  clock data
+  expect state tidyWhenReady == false
+  expect state doc.views.1.x == 0
+  expect state tidyLayout == "collage"
+  tap "redo"
+  clock data
+  expect state doc.views.1.x >= 500
+  tap "undo"
+  clock data
+  expect state doc.views.1.x == 0
+  tap "tidy-up"
+  clock data
+  expect state tidyWhenReady == true
+  expect state doc.views.1.x >= 500
+  expect state doc.views.2.x >= 1000
+  reload
+  clock data
+  expect state tidyLayout == "collage"
+  expect state collage == true
+  tap "layout-options"
+  tap "layout-column"
+  clock data
+  expect state tidyLayout == "column"
+  expect state doc.views.1.x == 0
+  expect state doc.views.2.x == 0
+
+test "a layout=collage address selects the collage until another layout is chosen"
+  size 1440x900
+  at "/?layout=collage"
+  expect state tidyLayout == "column"
+  expect state collage == true
+  tap "layout-options"
+  tap "layout-column"
+  expect state collage == false
+  expect state tidyLayout == "column"
+
 test "add every discovered screen with a device set"
   size 1440x900
   request POST "http://127.0.0.1:5176/mode" {"mode":"normal"}

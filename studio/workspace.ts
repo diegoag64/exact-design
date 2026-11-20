@@ -44,6 +44,8 @@ export function loadWorkspace(value: unknown): Workspace {
 }
 export class WorkspaceEditor {
   document = createWorkspace(); active = 'view-1'; selected = ''; past: Workspace[] = []; future: Workspace[] = [];
+  /** The next automatic layout choice can join the bulk add or setup that requested it. */
+  private settling = false;
   contentSizes=new Map<string,{source:string;width:number;viewportHeight:number;height:number;listRows?:number}>();
   get frames(){
     const frames=this.document.views.map(v=>{const screen=this.document.screens.find(s=>s.id===v.screenId)!,source=screenSource(screen,this.document.project),size=this.contentSizes.get(v.id);return source&&v.heightMode!=='fixed'&&size?.source===source&&size.width===v.width&&size.viewportHeight===v.height&&(size.listRows??5)===(v.listRows??5)?{...v,height:size.height}:{...v};});
@@ -54,9 +56,9 @@ export class WorkspaceEditor {
     const x0=Math.min(...frames.map(v=>v.x)),y0=Math.min(...frames.map(v=>v.y));
     const rows=this.document.screens.map(screen=>frames.filter(v=>v.screenId===screen.id).sort((a,b)=>a.x-b.x||a.y-b.y)).filter(row=>row.length);
     const lay=(row: typeof frames,x: number,y: number)=>{for(const v of row){v.x=Math.round(x);v.y=Math.round(y);x+=v.width+FRAME_GAP;}};
+    const shown=rows.filter(row=>row.some(v=>this.isShown(v.id))),rest=rows.filter(row=>!shown.includes(row));
     if(collage) {
       // Hidden screens keep a row each below the collage, so showing one later never lands on another frame.
-      const shown=rows.filter(row=>row.some(v=>this.isShown(v.id))),rest=rows.filter(row=>!shown.includes(row));
       const span=(row: typeof frames)=>row.reduce((w,v)=>w+v.width,0)+FRAME_GAP*(row.length-1),tall=(row: typeof frames)=>Math.max(...row.map(v=>v.height));
       const width=Math.max(0,...shown.map(span)),gutter=FRAME_GAP*2;
       // Each row goes to the shortest column; the column count whose outline is nearest a wide screen's wins.
@@ -66,7 +68,7 @@ export class WorkspaceEditor {
       for(const cell of best?.cells??[]) lay(cell.row,x0+cell.c*(width+gutter),y0+cell.y);
       let y=y0+(best?best.height+FRAME_GAP:0); for(const row of rest){lay(row,x0,y);y+=tall(row)+FRAME_GAP;}
     } else {
-      let y=y0; for(const row of rows){lay(row,x0,y);y+=Math.max(...row.map(v=>v.height))+FRAME_GAP;}
+      let y=y0; for(const row of [...shown,...rest]){lay(row,x0,y);y+=Math.max(...row.map(v=>v.height))+FRAME_GAP;}
     }
   }
   private manualLayout(d:Workspace){
@@ -100,12 +102,14 @@ export class WorkspaceEditor {
   change(work: (d: Workspace) => void): boolean {
     const next = structuredClone(this.document); work(next);
     if (JSON.stringify(next) === JSON.stringify(this.document)) return false;
+    // A real edit ends merging into a settling step; a no-op, such as a click that moves nothing, keeps it.
+    this.settling = false;
     this.past.push(this.document); if (this.past.length > 100) this.past.shift(); this.document = next; this.future = []; this.reconcile();
     return true;
   }
   reconcile() { if (!this.document.views.some(v => v.id === this.active)) this.active = this.document.views[0].id; if (!this.target) this.selected = ''; }
-  undo() { const d=this.past.pop(); if(d) { this.future.push(this.document); this.document=d; this.reconcile(); } }
-  redo() { const d=this.future.pop(); if(d) { this.past.push(this.document); this.document=d; this.reconcile(); } }
+  undo() { this.settling=false; const d=this.past.pop(); if(d) { this.future.push(this.document); this.document=d; this.reconcile(); } }
+  redo() { this.settling=false; const d=this.future.pop(); if(d) { this.past.push(this.document); this.document=d; this.reconcile(); } }
   select(id: string) { if(this.document.views.some(v=>v.id===id)) this.active=id; this.selected=id; }
   private id(prefix: string) { let i=1; const ids=[...this.document.views,...this.document.screens].map(n=>n.id); while(ids.includes(`${prefix}-${i}`)) i++; return `${prefix}-${i}`; }
   addView(preset: string, independent = false, duplicate = false) {
@@ -138,9 +142,11 @@ export class WorkspaceEditor {
       d.project={name:'',url:''};
     });
   }
-  addScreen(name: string, path: string, preset: string, linked: boolean) { this.addScreens([{name, route: path}], preset, linked); }
-  /** Add screens in one undo step: one row each, with a viewport per device in the chosen device or set. */
-  addScreens(items: NewScreen[], choice: string, linked: boolean) {
+  /** One screen; like the studio, only a device set starts a settling window for it. */
+  addScreen(name: string, path: string, preset: string, linked: boolean) { this.addScreens([{name, route: path}], preset, linked); this.settling=!!deviceSets[preset]; }
+  /** Add screens in one undo step: one row each, with a viewport per device in the chosen device or set.
+   *  Rows that `later` names (screens about to be hidden) go below the others, where Tidy up keeps hidden screens. */
+  addScreens(items: NewScreen[], choice: string, linked: boolean, later?: (row: {name: string; route: string}) => boolean) {
     const sizes = resolveDevices(choice), list = sizes.length ? sizes : [{name: 'Custom', width: 720, height: 520}];
     if(!items.length) throw new Error('There are no screens to add.');
     if(linked && !this.document.project.url) throw new Error('Connect a project first.');
@@ -154,9 +160,12 @@ export class WorkspaceEditor {
       if(route)seen.add(route); rows.push({name:item.name.trim().slice(0,120),route});
     }
     let y=Math.max(...this.frames.map(v=>v.y+v.height))+FRAME_GAP; let first='';
+    const placed=later?[...rows.filter(row=>!later(row)),...rows.filter(row=>later(row))]:rows;
     this.change(d=>{
-      for(const row of rows) {
-        const screenId=this.nextId(d,'screen'); d.screens.push({id:screenId,name:row.name,route:row.route,source:'',layers:[]});
+      // Screens join the library in the given order; their rows are laid out in placement order.
+      const ids=new Map(rows.map(row=>{const screenId=this.nextId(d,'screen');d.screens.push({id:screenId,name:row.name,route:row.route,source:'',layers:[]});return [row,screenId];}));
+      for(const row of placed) {
+        const screenId=ids.get(row)!;
         let x=0;
         for(const size of list) {
           const id=this.nextId(d,'view'); first||=id;
@@ -165,7 +174,7 @@ export class WorkspaceEditor {
         y+=Math.max(...list.map(size=>size.height))+FRAME_GAP;
       }
     });
-    this.active=first;this.selected=first;
+    this.active=first;this.selected=first;this.settling=true;
   }
   /** Add each device of a set to the active screen that it does not already show, in one undo step. */
   addViews(choice: string) {
@@ -176,15 +185,18 @@ export class WorkspaceEditor {
     if(this.document.views.length+fresh.length>200) throw new Error('This workspace is full.');
     let x=Math.max(...this.frames.map(v=>v.x+v.width))+FRAME_GAP; const y=this.view.y; let first='';
     this.change(d=>{for(const size of fresh){const id=this.nextId(d,'view');first||=id;d.views.push({id,screenId,name:size.name,x,y,width:size.width,height:size.height,heightMode:'content'});x+=size.width+FRAME_GAP;}});
-    this.active=first;this.selected=first;
+    this.active=first;this.selected=first;this.settling=true;
   }
-  /** Tidy is one undoable layout choice. Later measurements only change displayed geometry. */
-  arrange(_settle=false, collage=false): boolean {
+  /** Record the layout choice once; measurements only change displayed geometry.
+   * An automatic choice joins its requesting add/setup, never a later edit or undo. */
+  arrange(settle=false, collage=false): boolean {
+    if(settle&&!this.settling)return false;
     if(this.document.arranged&&!!this.document.arrangedCollage===collage)return false;
     const frames=this.frames;this.placeRows(frames,collage);
-    this.change(d=>{d.arranged=true;d.arrangedCollage=collage;for(const v of d.views){const frame=frames.find(f=>f.id===v.id)!;v.x=frame.x;v.y=frame.y;}});
+    const place=(d:Workspace)=>{d.arranged=true;d.arrangedCollage=collage;for(const v of d.views){const frame=frames.find(f=>f.id===v.id)!;v.x=frame.x;v.y=frame.y;}};
+    if(settle){const next=structuredClone(this.document);place(next);this.document=next;this.future=[];return true;}
+    this.change(place);
     return false;
-
   }
   /** True for the untouched starter workspace, which a project setup may replace. */
   isPristine() {
@@ -199,13 +211,14 @@ export class WorkspaceEditor {
   /** Connect a project and add each of its routes the library lacks, replacing an untouched starter screen; one undo step.
    *  A non-empty `show` (screen names or routes) leaves only the matching project screens visible; with no match, visibility is unchanged. */
   setupProject(name: string, url: string, routes: NewScreen[], choice: string, show: string[] = []) {
-    const pristine=this.isPristine(),starter=this.document.screens[0]?.id;
+    const pristine=this.isPristine(),starter=this.document.screens[0]?.id,before=this.document;
     this.batch(()=>{
       if(this.document.project.url!==projectUrl(url)) this.connectProject(name||'Project',url);
       const have=new Set(this.document.screens.map(s=>s.route)),missing=routes.filter(r=>!hasRouteParameters(r.route)&&!have.has(screenRoute(r.route)));
-      if(missing.length) {this.addScreens(missing,choice,true);this.change(d=>{d.arranged=true;});}
+      const wanted=new Set(show.map(entry=>entry.trim().toLowerCase()).filter(Boolean)),listed=(s:{name:string;route:string})=>wanted.has(s.name.toLowerCase())||wanted.has(s.route);
+      const filtering=wanted.size>0&&[...this.document.screens,...missing.map(r=>({name:r.name.trim(),route:screenRoute(r.route)}))].some(s=>s.route&&listed(s));
+      if(missing.length) {this.addScreens(missing,choice,true,filtering?row=>!listed(row):undefined);this.change(d=>{d.arranged=true;});}
       if(pristine&&missing.length) this.change(d=>{d.views=d.views.filter(v=>v.screenId!==starter);d.screens=d.screens.filter(s=>s.id!==starter);});
-      const wanted=new Set(show.map(entry=>entry.trim().toLowerCase()).filter(Boolean)),listed=(s:Screen)=>wanted.has(s.name.toLowerCase())||wanted.has(s.route);
       if(wanted.size&&this.document.screens.some(s=>s.route&&listed(s))) this.change(d=>{
         for(const s of d.screens) {
           if(!s.route) continue;
@@ -217,6 +230,8 @@ export class WorkspaceEditor {
       if(!this.isShown(this.active)){const first=this.shownFrames[0]?.id;if(first){this.active=first;this.selected=first;}}
     });
     this.reconcile();
+    // The tidy that follows a setup settles into the setup's undo step, whichever layout it uses.
+    this.settling=this.document!==before;
     return this.document.screens.filter(s=>s.route).length;
   }
   private nextId(d: Workspace, prefix: string) { let i=1; const ids=[...d.views,...d.screens].map(n=>n.id); while(ids.includes(`${prefix}-${i}`)) i++; return `${prefix}-${i}`; }
