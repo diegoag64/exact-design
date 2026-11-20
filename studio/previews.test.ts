@@ -49,3 +49,28 @@ test('external previews retain their source URL and fixed fallback height',async
   expect(result.frames[0]).toMatchObject({previewSource:'https://example.com/app',height:844,ready:true});await reader.cancel();
   expect(()=>previewScreens([{id:'bad',url:'file:///etc/passwd',width:390,height:844,auto:true}],new Request('http://localhost/previews'))).toThrow();
 });
+
+
+test('list samples persist, reject stale sizes, and undo independently per viewport',()=>{
+  const e=new WorkspaceEditor();e.select(e.active);e.property('source','http://localhost:5174/');
+  e.contentSizes.set(e.active,{source:e.source,width:720,viewportHeight:520,height:2000,listRows:5});
+  e.property('listRows','10');expect(e.frame.height).toBe(520);
+  expect(loadWorkspace(e.document).views[0].listRows).toBe(10);
+  e.undo();expect(e.frame.height).toBe(2000);e.redo();expect(e.view.listRows).toBe(10);
+  e.property('listRows','7');expect(e.view.listRows).toBe(10);
+  const invalid=structuredClone(e.document);invalid.views[0].listRows=7;expect(()=>loadWorkspace(invalid)).toThrow('sample');
+});
+
+test('arranged rows follow late content growth after reload without changing saved geometry or undo',()=>{
+  const e=new WorkspaceEditor();e.setupProject('App','http://localhost:5174',[{name:'Feed',route:'/'},{name:'Library',route:'/library'}],'Core');e.arrange();
+  const restored=new WorkspaceEditor();restored.document=loadWorkspace(e.document);
+  const phone=restored.document.views[0],library=restored.document.views.find(v=>v.screenId!==phone.screenId)!;
+  const before=JSON.stringify(restored.document);
+  restored.contentSizes.set(phone.id,{source:'http://localhost:5174/',width:phone.width,viewportHeight:phone.height,height:4000});
+  expect(restored.frames.find(v=>v.id===library.id)!.y).toBe(phone.y+4080);
+  expect(JSON.stringify(restored.document)).toBe(before);expect(restored.past).toHaveLength(0);
+  restored.select(library.id);restored.property('y','');expect(restored.document.arranged).toBe(true);restored.move(30,40);
+  expect(restored.document.arranged).toBeUndefined();expect(restored.frame.y).toBe(phone.y+4120);
+  restored.contentSizes.get(phone.id)!.height=5000;expect(restored.frame.y).toBe(phone.y+4120);
+  restored.undo();expect(restored.document.arranged).toBe(true);expect(restored.frame.y).toBe(phone.y+5080);
+});

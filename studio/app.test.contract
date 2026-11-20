@@ -426,6 +426,8 @@ test "project setup and viewport settings restore automatically without Save"
   tap "add-viewport"
   tap "variant-tablet"
   clock data
+  type "list-rows" "10"
+  clock data
   type "frame-width" "820"
   type "frame-width" key "Enter"
   clock data
@@ -440,6 +442,7 @@ test "project setup and viewport settings restore automatically without Save"
   expect state doc.selected == "view-3"
   expect state doc.source == "http://127.0.0.1:5176/"
   expect state doc.width == 820
+  expect state doc.views.2.listRows == "10"
   expect state doc.height == 1024
   tap "delete"
   clock data

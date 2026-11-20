@@ -32,7 +32,7 @@ If a preview is blank, use `127.0.0.1` for the editor URL and restart the app wi
 - Drag a frame title to move it. Hold Option or Alt to bypass snapping.
 - Drag the lower-right handle to resize a frame, or enter dimensions in the inspector.
 - Click **+** beside Viewport to add a linked size or device set.
-- Click **Tidy up** beside Screens to arrange the canvas. Click the arrow beside it to choose a layout: **Single column** stacks one row per screen, and **Collage** packs those rows into columns so the workspace fits one view, such as for a demo screenshot. Choosing a layout tidies the canvas in it at once, and the arrow's menu marks the current one. Both layouts keep each screen's viewports side by side, use loaded content heights so frames never overlap, and place hidden screens below the visible ones. The studio remembers the layout for later tidies. While previews load after a tidy, a bulk add or a setup link, the canvas keeps tidying as heights arrive, until you move a frame or undo. That tidying is part of the same undo step, so one **Undo** restores the previous arrangement. The chosen layout stays selected.
+- Click **Tidy up** beside Screens to arrange the canvas. Click the arrow beside it to choose a layout: **Single column** stacks one row per screen, and **Collage** packs those rows into columns so the workspace fits one view, such as for a demo screenshot. Choosing a layout tidies the canvas in it at once, and the arrow's menu marks the current one. Both layouts keep each screen's viewports side by side, use loaded content heights so frames never overlap, and place hidden screens below the visible ones. The studio remembers the layout for later tidies. Arranged rows follow content heights, including after reload, without adding undo steps. Moving a frame or changing its X or Y returns to free placement. One **Undo** restores the previous arrangement. The chosen layout stays selected.
 - To start a page in the collage, add `layout=collage` to the studio's address (`http://127.0.0.1:5173/?layout=collage`), for example on a setup link. The address selects the collage each time the page loads, until you choose a layout from the menu.
 - Click the zoom percentage to fit all screens.
 - Hover a screen or viewport in the sidebar and click its eye to hide it. A hidden screen hides all of its viewports. Hidden rows stay dimmed with a crossed-out eye; click it to show them again. Showing a viewport inside a hidden screen shows only that viewport.
@@ -41,7 +41,9 @@ Linked viewports share screen content. To create independent content, duplicate 
 
 For local previews, use **Auto** beside Height to expand frames to their rendered content. Enter a height to test a fixed device viewport. Modal routes keep the device height. Auto height does not load unrendered items in infinite feeds or virtualized lists.
 
-Use **Preview** to interact with the app. Local previews share supported app data and root state, while navigation and scroll remain separate for each frame.
+Connected Exact lists show a sample of the first five repeated rows on the canvas. Select a viewport and use **List preview** to choose 5, 10, 20, or **All loaded rows**. The choice is saved per viewport. Samples clip vertical row groups inside Exact lists; horizontal carousels, grids, and ordinary page content keep their layout. Rows outside the sample remain in the app's data. Sampling does not create fixtures or load missing rows.
+
+Use **Preview** to scroll and interact with the full app at the viewport's device height, without the canvas sample. Local previews share supported app data and root state, while navigation and scroll remain separate for each frame.
 
 ## Preview on the iOS Simulator
 

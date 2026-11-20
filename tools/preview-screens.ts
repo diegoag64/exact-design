@@ -1,23 +1,23 @@
 import {bridgeFor,type ElementBridge} from './element-bridge';
 import {localPreview} from '../studio/project';
 import {validSource} from '../studio/workspace';
-export type PreviewRequest={id:string;url:string;width:number;height:number;auto:boolean};
+export type PreviewRequest={id:string;url:string;width:number;height:number;auto:boolean;listRows?:number};
 export function previewPath(value:string){const u=new URL(value,'http://localhost');for(const key of [...u.searchParams.keys()])if(key.startsWith('__ed_')||key==='__exactDev')u.searchParams.delete(key);return u.pathname+u.search;}
 /** A workspace subscribes before its frames load, independent of inspect mode. */
 export function previewScreens(body:any,request:Request){
   if(!Array.isArray(body)||body.length>200)throw new Error('Invalid preview screens.');
   const bridges=new Set<ElementBridge>();
   const entries=body.map((v:PreviewRequest)=>{
-    if(!v||typeof v.id!=='string'||v.id.length>100||!validSource(v.url)||![v.width,v.height].every(n=>Number.isFinite(n)&&n>=100&&n<=10000)||typeof v.auto!=='boolean')throw new Error('Invalid preview screen.');
+    if(!v||typeof v.id!=='string'||v.id.length>100||!validSource(v.url)||![v.width,v.height].every(n=>Number.isFinite(n)&&n>=100&&n<=10000)||typeof v.auto!=='boolean'||(v.listRows!==undefined&&![0,5,10,20].includes(v.listRows)))throw new Error('Invalid preview screen.');
     const bridge=localPreview(v.url)?bridgeFor(new URL(v.url).origin):null;
     if(bridge)bridges.add(bridge);
     return {v,bridge};
   });
   const snapshot=()=>({frames:entries.map(({v,bridge})=>{
     const frame=bridge?.frames.get(v.id),src=new URL(v.url||'about:blank');
-    if(bridge){src.host=new URL(bridge.origin).host;src.searchParams.set('__ed_frame',v.id);src.searchParams.set('__ed_events','project-v2');src.searchParams.set('__ed_canvas','1');src.searchParams.set('__ed_height',String(v.height));src.searchParams.set('__ed_full',v.auto?'1':'0');}
-    const measured=frame&&frame.contentHeight!==undefined&&frame.width===v.width&&frame.viewportHeight===v.height&&frame.fullHeight===v.auto&&previewPath(frame.url??'')===previewPath(v.url);
-    return {id:v.id,source:v.url,previewSource:v.url?src.href:'',width:v.width,viewportHeight:v.height,auto:v.auto,height:measured&&v.auto?frame.contentHeight!:v.height,ready:!bridge||!!measured};
+    if(bridge){src.host=new URL(bridge.origin).host;src.searchParams.set('__ed_frame',v.id);src.searchParams.set('__ed_events','project-v2');src.searchParams.set('__ed_canvas','1');src.searchParams.set('__ed_height',String(v.height));src.searchParams.set('__ed_full',v.auto?'1':'0');src.searchParams.set('__ed_rows',String(v.listRows??5));}
+    const measured=frame&&frame.contentHeight!==undefined&&frame.width===v.width&&frame.viewportHeight===v.height&&frame.fullHeight===v.auto&&Number(new URL(frame.url??'','http://localhost').searchParams.get('__ed_rows')??5)===(v.listRows??5)&&previewPath(frame.url??'')===previewPath(v.url);
+    return {id:v.id,listRows:v.listRows??5,source:v.url,previewSource:v.url?src.href:'',width:v.width,viewportHeight:v.height,auto:v.auto,height:measured&&v.auto?frame.contentHeight!:v.height,ready:!bridge||!!measured};
   })});
   let controller:ReadableStreamDefaultController<Uint8Array>,timer:ReturnType<typeof setInterval>,last='';
   const publish=()=>{const text=JSON.stringify(snapshot());if(text===last)return;last=text;try{controller.enqueue(new TextEncoder().encode(`data: ${text}\n\n`));}catch{close();}};

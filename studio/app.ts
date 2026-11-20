@@ -37,13 +37,13 @@ async function discoverProject(owner:string,revision:number) {
   const routes=parseRoutes({routes:body.routes.map((r:{name:string;route:string})=>({name:r.name,pattern:r.route}))});
   return discoveryCache={owner,revision,routes,error:body.error};
 }
-function framePreview(source:string,id:string,height:number,auto:boolean,canvas:boolean){
+function framePreview(source:string,id:string,height:number,auto:boolean,canvas:boolean,listRows=5){
   if(!source)return '';
   if(localPreview(source)&&!previewBridges.has(new URL(source).origin))return '';
   const url=new URL(source),bridge=previewBridges.get(url.origin);
   if(bridge&&bridge!==url.origin){
     url.host=new URL(bridge).host;url.searchParams.set('__ed_frame',scoped(id));url.searchParams.set('__ed_events','project-v2');url.searchParams.set('__ed_canvas',canvas?'1':'0');
-    url.searchParams.set('__ed_height',String(height));url.searchParams.set('__ed_full',auto?'1':'0');
+    url.searchParams.set('__ed_height',String(height));url.searchParams.set('__ed_full',auto?'1':'0');url.searchParams.set('__ed_rows',String(canvas?listRows:0));
   }
   return url.href;
 }
@@ -52,7 +52,7 @@ const snapshot = () => {
   const screens = new Map(document.screens.map(screen => [screen.id, {...screen, source:screenSource(screen,document.project)}]));
   const targets = editor.selected === editor.active ? snapTargets(editor.frame, shown) : {x: [], y: []};
   return {
-    frameX: editor.view.x, frameY: editor.view.y, snapX: targets.x, snapY: targets.y,
+    frameX: editor.frame.x, frameY: editor.frame.y, snapX: targets.x, snapY: targets.y,
     drawing: JSON.stringify({...document,views:shown, screens:[...screens.values()], active: editor.active}),
     projectName: document.project.name, projectUrl: document.project.url, route: editor.screen.route,
     groups: [...screens.values()].map(screen=>({id:screen.id,name:screen.name,route:screen.route,source:screen.source,
@@ -62,15 +62,16 @@ const snapshot = () => {
     name: document.name,
     // Screens the native preview drawer can capture: each connected screen with a route, keyed by screen id.
     nativeScreens:document.project.url?JSON.stringify({project:document.project.url,screens:document.screens.filter(s=>s.route).map(s=>({id:s.id,route:s.route}))}):'',
-    previewRequests:JSON.stringify(document.views.flatMap(v=>{const screen=screens.get(v.screenId)!;return screen.source&&editor.isShown(v.id)?[{id:scoped(v.id),url:screen.source,width:v.width,height:v.height,auto:localPreview(screen.source)&&v.heightMode!=='fixed'}]:[];})),
+    previewRequests:JSON.stringify(document.views.flatMap(v=>{const screen=screens.get(v.screenId)!;return screen.source&&editor.isShown(v.id)?[{id:scoped(v.id),url:screen.source,width:v.width,height:v.height,listRows:v.listRows??5,auto:localPreview(screen.source)&&v.heightMode!=='fixed'}]:[];})),
     layers: editor.layers,
     views: frames.map(view => {
       const screen = screens.get(view.screenId)!;
-      const previewSource=framePreview(screen.source,view.id,document.views.find(v=>v.id===view.id)!.height,view.heightMode!=='fixed',true);
-      const {heightMode,hidden:_,...geometry}=view;
-      return {...geometry,canAutoHeight:localPreview(screen.source),autoHeight:localPreview(screen.source)&&view.heightMode!=='fixed', source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name, hidden: !editor.isShown(view.id)};
+      const previewSource=framePreview(screen.source,view.id,document.views.find(v=>v.id===view.id)!.height,view.heightMode!=='fixed',true,view.listRows??5);
+      const {heightMode,hidden:_,listRows,...geometry}=view;
+      return {...geometry,listRows:String(listRows??5),canAutoHeight:localPreview(screen.source),autoHeight:localPreview(screen.source)&&view.heightMode!=='fixed', source: screen.source, previewSource, layers: screen.source ? [] : screen.layers, screenName: screen.name, hidden: !editor.isShown(view.id)};
     }),
-    previewSource:framePreview(editor.source,'preview-'+editor.active,editor.view.height,editor.view.heightMode!=='fixed',false),
+    previewHeight:editor.view.height,
+    previewSource:framePreview(editor.source,'preview-'+editor.active,editor.view.height,false,false),
     active: editor.active, screenId: editor.screen.id, source: editor.source,
     frameSelected: editor.selected === editor.active,
     width: editor.view.width, height: editor.frame.height, screenName: editor.screen.name,
@@ -146,7 +147,7 @@ const sources: Sources = {
       const result=JSON.parse(event.data);
       for(const frame of result.frames){
         if(frame.previewSource&&frame.source){const origin=new URL(frame.source).origin;const proxy=new URL(frame.previewSource).origin;if(proxy!==origin)previewBridges.set(origin,proxy);}
-        if(frame.ready)editor.contentSizes.set(unscoped(frame.id),{source:frame.source,width:frame.width,viewportHeight:frame.viewportHeight,height:frame.height});
+        if(frame.ready)editor.contentSizes.set(unscoped(frame.id),{source:frame.source,width:frame.width,viewportHeight:frame.viewportHeight,height:frame.height,listRows:frame.listRows??5});
       }
       return latest={requests,loaded:result.frames.filter((f:{ready:boolean})=>f.ready).length,total:result.frames.length,ready:!!result.frames.every((f:{ready:boolean})=>f.ready),signature:JSON.stringify(result.frames.map((f:{id:string;height:number;ready:boolean})=>[f.id,f.height,f.ready]))};
     }});
@@ -249,7 +250,7 @@ const sources: Sources = {
     if(op === 'delete') editor.remove();
     if(op === 'hide' || op === 'show') editor.setHidden(key, op === 'hide');
     const saved=await persistence.save(storage.fs,op==='save');
-    // Settling passes share one undo step, but each pass that moves frames still appears in the timeline, as an automatic tidy of every screen.
+    // Record an initial automatic layout choice; later measurements do not mutate the document.
     const settled=op==='arrange'&&key.endsWith('settle');
     if(saved)try{await logWorkspace(storage,before,op,settled?'All screens':target,timestamp,settled?'Tidy up as previews load':'');}catch{status='Could not save the timeline. Your workspace is saved.';}
     if(op==='save'&&saved&&!status)status='Saved';
