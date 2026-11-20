@@ -37,6 +37,8 @@ Notable changes to Exact Design. Dated development entries summarize Git commit 
 
 ### Fixed
 
+- Canvas previews show the first five repeated list rows by default, with per-viewport choices for 10, 20, or all loaded rows. Preview keeps the full scrollable app, and tidied screen rows stay separated as late content loads.
+
 - Setup links fetch current screens when another app takes over the same local server URL, instead of reusing the previous app’s cached screens.
 
 - Grouped draft edits roll back on failure and undo both alignment axes even at the history limit. Number scrubbing preserves valid negative values, alignment follows reversed flows, and Fixed sizing accounts for padding and borders.

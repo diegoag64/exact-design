@@ -2,6 +2,39 @@
 export function fullPage(report){
   const query=new URL(location.href).searchParams,url=location.pathname+location.search;
   const enabled=query.get('__ed_full')==='1',minimum=Math.max(100,Math.min(10000,Number(query.get('__ed_height'))||innerHeight));
+  const requested=Number(query.get('__ed_rows')??5),rows=query.get('__ed_canvas')==='1'&&[5,10,20].includes(requested)?requested:0;
+  const sampleSheet=document.createElement('style');sampleSheet.dataset.edListSamples='';document.head.append(sampleSheet);
+  // Keep the real nodes and their source identities. Clip each vertical repeated
+  // row group, including its pagination tail, rather than removing application data.
+  function sampleLists(root){
+    if(!rows)return;
+    const bounded=new Set(),rules=[];
+    for(const parent of root.querySelectorAll('[data-exact-list], [data-exact-list] *')){
+      if(parent.parentElement?.closest('[data-ed-list-sample]'))continue;
+      const groups=new Map();
+      for(const child of parent.children){
+        const site=child.getAttribute('data-site');if(site===null)continue;
+        if(!groups.has(site))groups.set(site,[]);groups.get(site).push(child);
+      }
+      for(const group of groups.values()){
+        if(group.length<=rows)continue;
+        const boxes=group.map(el=>el.getBoundingClientRect());
+        // Horizontal carousels, grids, and hidden routes keep their own layout.
+        if(boxes.some((b,i)=>!b.width||!b.height||(i>0&&b.top<boxes[i-1].bottom-1)))continue;
+        const box=parent.getBoundingClientRect(),css=getComputedStyle(parent);
+        if(!box.width||css.display==='contents')continue;
+        const height=Math.ceil(boxes[rows-1].bottom-box.top+(parseFloat(css.borderBottomWidth)||0));
+        const id=String(bounded.size);bounded.add(parent);
+        if(parent.dataset.edListSample!==id)parent.dataset.edListSample=id;
+        rules.push(`#exact-root [data-ed-list-sample="${id}"]{max-height:${height}px!important;min-height:0!important;overflow:clip!important;box-sizing:border-box!important}[data-ed-list-sample="${id}"]>*{flex-shrink:0!important}`);
+        break;
+      }
+    }
+    for(const el of root.querySelectorAll('[data-ed-list-sample]'))if(!bounded.has(el))delete el.dataset.edListSample;
+    const css=rules.join('\n');if(sampleSheet.textContent!==css)sampleSheet.textContent=css;
+  }
+  // Canvas layout changes must not act like the user scrolling to load a page.
+  if(rows)addEventListener('scroll',e=>{if(e.target?.closest?.('[data-exact-list]'))e.stopImmediatePropagation();},true);
   const sheet=document.createElement('style');sheet.dataset.edFullPage='';document.head.append(sheet);
   let height=minimum,ready=false,scheduled=0,last='',closed=false,observed=null;
   const rules=`html,body{height:auto!important;min-height:0!important;overflow:visible!important}#exact-root{height:auto!important;min-height:${minimum}px!important;overflow:visible!important}[data-ed-page-grow]{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}[data-ed-page-flex]{flex-basis:auto!important;flex-shrink:0!important}[data-ed-page-position]{position:relative!important;inset:auto!important}#exact-root>main>[data-ed-page-position]{min-height:${minimum}px!important}#exact-root>main{height:auto!important;min-height:${minimum}px!important;overflow:visible!important}`;
@@ -9,6 +42,7 @@ export function fullPage(report){
     scheduled=0;if(closed)return;
     const root=document.getElementById('exact-root')||document.body;
     if(!root)return;
+    sampleLists(root);
     if(observed!==root){observer.disconnect();observer.observe(root,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});observed=root;}
     // A presented modal or full-screen route covers the device: expanding the page underneath
     // would stack the route below its parent screen, so it keeps the viewport height.

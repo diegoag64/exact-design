@@ -86,6 +86,8 @@ function snapshot(){
     if(rows.length>=600)break;
     if(el.closest('[data-exiting], [hidden], [inert]') || !el.checkVisibility({visibilityProperty:true,contentVisibilityAuto:true}))continue;
     const rect=el.getBoundingClientRect();if(!rect.width||!rect.height)continue;
+    const sample=el.parentElement?.closest('[data-ed-list-sample]');
+    if(sample){const clip=sample.getBoundingClientRect();if(rect.top>=clip.bottom||rect.bottom<=clip.top)continue;}
     let parent=el.parentElement?.closest('[data-site]');while(parent&&!ids.has(parent))parent=parent.parentElement?.closest('[data-site]');
     const instance=globalThis.exact?.instanceOf?.(el)??[];
     const identity=JSON.stringify([Number(el.dataset.site),instance]);

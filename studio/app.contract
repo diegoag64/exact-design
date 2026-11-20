@@ -125,6 +125,7 @@ shape NativeStatus
   frames: NativeShot[]
 
 shape CanvasView
+  listRows: string
   canAutoHeight: bool
   autoHeight: bool
   source: string
@@ -159,6 +160,7 @@ shape ScreenGroup
   layers: Layer[]
 
 shape Document
+  previewHeight: number
   nativeScreens: string
   previewSource: string
   previewRequests: string
@@ -817,8 +819,8 @@ component Studio
     resetView()
   task fitLoaded when fitWhenReady and fittedSignature != previews.signature and previews.ready and previews.requests == doc.previewRequests and not pending(doc) and not pending(renderedScene)
     after(1, fitLoadedScreens)
-  // After a bulk add, frames report content heights over several seconds. Tidy on each new measurement
-  // for a short window (one merged undo step) and keep the camera fitted until the person pans or zooms.
+  // After a bulk add, enable row layout and keep the camera fitted during initial loading.
+  // The workspace continues to place arranged rows from measured heights after this window ends.
   state tidyWhenReady = false
   state tidySignature = ""
   state tidyFit = false
@@ -970,14 +972,19 @@ component Studio
     if not rightOpen and viewport.width < 700
       leftPanel = "closed"
   action command(op: string, key: string)
+    if op == "undo" or op == "redo"
+      tidyWhenReady = false
     if editing and op == "undo"
       undoDesign()
     else
       if not editing or op == "save"
         send changed = edit(op, key, "", 0, 0, time.epochAtZero + performanceNow())
   action prop(key: string, value: string)
+    if key == "x" or key == "y"
+      tidyWhenReady = false
     send changed = edit("property", key, value, 0, 0, time.epochAtZero + performanceNow())
   action down(e: PointerEvent)
+    tidyWhenReady = false
     cancelPan()
     fitWhenReady = false
     tidyFit = false
@@ -1714,6 +1721,14 @@ component Studio
                               if v.canAutoHeight
                                 button press=prop("heightMode", "content") class=SmallTool width=28 height=28 aria-label="Fit screen height to content" aria-pressed=v.autoHeight data-tip=(v.autoHeight ? "Height fits content · enter a height to fix it" : "Fit height to content") background-color=(v.autoHeight ? "surface.selected" : "surface.field") color=(v.autoHeight ? "ink.selected" : "ink.secondary") testId="auto-height"
                                   Icon(name="fold-vertical", size=14, angle=0)
+                            if v.canAutoHeight
+                              FieldLabel(label="List preview")
+                              select value=v.listRows change=prop("listRows") class=Field aria-label="List preview rows" testId="list-rows"
+                                option "First 5 rows" value="5"
+                                option "First 10 rows" value="10"
+                                option "First 20 rows" value="20"
+                                option "All loaded rows" value="0"
+                              text "Canvas sample only. Use Preview to scroll the app." font="type.caption" color="ink.muted"
                       for n in doc.layers.filter(n => n.id == doc.selected) key=n.id
                         column class=PanelSection
                           row class=SectionHead gap=8
@@ -1886,8 +1901,8 @@ component Studio
                   if clicks > 0
                     text `Clicked ${clicks}` font="type.caption" color="ink.secondary" padding="2px 8px" border-radius=10 background-color="surface.field" testId="preview-clicks"
                   IconButton(icon="x", label="Close preview", hint="Close preview", shortcut="", selected=false, disabled=editing, testId="close-preview", press=togglePreview)
-                scroll width="100%" max-width=doc.width height=doc.height max-height="80%" overflow-x="scroll" border-radius="radius.panel" box-shadow="shadow.menu"
-                  column position="relative" width=doc.width height=doc.height overflow="hidden" background-color="paper" testId="live-screen"
+                scroll width="100%" max-width=doc.width height=doc.previewHeight max-height="80%" overflow-x="scroll" border-radius="radius.panel" box-shadow="shadow.menu"
+                  column position="relative" width=doc.width height=doc.previewHeight overflow="hidden" background-color="paper" testId="live-screen"
                     ScreenView(source=doc.previewSource, layers=doc.layers, prefix="preview", selected="", dx=0, dy=0, resizing=false, activate=previewClick)
         if entry.name == "project" or entry.name == "addScreen"
           column navigationKey=`${entry.id}` navigationPresentation="fullscreen" position="absolute" inset=0 background-color="surface.scrim" align-items="center" justify-content="center" padding=20 box-sizing="border-box"
